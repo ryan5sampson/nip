@@ -1,0 +1,16 @@
+[project]
+name = "nip"
+version = "0.1.0"
+description = "Voice-directed footage prep: transcribe, find spoken takes and commands, export clean clips."
+requires-python = ">=3.11"
+dependencies = ["mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'"]
+
+[project.scripts]
+nip = "nip.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["nip"]
