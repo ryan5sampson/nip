@@ -18,7 +18,7 @@ from nip.commands import kept_ranges, tiers, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
-STATE = {"processing": 0}  # videos the background ingest is working on
+STATE = {"transcribing": 0}  # videos the background ingest is working on
 
 
 def clips_of(proj):
@@ -51,16 +51,29 @@ def summary(proj):
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "exported": (cli.EXPORTS / proj.name).exists(),
+            "stage": cli.stage_of(proj, info),
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
 
 def project_data(proj):
     info, clips = clips_of(proj)
-    return {**info, "name": proj.name, "clips": clips,
+    return {**info, "name": proj.name, "clips": clips, "stage": cli.stage_of(proj, info),
             "description": info.get("my_description") or info["description"],
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
+
+
+def settle(proj, how):
+    """Mark every stretch nobody marked yet as cut or keep (how), so the edit is fully decided."""
+    if how not in ("cut", "keep"):
+        return
+    layer = "my_cuts" if how == "cut" else "my_keeps"
+    with LOCK:
+        for stem in cli.load(proj / "project.json")["clips"]:
+            f = proj / f"{stem}.nip.json"
+            clip = cli.load(f)
+            clip.setdefault(layer, []).extend({"start": a, "end": b} for a, b in unmarked(cli.decisions(clip)))
+            cli.save(f, clip)
 
 
 def apply_notes(f, ids):
@@ -158,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(PAGE, "text/html; charset=utf-8")
             elif p == ["api", "status"]:
                 waiting = [v for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO] if cli.INBOX.exists() else []
-                self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "processing": STATE["processing"],
+                self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "transcribing": STATE["transcribing"],
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
             elif p == ["api", "projects"]:
@@ -327,16 +340,20 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("action must be export or delete")
             elif len(p) == 3 and p[:2] == ["api", "export"]:
                 proj = self.project(p[2])
-                if body.get("unmarked") in ("cut", "keep"):  # settle footage still unmarked before exporting
-                    layer = "my_cuts" if body["unmarked"] == "cut" else "my_keeps"
-                    with LOCK:
-                        for stem in cli.load(proj / "project.json")["clips"]:
-                            f = proj / f"{stem}.nip.json"
-                            clip = cli.load(f)
-                            clip.setdefault(layer, []).extend({"start": a, "end": b} for a, b in unmarked(cli.decisions(clip)))
-                            cli.save(f, clip)
+                settle(proj, body.get("unmarked"))
                 cli.export(proj, bool(body.get("combined")))
                 self.send_json({"done": str(cli.EXPORTS / proj.name)})
+            elif len(p) == 3 and p[:2] == ["api", "stage"]:  # opened (processing), or marked complete (processed)
+                proj = self.project(p[2])
+                if body.get("stage") not in ("processing", "processed"):
+                    raise ValueError("stage must be processing or processed; exporting sets exported")
+                settle(proj, body.get("unmarked"))
+                with LOCK:
+                    cli.set_stage(proj, body["stage"])
+                self.send_json(project_data(proj))
+            elif len(p) == 3 and p[:2] == ["api", "clear"]:
+                with LOCK:
+                    self.send_json({"trash": str(cli.clear(self.project(p[2])))})
             elif p == ["api", "bundle"]:  # several projects become one, named by the user
                 names = body.get("projects")
                 if not isinstance(names, list) or not isinstance(body.get("name"), str):
@@ -371,12 +388,12 @@ class Handler(BaseHTTPRequestHandler):
 def watch_inbox():
     while True:
         try:
-            STATE["processing"] = sum(1 for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO)
-            if STATE["processing"]:
+            STATE["transcribing"] = sum(1 for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO)
+            if STATE["transcribing"]:
                 cli.ingest()
         except Exception as e:  # keep watching; a bad file shouldn't take the app down
             print(f"inbox: {e}")
-        STATE["processing"] = 0
+        STATE["transcribing"] = 0
         time.sleep(10)
 
 

@@ -225,7 +225,7 @@
 <div class="app">
   <aside class="sidebar" aria-label="Sidebar">
     <h3>Library</h3>
-    <button class="item" id="inboxview" title="Projects not exported yet"><svg class="i"><use href="#i-tray"/></svg><span>Inbox</span><small id="inboxcount" class="num"></small></button>
+    <div id="stages"></div>
     <button class="item" id="allfootage"><svg class="i"><use href="#i-photos"/></svg><span>All Footage</span><small id="allcount" class="num"></small></button>
     <h3 id="tagshead" hidden>Tags</h3>
     <div id="taglist"></div>
@@ -242,7 +242,9 @@
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="icon-btn" id="reveal" title="Show Exports in Finder"><svg class="i"><use href="#i-folder"/></svg></button>
         <span class="tb-sep"></span>
-        <button class="btn" id="export" title="Export the kept takes as clips"><svg class="i"><use href="#i-share"/></svg>Export</button>
+        <button class="btn" id="complete" title="Done going through every clip: move it to Processed"><svg class="i"><use href="#i-check"/></svg>Mark Complete</button>
+        <button class="btn" id="export" title="Export the kept takes as clips" style="margin-left:6px"><svg class="i"><use href="#i-share"/></svg>Export</button>
+        <button class="btn" id="clear" title="Move this footage to the Trash to free space; exports stay" style="margin-left:6px" hidden><svg class="i"><use href="#i-trash"/></svg>Clear</button>
       </span>
     </div>
 
@@ -273,7 +275,7 @@
       <dialog id="settle"><form method="dialog">
         <b>Some footage isn’t marked</b>
         <p id="settletext"></p>
-        <p>Cut it or keep it before exporting? You can change it afterwards.</p>
+        <p>Cut it or keep it first? You can change it afterwards.</p>
         <div class="actions-line"><button class="btn" value="">Cancel</button><button class="btn" value="cut">Cut Unmarked</button><button class="btn default" value="keep" autofocus>Keep Unmarked</button></div>
       </form></dialog>
       <aside class="inspector" aria-label="Inspector">
@@ -340,7 +342,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], tagFilter = null, inboxOnly = false, data = null, proj = '', clipIdx = 0;
+let projects = [], tagFilter = null, stageFilter = null, data = null, proj = '', clipIdx = 0;
 let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, openSeg = null, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -365,6 +367,9 @@ async function run(btn, busyMsg, fn) {  // disable a button while its request ru
 }
 
 // ---------- library ----------
+const STAGES = {inbox: ['Inbox', 'tray', 'New footage, not opened yet. Drag one onto another to bundle them.'],
+  processing: ['Processing', 'film', 'Opened and being worked on'], processed: ['Processed', 'check', 'Marked complete'],
+  exported: ['Exported', 'share', 'Exported; can be cleared to free space']};
 async function loadLibrary() {
   try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
   drawLibrary();
@@ -376,22 +381,21 @@ function drawLibrary() {
   const tags = Object.keys(counts).sort();
   $('#tagshead').hidden = !tags.length;
   $('#taglist').innerHTML = tags.map(t => `<button class="item ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
-  $('#allfootage').classList.toggle('on', !tagFilter && !inboxOnly && !proj);
+  $('#allfootage').classList.toggle('on', !tagFilter && !stageFilter && !proj);
   $('#allcount').textContent = projects.length || '';
-  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)) && (!inboxOnly || !p.exported));
-  $('#inboxview').classList.toggle('on', inboxOnly && !proj);
-  $('#inboxcount').textContent = projects.filter(p => !p.exported).length || '';
+  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)) && (!stageFilter || p.stage === stageFilter));
+  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length || ''}</small></button>`).join('');
   if ($('#library').hidden) return;
-  $('#title').textContent = tagFilter || (inboxOnly ? 'Inbox' : 'All Footage');
+  $('#title').textContent = tagFilter || (stageFilter ? STAGES[stageFilter][0] : 'All Footage');
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
     <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Drag onto another project to bundle them">
       <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i></div>
       <b>${esc(p.description || p.name)}</b>
-      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
+      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${stageFilter ? '' : ` · ${STAGES[p.stage][0]}`}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
     </a>`).join('') : projects.length
-    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>Nothing matches “${esc($('#search').value || tagFilter)}”.</div>`
+    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value || tagFilter ? `Nothing matches “${esc($('#search').value || tagFilter)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Drop videos into the inbox. They’ll appear here once processed.</div>`;
 }
 $('#search').oninput = drawLibrary;
@@ -424,11 +428,11 @@ $('#taglist').onclick = e => {
   const b = e.target.closest('[data-tag]');
   if (!b) return;
   tagFilter = tagFilter === b.dataset.tag ? null : b.dataset.tag;
-  inboxOnly = false;
+  stageFilter = null;
   location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
 };
-$('#inboxview').onclick = () => { tagFilter = null; inboxOnly = true; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
-$('#allfootage').onclick = () => { tagFilter = null; inboxOnly = false; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#allfootage').onclick = () => { tagFilter = null; stageFilter = null; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
@@ -445,14 +449,20 @@ const label = t => t.name || (t.group ? `Section ${t.group}` : 'Before first tak
 async function loadProject(name) {
   proj = name;
   openGap = openSeg = null;
-  try { show(await api('/api/project/' + enc(name)), 0); }
-  catch (e) { return status(e.message, true); }
+  try {
+    show(await api('/api/project/' + enc(name)), 0);
+    if (data.stage === 'inbox') show(await api('/api/stage/' + enc(name), {stage: 'processing'}));  // opened: now processing
+  } catch (e) { return status(e.message, true); }
   if (kept.length) video.readyState ? video.currentTime = kept[0][0] : pendingSeek = kept[0][0];  // open on the first kept frame
 }
 
 function show(d, idx = clipIdx) {
   data = d;
   clipIdx = Math.min(idx, data.clips.length - 1);
+  $('#complete').hidden = data.stage === 'exported';
+  $('#complete').lastChild.textContent = data.stage === 'processed' ? 'Completed' : 'Mark Complete';
+  $('#complete').title = data.stage === 'processed' ? 'Completed. Click to move it back to Processing.' : 'Done going through every clip: move it to Processed';
+  $('#clear').hidden = data.stage !== 'exported';
   const c = clip(), e = c.edit;
   const src = `/media/${enc(proj)}/${enc(c.source)}`;
   if (video.dataset.src !== src) { video.src = src; video.dataset.src = src; }
@@ -783,8 +793,11 @@ $('#stories').onclick = e => {
     const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
     playList(list);
   }
-  if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () =>
-    status(`Exported to ${(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'})).done}`));
+  if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () => {
+    const r = await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'});
+    show(await api('/api/project/' + enc(proj)));  // now exported
+    status(`Exported to ${r.done}`);
+  });
   if (b.dataset.act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files are kept.`))
     run(b, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Edit deleted'); });
 };
@@ -800,18 +813,30 @@ $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(awai
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
 const exportAll = unmarked => run($('#export'), 'Exporting kept takes…', async () => {
   const r = await api('/api/export/' + enc(proj), {combined: $('#combined').checked, unmarked});
-  if (unmarked) show(await api('/api/project/' + enc(proj)));
+  show(await api('/api/project/' + enc(proj)));  // now exported
   status(`Exported to ${r.done}`);
 });
-$('#export').onclick = () => {
+const complete = unmarked => run($('#complete'), 'Saving…', async () => {
+  show(await api('/api/stage/' + enc(proj), {stage: 'processed', unmarked}));
+  status('Complete: moved to Processed');
+});
+$('#complete').onclick = () => data.stage === 'processed'
+  ? run($('#complete'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Back in Processing'); })
+  : settleThen(complete);
+$('#export').onclick = () => settleThen(exportAll);
+$('#clear').onclick = () => confirm(`Move “${data.description || data.name}” to the Trash? Its footage and edits leave NIP; the exported videos stay. Empty the Trash to free the space.`)
+  && run($('#clear'), 'Clearing…', async () => { await api('/api/clear/' + enc(proj), {}); location.hash = '#/'; status('Moved to the Trash'); });
+let afterSettle = null;
+function settleThen(fn) {  // ask about unmarked footage first, if there is any
   const open = data.clips.filter(c => c.unmarked.length), parts = open.flatMap(c => c.unmarked);
-  if (!parts.length) return exportAll();
+  if (!parts.length) return fn();
+  afterSettle = fn;
   const secs = parts.reduce((n, [a, b]) => n + b - a, 0);
   $('#settletext').textContent = `${parts.length} ${parts.length === 1 ? 'stretch' : 'stretches'} in ${plural(open.length, 'clip')}, ${mmss(secs)} in total, ${parts.length === 1 ? 'is' : 'are'} not marked cut or keep.`;
   $('#settle').returnValue = '';  // Esc closes without an answer
   $('#settle').showModal();
 };
-$('#settle').onclose = () => $('#settle').returnValue && exportAll($('#settle').returnValue);
+$('#settle').onclose = () => $('#settle').returnValue && afterSettle($('#settle').returnValue);
 $('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
 // ---------- second-round edit notes ----------
@@ -883,14 +908,14 @@ document.addEventListener('keydown', e => {
 async function poll() {
   try {
     const s = await api('/api/status');
-    $('#inbox').innerHTML = s.processing
-      ? `<span class="spin"></span><span><b>Processing</b> ${plural(s.processing, 'video')}…</span>`
+    $('#inbox').innerHTML = s.transcribing
+      ? `<span class="spin"></span><span><b>Transcribing</b> ${plural(s.transcribing, 'video')}…</span>`
       : `${icon('tray')}<span>Inbox empty</span>`;
     $('#inbox').insertAdjacentHTML('beforeend', `<button class="icon-btn small" id="openinbox" title="Open Inbox in Finder (${esc(s.inbox)})" style="margin-left:auto">${icon('folder')}</button>`);
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
     $('#claudehint').textContent = {plan: 'Uses your Claude plan', api: 'Uses your API key'}[s.claude] || 'Needs Claude Code or an API key';
-    if (lastProcessing && !s.processing) loadLibrary();
-    lastProcessing = s.processing;
+    if (lastProcessing && !s.transcribing) loadLibrary();
+    lastProcessing = s.transcribing;
   } catch (e) { $('#inbox').textContent = 'NIP isn’t running'; }
 }
 function route() {

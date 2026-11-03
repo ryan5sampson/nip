@@ -18,6 +18,8 @@ LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
+TRASH = Path.home() / ".Trash"
+STAGES = ("inbox", "processing", "processed", "exported")  # footage moves through these; exported can be cleared
 SHORT_SIDE = 1080  # Reels, TikTok and Shorts all play 1080x1920; more is wasted on them
 
 
@@ -153,16 +155,16 @@ def free_path(name):
 
 
 def process(proj, vids):
-    info = {"description": None, "tags": [], "clips": []}
+    info = {"description": None, "tags": [], "clips": [], "stage": "inbox"}
     clips = []
     for v in vids:
         dest = proj / "raw" / v.name
         shutil.move(v, dest)
         duration, created = probe(dest)
         clips.append((created or dest.name, dest, duration))
-    for _, dest, duration in sorted(clips):  # filming order
+    for created, dest, duration in sorted(clips):  # filming order
         print(f"transcribing {dest.name} ({duration / 60:.1f} min)")
-        clip = {"source": dest.name, "duration": duration, "words": transcribe(dest)}
+        clip = {"source": dest.name, "duration": duration, "created": created, "words": transcribe(dest)}
         clip["edit"] = build_edit(clip["words"], duration)
         save(proj / f"{dest.stem}.nip.json", clip)
         info["clips"].append(dest.stem)
@@ -180,10 +182,19 @@ def bundle(projs, title):
     stems = [s for i in infos for s in i["clips"]]
     if len(projs) < 2 or len(set(stems)) < len(stems) or not slug(title):
         raise ValueError("bundle two or more projects with different video names, and give the bundle a name")
+    stages = {stage_of(p, i) for p, i in zip(projs, infos)}
+    if stages - {"inbox", "processing"}:
+        raise ValueError("only footage in the inbox or processing can be bundled")
+
+    def filmed(p, stem):  # clips from before NIP stored "created" are probed for it
+        c = load(p / f"{stem}.nip.json")
+        return c.get("created") or probe(p / "raw" / c["source"])[1] or c["source"]
+    order = sorted((filmed(p, s), s) for p, i in zip(projs, infos) for s in i["clips"])
     dest = new_project(f"{min(p.name[:10] for p in projs)}_{slug(title)}")
     info = {"description": next((i["description"] for i in infos if i["description"]), None), "my_description": title.strip(),
             "tags": sorted({t for i in infos for t in i["tags"]}),
-            "my_tags": sorted({t for i in infos for t in i.get("my_tags", i["tags"])}), "clips": stems, "stories": []}
+            "my_tags": sorted({t for i in infos for t in i.get("my_tags", i["tags"])}), "clips": [s for _, s in order],
+            "stories": [], "stage": "processing" if "processing" in stages else "inbox"}
     for p, i in zip(projs, infos):
         for s in i.get("stories", []):
             info["stories"].append({**s, "id": len(info["stories"]) + 1})
@@ -197,6 +208,27 @@ def bundle(projs, title):
         (p / "thumb.jpg").unlink(missing_ok=True)
         (p / "raw").rmdir()
         p.rmdir()
+    return dest
+
+
+def stage_of(proj, info):
+    return info.get("stage") or ("exported" if (EXPORTS / proj.name).exists() else "inbox")  # projects from before stages
+
+
+def set_stage(proj, stage):
+    info = load(proj / "project.json")
+    info["stage"] = stage
+    save(proj / "project.json", info)
+
+
+def clear(proj):
+    """Move an exported project's footage and edits to the Trash, to free space; its exports stay."""
+    if stage_of(proj, load(proj / "project.json")) != "exported":
+        raise ValueError("only exported footage can be cleared")
+    dest, n = TRASH / proj.name, 2
+    while dest.exists():
+        dest, n = TRASH / f"{proj.name} {n}", n + 1
+    shutil.move(proj, dest)
     return dest
 
 
@@ -294,6 +326,7 @@ def export(proj, combined):
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst),
                         "-c", "copy", str(out / f"{proj.name}.mp4")], check=True)
         lst.unlink()
+    set_stage(proj, "exported")
     print(f"done: {out}")
 
 
@@ -319,6 +352,7 @@ def export_story(proj, story):
                         "-c", "copy", str(final)], check=True)
         for f in [lst, *parts]:
             f.unlink()
+    set_stage(proj, "exported")
     print(f"done: {final}")
     return final
 

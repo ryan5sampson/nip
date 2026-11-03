@@ -340,7 +340,7 @@ class Viewer(unittest.TestCase):
                     post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "x" * 201})
                 post("/api/cuts/p/v", {"action": "reset"})
                 card = json.loads(get("/api/projects").read())[0]
-                self.assertEqual((card["tiers"], card["exported"]), ({"keep": 0, "unmarked": 1, "cut": 1}, False))
+                self.assertEqual((card["tiers"], card["stage"]), ({"keep": 0, "unmarked": 1, "cut": 1}, "inbox"))
                 self.assertIn("the hello", card["search"])
                 # three tiers: mark the unmarked footage keep by hand; export can settle the rest as cut
                 post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})  # splits "hello" in two
@@ -352,6 +352,21 @@ class Viewer(unittest.TestCase):
                     post("/api/export/p", {"unmarked": "cut"})
                 export.assert_called_once()
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
+                # stages: opened, then marked complete; only exported footage can be cleared, to the Trash
+                post("/api/cuts/p/v", {"action": "uncut", "start": left[1][0]})
+                self.assertEqual(json.loads(post("/api/stage/p", {"stage": "processing"}).read())["stage"], "processing")
+                data = json.loads(post("/api/stage/p", {"stage": "processed", "unmarked": "keep"}).read())
+                self.assertEqual((data["stage"], data["clips"][0]["unmarked"]), ("processed", []))
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/stage/p", {"stage": "exported"})
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/clear/p", {})
+                cli.set_stage(lib / "p", "exported")
+                with mock.patch.object(cli, "TRASH", Path(d) / "trash"):
+                    (Path(d) / "trash").mkdir()
+                    post("/api/clear/p", {})
+                    self.assertTrue((Path(d) / "trash" / "p" / "raw" / "v.mov").exists())
+                self.assertFalse((lib / "p").exists())
                 server.shutdown()
 
 
@@ -375,14 +390,18 @@ class Export(unittest.TestCase):
                 self.assertEqual([p.name[11:] for p in projs], ["a_demo-day", "b_demo-day"])
                 with self.assertRaises(ValueError):
                     cli.bundle(projs[:1], "Demo day")
+                for p, when in zip(projs, ("2026-11-02T10:00:00Z", "2026-11-02T09:00:00Z")):  # b was filmed first
+                    clip = cli.load(next(p.glob("*.nip.json")))
+                    cli.save(next(p.glob("*.nip.json")), {**clip, "created": when})
                 proj = cli.bundle(projs, "Demo day")
                 self.assertEqual([p.name for p in cli.LIBRARY.iterdir()], [proj.name])  # the old folders are gone
                 self.assertTrue(proj.name.endswith("_demo-day"))
                 info = json.loads((proj / "project.json").read_text())
-                self.assertEqual((info["clips"], info["my_description"]), (["a", "b"], "Demo day"))
+                self.assertEqual((info["clips"], info["my_description"], info["stage"]), (["b", "a"], "Demo day", "inbox"))
                 cli.export(proj, combined=True)
                 outs = sorted(p.name for p in (cli.EXPORTS / proj.name).iterdir())
-                self.assertEqual(outs, ["01_a_s1t2.mp4", "02_b_s1t2.mp4", f"{proj.name}.mp4"])
+                self.assertEqual(outs, ["01_b_s1t2.mp4", "02_a_s1t2.mp4", f"{proj.name}.mp4"])
+                self.assertEqual(json.loads((proj / "project.json").read_text())["stage"], "exported")
                 dur, _ = cli.probe(cli.EXPORTS / proj.name / f"{proj.name}.mp4")
                 self.assertGreater(dur, 1)
                 size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
