@@ -9,11 +9,11 @@ from nip.commands import build_edit, kept_ranges
 
 
 def script(text):
-    """Fake word timestamps: words take 0.3s with 0.05s gaps; "/" is a 1.2s pause."""
+    """Fake word timestamps: words take 0.3s with 0.05s gaps; "/" is a 2s pause."""
     words, t = [], 0.0
     for tok in text.split():
         if tok == "/":
-            t += 1.2
+            t += 2.0
             continue
         words.append({"w": tok, "start": round(t, 2), "end": round(t + 0.3, 2)})
         t += 0.35
@@ -63,6 +63,24 @@ class Commands(unittest.TestCase):
     def test_nip_instruction_stops_at_pause(self):
         _, e = summary("NIP, this is a test / this is narration")
         self.assertEqual(e["description"], "a test")
+
+    def test_instruction_stops_at_sentence_end(self):
+        _, e = summary("NIP. Pause. more words / NIP, this is a test. Not part of it")
+        self.assertEqual(e["description"], "a test")
+        self.assertEqual(e["pending"], [])
+
+    def test_numbered_clips_highlight_note_cut_everything(self):
+        words, dur = script("NIP, this is couch day. / setup chatter / NIP, cut everything up to here / "
+                            "NIP, clip one, tossing on the couch. / talk talk / NIP, that was plant talk / "
+                            "NIP, clip two, bouncing off the table. I'm sorry / slip / NIP, clipped the last 10 seconds")
+        e = build_edit(words, dur)
+        self.assertEqual(e["description"], "couch day")
+        self.assertEqual([(t["name"], t["keep"]) for t in e["takes"]],
+                         [(None, False), ("tossing on the couch", True), ("bouncing off the table", True)])
+        self.assertEqual(e["notes"][0]["text"], "that was plant talk")
+        self.assertIn("cut everything", [c["why"] for c in e["cuts"]])
+        hl = e["markers"][0]
+        self.assertEqual((hl["t"], hl["end"]), (e["takes"][2]["start"], words[-6]["start"]))  # clamped to clip start
 
     def test_cut_that_removes_previous_sentence(self):
         words, dur = script("good sentence / bad sentence NIP cut that / more good")
@@ -118,10 +136,10 @@ class Export(unittest.TestCase):
                 for p in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
                     p.mkdir()
                 for name in ("a", "b"):
-                    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=d=15:s=320x240:r=30",
+                    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=d=15:s=1440x2560:r=30",
                                     "-f", "lavfi", "-i", "sine=d=15", "-shortest", str(cli.INBOX / f"{name}.mp4")],
                                    check=True)
-                words, _ = script("NIP this is demo day / / Take one / / bad / / / Take two / / good")
+                words, _ = script("NIP this is demo day / Take one / bad / Take two / good")
                 with mock.patch.object(cli, "transcribe", return_value=words), \
                         mock.patch.object(cli, "settled", return_value=True):
                     cli.ingest()
@@ -133,6 +151,10 @@ class Export(unittest.TestCase):
                 self.assertEqual(outs, ["01_a_s1t2.mp4", "02_b_s1t2.mp4", f"{proj.name}.mp4"])
                 dur, _ = cli.probe(cli.EXPORTS / proj.name / f"{proj.name}.mp4")
                 self.assertGreater(dur, 1)
+                size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                       "stream=width,height", "-of", "csv=p=0", str(cli.EXPORTS / proj.name / outs[0])],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+                self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertFalse(any(cli.INBOX.iterdir()))
 
 

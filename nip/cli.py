@@ -18,6 +18,7 @@ LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
+SHORT_SIDE = 1080  # Reels, TikTok and Shorts all play 1080x1920; more is wasted on them
 
 
 def load(p):
@@ -136,7 +137,10 @@ def report(proj):
             where = f'"{t["name"]}"' if t.get("name") else f"section {t['group']}"
             print(f"    {mark}  {mmss(t['start'])}-{mmss(t['end'])}  {where} {label} ({t['why']})")
         for m in e["markers"]:
-            print(f"    mark  {mmss(m['t'])}  {m['label']}")
+            span = f"{mmss(m['t'])}-{mmss(m['end'])}" if "end" in m else mmss(m["t"])
+            print(f"    mark  {span}  {m['label']}")
+        for n in e.get("notes", []):
+            print(f"    note  {mmss(n['t'])}  {n['text']}")
         for c in e["cuts"]:
             if c["why"] == "nip cut that":
                 print(f"    cut   {mmss(c['start'])}-{mmss(c['end'])}  (nip cut that)")
@@ -145,8 +149,9 @@ def report(proj):
 
 
 def encoder():
+    # an editing copy for CapCut, which makes the final ~10 Mbps platform encode, so leave headroom above that
     if sys.platform == "darwin":  # hardware HEVC keeps iPhone 10-bit/HDR footage intact and is fast
-        return ["-c:v", "hevc_videotoolbox", "-q:v", "65", "-tag:v", "hvc1"]
+        return ["-c:v", "hevc_videotoolbox", "-b:v", "16M", "-tag:v", "hvc1"]
     return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"]
 
 
@@ -158,8 +163,11 @@ def cut(src, start, pieces, out):
         parts.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}];"
                      f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS[a{i}];")
     graph = "".join(parts) + "".join(f"[v{i}][a{i}]" for i in range(len(pieces)))
-    graph += f"concat=n={len(pieces)}:v=1:a=1[v][a]"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-to", f"{pieces[-1][1]:.3f}",
+    graph += f"concat=n={len(pieces)}:v=1:a=1[vc][a];"
+    s = SHORT_SIDE  # scale the short side down to s, whichever way the footage is held; never upscale
+    graph += f"[vc]scale=w='if(lt(iw,ih),min({s},iw),-2)':h='if(lt(iw,ih),-2,min({s},ih))'[v]"
+    hw = ["-hwaccel", "videotoolbox"] if sys.platform == "darwin" else []
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *hw, "-ss", f"{start:.3f}", "-to", f"{pieces[-1][1]:.3f}",
                     "-i", str(src), "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
                     *encoder(), "-c:a", "aac", "-b:a", "192k", str(out)], check=True)
 
@@ -194,6 +202,8 @@ def export(proj, combined):
 
 
 def find(name):
+    if name and (LIBRARY / name / "project.json").exists():  # exact name beats "newest containing it"
+        return LIBRARY / name
     hits = sorted(p for p in LIBRARY.glob(f"*{name}*") if (p / "project.json").exists()) if name else []
     if not hits:
         hits = sorted((p for p in LIBRARY.iterdir() if (p / "project.json").exists()),

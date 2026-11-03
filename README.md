@@ -25,6 +25,8 @@ The first transcription downloads the Whisper model (about 1.6 GB).
 
 Exports land in `~/NIP/exports/<project>/`. Originals stay untouched in `~/NIP/library/<project>/raw/`.
 
+Exports are sized for Instagram Reels, TikTok and YouTube Shorts: 1080×1920 for vertical footage (the short side is scaled to 1080, never up), the original frame rate, and HEVC at 16 Mbps with iPhone HDR kept. That's an editing copy for CapCut, about a fifth the size of iPhone 4K. In CapCut, export at 1080p with the source frame rate. Each platform re-encodes what you upload.
+
 `report`, `reparse`, and `export` act on the newest project by default. Pass part of a folder name to pick another, for example `nip export linderball`.
 
 To use a Google Drive folder as the inbox so you can upload from your phone, set `NIP_INBOX`. NIP moves files out of the inbox, so they're removed from Drive after ingest.
@@ -35,11 +37,11 @@ export NIP_INBOX="$HOME/Library/CloudStorage/GoogleDrive-you@gmail.com/My Drive/
 
 ## Voice commands
 
-Start every command with "NIP" and pause for a second after it, so NIP knows where the command ends and your speech begins.
+Start every command with "NIP" and pause for a second or two after it, so NIP knows where the command ends and your speech begins.
 
 | Say | What NIP does |
 |---|---|
-| "NIP, new clip" / "NIP, new clip curve throw" | Starts a new clip, optionally named. Its takes compete only with each other, and the best one is exported as `01_curve-throw_t3.mp4`. Footage right after it counts as take one. |
+| "NIP, new clip" / "NIP, clip two, curve throw" | Starts a new clip, optionally named. Its takes compete only with each other, and the best one is exported as `01_curve-throw_t3.mp4`. Footage right after it counts as take one. |
 | "Take one", "Take two", … | Starts a take. Say it as its own phrase, with a short pause before and after, or as "NIP, take two". The last take in a run is kept. Without "new clip", starting again from the same or a lower number starts a new section; after "new clip", a repeated number is just another take. |
 | "Scratch that" / "Scrap that" / "Reset" | Drops the current take. "Reset" needs a pause on both sides, or "NIP" before it. |
 | "NIP, this is …" | Sets the project description. The project folder is renamed to match. |
@@ -49,6 +51,9 @@ Start every command with "NIP" and pause for a second after it, so NIP knows whe
 | "NIP, cut the silence" | Shortens every pause longer than 1 second in this take. |
 | "NIP, mark that" / "highlight" | Adds a marker. |
 | "NIP, cut that" / "NIP, let me try that again" | Cuts back to the last pause of at least 1 second. |
+| "NIP, cut everything up to here" | Cuts from the start of the current clip or take up to here. |
+| "NIP, clip the last 10 seconds" | Highlights those seconds in the report as worth keeping. |
+| "NIP, that was …" | Adds a note on what you just filmed to the report. |
 | "NIP, …" anything else | Listed as not understood in the report, for now. |
 
 NIP always cuts the command words themselves. Footage before the first "take" is dropped. Videos without any take or clip commands are kept whole.

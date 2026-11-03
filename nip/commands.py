@@ -6,8 +6,8 @@ SCRATCH = {"scratch", "scrap"}
 NUMBERS = {"one": 1, "won": 1, "two": 2, "to": 2, "too": 2, "three": 3, "four": 4, "for": 4,
            "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 PAUSE = 0.25        # gap (s) that makes "reset" / "take two" a standalone command, not normal speech
-NIP_WINDOW = 3.0    # instruction must start within this many seconds of the wake word
-NIP_GAP = 1.0       # a silence this long ends the instruction
+NIP_WINDOW = 8.0    # instruction must start within this many seconds of the wake word
+NIP_GAP = 1.5       # a silence this long ends the instruction (users pause ~2s after a command)
 SILENCE = 1.0       # "NIP, cut the silence" shortens gaps longer than this
 PAD_BEFORE, PAD_AFTER = 0.1, 0.3
 
@@ -44,7 +44,9 @@ def find_events(words):
             events.append({"kind": "nip", "start": words[i]["start"], "end": words[j]["end"], "text": "resume"})
         elif t in WAKE:
             j = i
+            # ends at a pause or at Whisper's sentence end ("NIP." itself doesn't count)
             while (j + 1 < len(words) and words[j + 1]["start"] - words[j]["end"] < NIP_GAP
+                   and (j == i or not words[j]["w"].endswith((".", "?", "!")))
                    and words[j + 1]["start"] <= words[i]["end"] + NIP_WINDOW):
                 j += 1
             text = " ".join(toks[i + 1:j + 1])
@@ -84,7 +86,7 @@ def build_edit(words, duration):
     Footage before the first take marker is dropped if the clip has takes, else kept (e.g. gameplay).
     """
     events = find_events(words)
-    edit = {"takes": [], "cuts": [], "markers": [], "description": None, "tags": [], "pending": []}
+    edit = {"takes": [], "cuts": [], "markers": [], "notes": [], "description": None, "tags": [], "pending": []}
     takes = edit["takes"]
     cur = {"start": 0.0, "group": 0, "take": 0, "keep": True, "why": "no take markers", "name": None}
     last_n = 0  # last spoken take number; "scratch that, take two" must not start a new group
@@ -122,9 +124,14 @@ def build_edit(words, duration):
                    "name": cur["name"]}
         else:
             text = e["text"]
-            if text.startswith("new clip"):
+            clip = re.match(r"(new clip|clip(?:ped)? (\w+))\b(.*)", text)  # "new clip x", "clip two x"
+            last = re.search(r"\blast (\w+) seconds?\b", text)
+            if last and number(last[1]):
+                edit["markers"].append({"t": max(cur["start"], e["start"] - number(last[1])), "end": e["start"],
+                                        "label": text})
+            elif clip and (clip[2] is None or number(clip[2])):
                 close(e["start"])
-                name = re.sub(r"^(called|named)\b", "", text[len("new clip"):].strip()).strip()
+                name = re.sub(r"^(called|named)\b", "", clip[3].strip()).strip()
                 cur = {"start": e["end"], "group": cur["group"] + 1, "take": 1, "keep": False, "why": "",
                        "name": name or None}
                 last_n, clips = 0, True
@@ -138,9 +145,13 @@ def build_edit(words, duration):
                     edit["cuts"].append({"start": cur.pop("paused"), "end": e["start"], "why": "paused"})
             elif re.search(r"\bbest\b", text) or ("take" in text and re.search(r"\b(keep|keeper|good)\b", text)):
                 cur["why"] = "picked as best"
+            elif re.search(r"\bcut everything\b", text):
+                edit["cuts"].append({"start": cur["start"], "end": e["start"], "why": "cut everything"})
             elif re.search(r"\b(cut|delete|remove|scrap)\b", text) and "that" in text or re.search(r"\bagain\b", text):
                 edit["cuts"].append({"start": last_pause_before(words, e["start"], cur["start"]),
                                      "end": e["start"], "why": "nip cut that"})
+            elif text.startswith("that was"):  # a note on the stretch just filmed
+                edit["notes"].append({"t": e["start"], "text": text})
             elif text.startswith("this is"):
                 edit["description"] = text[len("this is"):].strip()
             elif text.startswith("tag"):
