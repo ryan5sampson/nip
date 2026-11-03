@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import build_edit, kept_ranges
+from nip.commands import apply_overrides, build_edit, kept_ranges
 
 
 def script(text):
@@ -125,6 +125,60 @@ class Commands(unittest.TestCase):
         e = build_edit(words, dur)
         kept = kept_ranges(e["takes"][-1], e["cuts"])
         self.assertTrue(all(a >= words[1]["end"] for a, _ in kept))
+
+
+class Overrides(unittest.TestCase):
+    def test_hand_edits_match_by_original_start(self):
+        _, e = summary("NIP new clip intro / one / NIP take two / two")
+        a, b = e["takes"]
+        out = apply_overrides(e, {str(a["start"]): {"keep": True, "end": a["end"] - 0.5, "name": "hello"},
+                                  "999": {"keep": False}})  # 999: a take that no longer exists
+        self.assertEqual([(t["keep"], t["name"], t.get("edited", False)) for t in out["takes"]],
+                         [(True, "hello", True), (True, "hello", False)])
+        self.assertEqual(out["takes"][0]["at"], a["start"])
+        self.assertFalse(e["takes"][0]["keep"])  # the voice decisions are left as they were
+
+
+class Viewer(unittest.TestCase):
+    def test_serves_ranges_and_rejects_bad_requests(self):
+        import threading
+        import urllib.error
+        import urllib.request
+        import nip.cli as cli
+        import nip.view as view
+        with tempfile.TemporaryDirectory() as d:
+            lib = Path(d) / "lib"
+            (lib / "p" / "raw").mkdir(parents=True)
+            (lib / "p" / "raw" / "v.mov").write_bytes(bytes(range(100)))
+            words, dur = script("NIP take one / hello")
+            cli.save(lib / "p" / "project.json", {"description": None, "tags": [], "clips": ["v"]})
+            cli.save(lib / "p" / "v.nip.json", {"source": "v.mov", "duration": dur, "words": words,
+                                                 "edit": build_edit(words, dur)})
+            with mock.patch.object(cli, "LIBRARY", lib):
+                server = view.ThreadingHTTPServer(("127.0.0.1", 0), view.Handler)
+                threading.Thread(target=server.serve_forever, daemon=True).start()
+                url = f"http://127.0.0.1:{server.server_port}"
+
+                def get(path, **headers):
+                    return urllib.request.urlopen(urllib.request.Request(url + path, headers=headers))
+
+                def post(path, body):
+                    return urllib.request.urlopen(urllib.request.Request(
+                        url + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}))
+
+                r = get("/media/p/v.mov", Range="bytes=10-19")
+                self.assertEqual((r.status, r.read()), (206, bytes(range(10, 20))))
+                for bad in ("/media/p/..%2Fproject.json", "/media/../p/raw/v.mov", "/api/project/nope"):
+                    with self.assertRaises(urllib.error.HTTPError) as cm:
+                        get(bad)
+                    self.assertEqual(cm.exception.code, 404)
+                take = json.loads(get("/api/project/p").read())["clips"][0]["edit"]["takes"][-1]
+                with self.assertRaises(urllib.error.HTTPError) as cm:
+                    post("/api/override/p/v", {"at": take["at"], "start": take["end"] + 1})
+                self.assertEqual(cm.exception.code, 400)
+                post("/api/override/p/v", {"at": take["at"], "keep": False})
+                self.assertFalse(cli.decisions(cli.load(lib / "p" / "v.nip.json"))["takes"][-1]["keep"])
+                server.shutdown()
 
 
 class Export(unittest.TestCase):

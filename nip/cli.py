@@ -10,7 +10,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import build_edit, kept_ranges
+from nip.commands import apply_overrides, build_edit, kept_ranges
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
@@ -27,6 +27,10 @@ def load(p):
 
 def save(p, data):
     p.write_text(json.dumps(data, indent=1))
+
+
+def decisions(clip):
+    return apply_overrides(clip["edit"], clip.get("overrides", {}))
 
 
 def slug(text):
@@ -129,13 +133,13 @@ def report(proj):
     info = load(proj / "project.json")
     print(f"\n{proj.name}\n  {info['description'] or '(no description)'}  tags: {info['tags']}")
     for stem in info["clips"]:
-        e = load(proj / f"{stem}.nip.json")["edit"]
+        e = decisions(load(proj / f"{stem}.nip.json"))
         print(f"\n  {stem}")
         for t in e["takes"]:
             label = f"take {t['take']}" if t["group"] else "untaken"
             mark = "KEEP" if t["keep"] else "drop"
             where = f'"{t["name"]}"' if t.get("name") else f"section {t['group']}"
-            print(f"    {mark}  {mmss(t['start'])}-{mmss(t['end'])}  {where} {label} ({t['why']})")
+            print(f"    {mark}  {mmss(t['start'])}-{mmss(t['end'])}  {where} {label} ({t['why']}{', edited' if t.get('edited') else ''})")
         for m in e["markers"]:
             span = f"{mmss(m['t'])}-{mmss(m['end'])}" if "end" in m else mmss(m["t"])
             print(f"    mark  {span}  {m['label']}")
@@ -179,8 +183,9 @@ def export(proj, combined):
     files, n = [], 1
     for stem in info["clips"]:
         clip = load(proj / f"{stem}.nip.json")
-        for t in clip["edit"]["takes"]:
-            pieces = kept_ranges(t, clip["edit"]["cuts"]) if t["keep"] else []
+        e = decisions(clip)
+        for t in e["takes"]:
+            pieces = kept_ranges(t, e["cuts"]) if t["keep"] else []
             if not pieces:
                 continue
             if t.get("name"):
@@ -219,6 +224,7 @@ def main():
     sub.add_parser("ingest", help="process everything waiting in the inbox once")
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
+    sub.add_parser("view", help="open the viewer in your browser to review and adjust takes")
     for c in ("report", "reparse", "export"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")
@@ -235,6 +241,9 @@ def main():
         while True:
             ingest()
             time.sleep(10)
+    elif a.cmd == "view":
+        from nip.view import serve  # here, not at the top: view imports cli
+        serve()
     elif a.cmd == "list":
         for p in sorted(LIBRARY.iterdir()):
             if (p / "project.json").exists():

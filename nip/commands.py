@@ -184,3 +184,28 @@ def kept_ranges(take, cuts):
         pieces = [p for a, b in pieces
                   for p in ((a, min(b, c["start"])), (max(a, c["end"]), b)) if p[1] - p[0] > 0.05]
     return pieces
+
+
+def apply_overrides(edit, overrides):
+    """Hand edits from the viewer on top of the voice decisions.
+
+    overrides maps a take's original start (as a string) to changed fields: keep, start, end, name.
+    Matching by original start, not list position, keeps them through `nip reparse`.
+    """
+    takes = [dict(t) for t in edit["takes"]]
+    starts = [t["start"] for t in takes]
+    for t, s in zip(takes, starts):
+        t["at"] = s
+    for at, o in overrides.items():
+        i = min(range(len(takes)), key=lambda i: abs(starts[i] - float(at)), default=None)
+        if i is None or abs(starts[i] - float(at)) > 1.0:  # take is gone after a rule change; ignore
+            continue
+        for k in ("keep", "start", "end"):
+            if k in o:
+                takes[i][k] = o[k]
+        if "name" in o:  # a name belongs to the whole clip
+            for t in takes:
+                if t["group"] == takes[i]["group"]:
+                    t["name"] = o["name"] or None
+        takes[i]["edited"] = True
+    return {**edit, "takes": takes}

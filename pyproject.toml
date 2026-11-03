@@ -14,3 +14,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["nip"]
+package-data = {nip = ["viewer.html"]}

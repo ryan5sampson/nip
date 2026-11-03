@@ -21,7 +21,8 @@ The first transcription downloads the Whisper model (about 1.6 GB).
 1. Put footage in `~/NIP/inbox/`. Loose files become one project named after today's date. A folder of files becomes one project named after the folder, so you can group several videos.
 2. Run `nip ingest` once, or `nip watch` to keep checking the inbox.
 3. Read what NIP found: `nip report`.
-4. Export the kept takes as numbered clips: `nip export`. Add `--combined` for one joined video too.
+4. Optional: review in the browser with `nip view`. Play each take, preview the whole edit with the cuts skipped, keep or drop takes, set a take's in and out points from the playhead, and rename clips. Your changes are saved next to NIP's own decisions, so `nip reparse` keeps them. Export from the page, or:
+5. Export the kept takes as numbered clips: `nip export`. Add `--combined` for one joined video too.
 
 Exports land in `~/NIP/exports/<project>/`. Originals stay untouched in `~/NIP/library/<project>/raw/`.
 
