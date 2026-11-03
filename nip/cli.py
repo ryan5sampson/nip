@@ -32,6 +32,7 @@ def save(p, data):
 def decisions(clip):
     """Voice decisions with the user's hand edits on top (all kept through reparse)."""
     e = apply_overrides(clip["edit"], clip.get("overrides", {}))
+    e["labels"] = clip.get("labels", [])  # descriptions the user gave stretches of footage; Reset keeps them
     return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []), clip.get("my_keeps", []))
 
 
@@ -80,6 +81,16 @@ def add_cut(clip, start, end, layer="my_cuts"):  # layer "my_keeps" marks it kee
     clip.setdefault(layer, []).append({"start": round(float(start), 2), "end": round(float(end), 2)})
 
 
+def set_label(clip, start, end, text):
+    """Describe a stretch of footage; replaces any label already on it, and empty text removes it."""
+    ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
+    if not (ok and 0 <= start < end <= clip["duration"]) or not isinstance(text, str) or len(text) > 200:
+        raise ValueError("a label needs a range inside the video and text of 200 characters at most")
+    clip["labels"] = [l for l in clip.get("labels", []) if not start <= (l["start"] + l["end"]) / 2 <= end]
+    if text.strip():
+        clip["labels"].append({"start": round(float(start), 2), "end": round(float(end), 2), "text": text.strip()})
+
+
 def restore_cut(clip, start):
     if not any(isinstance(start, (int, float)) and abs(c["start"] - start) < 0.01 for c in clip["edit"]["cuts"]):
         raise ValueError(f"no voice cut starts at {start}")
@@ -120,8 +131,8 @@ def ingest():
             vids = [v for v in sorted(p.iterdir()) if v.suffix.lower() in VIDEO]
             if vids and all(settled(v) for v in vids):
                 batches[p.name] = vids
-        elif p.suffix.lower() in VIDEO and settled(p):
-            batches.setdefault(str(date.today()), []).append(p)
+        elif p.suffix.lower() in VIDEO and settled(p):  # each loose video is its own project until bundled
+            batches[f"{date.today()}_{slug(p.stem)}"] = [p]
     for name, vids in batches.items():
         process(new_project(name), vids)
         if vids[0].parent != INBOX and not any(vids[0].parent.iterdir()):
@@ -161,6 +172,32 @@ def process(proj, vids):
     if info["description"]:
         proj = proj.rename(free_path(f"{proj.name}_{slug(info['description'])}"))
     report(proj)
+
+
+def bundle(projs, title):
+    """Move several projects' videos, edits and Claude edits into one new project named after title."""
+    infos = [load(p / "project.json") for p in projs]
+    stems = [s for i in infos for s in i["clips"]]
+    if len(projs) < 2 or len(set(stems)) < len(stems) or not slug(title):
+        raise ValueError("bundle two or more projects with different video names, and give the bundle a name")
+    dest = new_project(f"{min(p.name[:10] for p in projs)}_{slug(title)}")
+    info = {"description": next((i["description"] for i in infos if i["description"]), None), "my_description": title.strip(),
+            "tags": sorted({t for i in infos for t in i["tags"]}),
+            "my_tags": sorted({t for i in infos for t in i.get("my_tags", i["tags"])}), "clips": stems, "stories": []}
+    for p, i in zip(projs, infos):
+        for s in i.get("stories", []):
+            info["stories"].append({**s, "id": len(info["stories"]) + 1})
+        for stem in i["clips"]:
+            clip = load(p / f"{stem}.nip.json")
+            shutil.move(p / "raw" / clip["source"], dest / "raw" / clip["source"])
+            shutil.move(p / f"{stem}.nip.json", dest / f"{stem}.nip.json")
+    save(dest / "project.json", info)
+    for p in projs:  # only what NIP made is left; rmdir refuses anything else, so nothing unknown is deleted
+        (p / "project.json").unlink()
+        (p / "thumb.jpg").unlink(missing_ok=True)
+        (p / "raw").rmdir()
+        p.rmdir()
+    return dest
 
 
 def reparse(proj):

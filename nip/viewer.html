@@ -109,6 +109,12 @@
   #timeline { position: relative; display: flex; gap: 2px; height: 46px; padding: 9px 4px; background: var(--track); border-radius: 7px; box-shadow: inset 0 0 0 .5px var(--separator); overflow: hidden; }
   .tk, .gap { position: relative; border-radius: 5px; font-size: 11px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
   .tk { flex: var(--s) 1 0; min-width: 4px; padding: 0 6px; background: var(--control); color: var(--label); box-shadow: inset 0 0 0 .5px var(--control-edge); }
+  .tk.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+  #labelin { flex: 1; min-width: 0; }
+  .tiers { display: flex; gap: 8px; font-size: 11px; color: var(--secondary); }
+  .tiers i { font-style: normal; display: inline-flex; align-items: center; gap: 3px; }
+  .tiers i::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .5px var(--tertiary); }
+  .tile.drop .thumb { box-shadow: 0 0 0 3px var(--green); }
   .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
   .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
   .gap:hover { color: var(--label); box-shadow: inset 0 0 0 1px var(--secondary); }
@@ -219,6 +225,7 @@
 <div class="app">
   <aside class="sidebar" aria-label="Sidebar">
     <h3>Library</h3>
+    <button class="item" id="inboxview" title="Projects not exported yet"><svg class="i"><use href="#i-tray"/></svg><span>Inbox</span><small id="inboxcount" class="num"></small></button>
     <button class="item" id="allfootage"><svg class="i"><use href="#i-photos"/></svg><span>All Footage</span><small id="allcount" class="num"></small></button>
     <h3 id="tagshead" hidden>Tags</h3>
     <div id="taglist"></div>
@@ -317,6 +324,12 @@
   </div>
 </div>
 <div id="status" role="status" aria-live="polite"></div>
+<dialog id="bundle"><form method="dialog">
+  <b>Bundle Footage</b>
+  <p id="bundletext"></p>
+  <input type="text" id="bundlename" maxlength="80" required aria-label="Bundle name" placeholder="Name this bundle" style="width:100%">
+  <div class="actions-line"><button class="btn" value="" formnovalidate>Cancel</button><button class="btn default" value="ok">Bundle</button></div>
+</form></dialog>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -327,8 +340,8 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], tagFilter = null, data = null, proj = '', clipIdx = 0;
-let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
+let projects = [], tagFilter = null, inboxOnly = false, data = null, proj = '', clipIdx = 0;
+let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, openSeg = null, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -363,29 +376,59 @@ function drawLibrary() {
   const tags = Object.keys(counts).sort();
   $('#tagshead').hidden = !tags.length;
   $('#taglist').innerHTML = tags.map(t => `<button class="item ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
-  $('#allfootage').classList.toggle('on', !tagFilter && !proj);
+  $('#allfootage').classList.toggle('on', !tagFilter && !inboxOnly && !proj);
   $('#allcount').textContent = projects.length || '';
-  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)));
+  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)) && (!inboxOnly || !p.exported));
+  $('#inboxview').classList.toggle('on', inboxOnly && !proj);
+  $('#inboxcount').textContent = projects.filter(p => !p.exported).length || '';
   if ($('#library').hidden) return;
-  $('#title').textContent = tagFilter || 'All Footage';
+  $('#title').textContent = tagFilter || (inboxOnly ? 'Inbox' : 'All Footage');
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
-    <a class="tile" href="#/p/${enc(p.name)}">
+    <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Drag onto another project to bundle them">
       <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i></div>
       <b>${esc(p.description || p.name)}</b>
-      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.clips.length ? ` · ${plural(p.clips.length, 'clip')}` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
+      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
+      <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
     </a>`).join('') : projects.length
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>Nothing matches “${esc($('#search').value || tagFilter)}”.</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Drop videos into the inbox. They’ll appear here once processed.</div>`;
 }
 $('#search').oninput = drawLibrary;
+let dragged = null, bundling = [];  // drag a project onto another to bundle them into one
+$('#cards').ondragstart = e => { dragged = e.target.closest('[data-name]')?.dataset.name; };
+$('#cards').ondragover = e => {
+  const t = e.target.closest('[data-name]');
+  document.querySelectorAll('.tile.drop').forEach(x => x !== t && x.classList.remove('drop'));
+  if (dragged && t && t.dataset.name !== dragged) { e.preventDefault(); t.classList.add('drop'); }
+};
+$('#cards').ondragleave = e => { if (!e.relatedTarget?.closest?.('.tile.drop')) document.querySelectorAll('.tile.drop').forEach(x => x.classList.remove('drop')); };
+$('#cards').ondrop = e => {
+  e.preventDefault();
+  document.querySelectorAll('.tile.drop').forEach(x => x.classList.remove('drop'));
+  const target = projects.find(p => p.name === e.target.closest('[data-name]')?.dataset.name), from = projects.find(p => p.name === dragged);
+  if (!target || !from || target === from) return;
+  bundling = [target.name, from.name];
+  $('#bundletext').textContent = `“${from.description || from.name}” and “${target.description || target.name}” become one project, ${mins(from.filmed + target.filmed)} of footage.`;
+  $('#bundlename').value = target.description || '';
+  $('#bundle').returnValue = '';
+  $('#bundle').showModal();
+};
+$('#cards').ondragend = () => { dragged = null; };
+$('#bundle').onclose = () => $('#bundle').returnValue && run($('#cards'), 'Bundling…', async () => {
+  const r = await api('/api/bundle', {projects: bundling, name: $('#bundlename').value});
+  await loadLibrary();
+  status(`Bundled as ${r.name}`);
+});
 $('#taglist').onclick = e => {
   const b = e.target.closest('[data-tag]');
   if (!b) return;
   tagFilter = tagFilter === b.dataset.tag ? null : b.dataset.tag;
+  inboxOnly = false;
   location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
 };
-$('#allfootage').onclick = () => { tagFilter = null; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#inboxview').onclick = () => { tagFilter = null; inboxOnly = true; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#allfootage').onclick = () => { tagFilter = null; inboxOnly = false; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
@@ -401,7 +444,7 @@ const label = t => t.name || (t.group ? `Section ${t.group}` : 'Before first tak
 
 async function loadProject(name) {
   proj = name;
-  openGap = null;
+  openGap = openSeg = null;
   try { show(await api('/api/project/' + enc(name)), 0); }
   catch (e) { return status(e.message, true); }
   if (kept.length) video.readyState ? video.currentTime = kept[0][0] : pendingSeek = kept[0][0];  // open on the first kept frame
@@ -434,8 +477,8 @@ function show(d, idx = clipIdx) {
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
     if (s.gap) return `<div class="gap ${open ? 'open' : ''}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${short(len)}${marks}</div>`;
     const t = e.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
-    const name = t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '';
-    return `<div class="tk ${s.keep ? 'keep' : ''}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
+    const name = labelOf(s)?.text || (t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '');
+    return `<div class="tk ${s.keep ? 'keep' : ''} ${s.a === openSeg ? 'sel' : ''}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
   }).join('') + '<div id="playhead"></div>';
   drawGap();
 
@@ -538,9 +581,20 @@ function reasons(g) {  // why each part of a cut stretch was cut, with a way to 
   });
   return out;
 }
+const labelOf = s => clip().edit.labels.find(l => s.a <= (l.start + l.end) / 2 && (l.start + l.end) / 2 <= s.b);
+const myKeep = s => clip().edit.keeps.find(k => k.why === 'kept by you' && k.start <= s.a + 0.01 && s.a < k.end);
+function drawSeg(s) {  // a clicked clip: describe it, cut it, keep it
+  $('#gapinfo').innerHTML = `<div class="head"><b class="num">${s.keep ? 'Keep' : 'Not marked'} · ${mmss(s.a)}–${mmss(s.b)} · ${short(s.b - s.a)}</b>
+      <button class="btn" data-act="playseg">${icon('play', true)}Play</button>
+      ${!s.keep ? '<button class="btn" data-act="keep">Keep</button>' : myKeep(s) ? '<button class="btn" data-act="unkeep">Unmark</button>' : ''}
+      <button class="btn" data-act="cut">Cut</button><button class="btn" data-act="fold">Close</button></div>
+    <form class="why-row" id="labelform"><input type="text" id="labelin" maxlength="200" aria-label="Clip description"
+      placeholder="Describe this clip, e.g. curve throw in slow motion" value="${esc(labelOf(s)?.text || '')}"><button class="btn">Save</button></form>`;
+}
 function drawGap() {
-  const g = segs.find(s => s.gap && s.a === openGap);
-  $('#gapinfo').hidden = !g;
+  const g = segs.find(s => s.gap && s.a === openGap), sel = segs.find(s => !s.gap && s.a === openSeg);
+  $('#gapinfo').hidden = !g && !sel;
+  if (sel) return drawSeg(sel);
   if (!g) return;
   gapWhy = reasons(g);
   const rows = gapWhy.length ? gapWhy : [{text: 'Between takes. Move a neighbouring take’s In or Out to bring it back.'}];
@@ -549,8 +603,8 @@ function drawGap() {
     rows.map((r, j) => `<div class="why-row"><span>${esc(r.text)}</span>${r.take != null ? `<button class="btn" data-j="${j}">Keep</button>`
       : r.cut ? `<button class="btn" data-j="${j}">${r.cut.why === 'cut by you' ? 'Remove Cut' : 'Restore'}</button>` : ''}</div>`).join('');
 }
-async function cutAction(action, start, end) {
-  try { show(await api(`/api/cuts/${enc(proj)}/${enc(clip().stem)}`, {action, start, end})); return true; }
+async function cutAction(action, start, end, text) {
+  try { show(await api(`/api/cuts/${enc(proj)}/${enc(clip().stem)}`, {action, start, end, text})); return true; }
   catch (e) { status(e.message, true); return false; }
 }
 async function edit(i, fields) {
@@ -657,20 +711,24 @@ document.querySelector('.inspector .seg').onclick = e => {
   document.querySelectorAll('.inspector .pane').forEach(p => p.hidden = p.id !== 'pane-' + tab);
   try { localStorage.setItem('nip-tab', tab); } catch {}
 };
-$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); openGap = null; show(data, +b.dataset.i); } };
+$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); openGap = openSeg = null; show(data, +b.dataset.i); } };
 $('#timeline').onclick = e => {
   const el = e.target.closest('[data-k]');
   if (!el) return;
   const s = segs[+el.dataset.k];
-  if (s.gap && s.a !== openGap) { openGap = s.a; show(data); seek(s.a); return; }
-  const r = el.getBoundingClientRect();
+  if (s.gap && s.a !== openGap) { openGap = s.a; openSeg = null; show(data); seek(s.a); return; }
+  const r = el.getBoundingClientRect();  // before show() replaces the element
+  if (!s.gap && s.a !== openSeg) { openSeg = s.a; openGap = null; show(data); }
   seek(s.a + (s.b - s.a) * Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
 };
 $('#gapinfo').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
-  const g = segs.find(s => s.gap && s.a === openGap);
-  if (b.dataset.act === 'fold') { openGap = null; show(data); }
+  const g = segs.find(s => s.gap && s.a === openGap), sel = segs.find(s => !s.gap && s.a === openSeg);
+  if (b.dataset.act === 'fold') { openGap = openSeg = null; show(data); }
+  else if (b.dataset.act === 'playseg' && sel) playList([{ci: clipIdx, a: sel.a, b: sel.b}]);
+  else if (['keep', 'cut'].includes(b.dataset.act) && sel) cutAction(b.dataset.act, sel.a, sel.b).then(ok => ok && status(b.dataset.act === 'cut' ? `Cut ${short(sel.b - sel.a)}` : 'Marked keep'));
+  else if (b.dataset.act === 'unkeep' && sel) cutAction('unkeep', myKeep(sel).start).then(ok => ok && status('Unmarked'));
   else if (b.dataset.act === 'playgap' && g) playList([{ci: clipIdx, a: g.a, b: g.b}]);
   else if (b.dataset.act === 'all') restoreAll(gapWhy);
   else if (b.dataset.j != null) restoreOne(gapWhy[+b.dataset.j]);
@@ -692,6 +750,11 @@ async function restoreAll(rows) {  // one request at a time: each answer is the 
   }
   status('Restored');
 }
+$('#gapinfo').onsubmit = e => {
+  e.preventDefault();
+  const sel = segs.find(s => !s.gap && s.a === openSeg);
+  if (sel) cutAction('label', sel.a, sel.b, $('#labelin').value).then(ok => ok && status($('#labelin').value.trim() ? 'Described' : 'Description removed'));
+};
 $('#play').onclick = togglePlay;
 $('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : mark('cut');
 $('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : mark('keep');

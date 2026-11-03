@@ -207,6 +207,21 @@ def unmarked(edit):
     return sorted(p for p in out if p[1] - p[0] >= 0.5)  # slivers between marks aren't worth asking about
 
 
+def tiers(edit, duration):
+    """The three tiers as (start, end) lists: cut (folded away), unmarked, and keep."""
+    merged = []
+    for a, b in sorted(p for t in edit["takes"] if t["keep"] for p in kept_ranges(t, edit["cuts"])):
+        if merged and a <= merged[-1][1] + 0.01:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    loose = unmarked(edit)
+    keep = [p for a, b in merged for p in kept_ranges({"start": a, "end": b}, [{"start": x, "end": y} for x, y in loose])
+            if p[1] - p[0] >= 0.5]
+    cut = kept_ranges({"start": 0.0, "end": duration}, [{"start": a, "end": b} for a, b in merged])
+    return {"cut": cut, "unmarked": loose, "keep": keep}
+
+
 def apply_overrides(edit, overrides):
     """Hand edits from the viewer on top of the voice decisions.
 

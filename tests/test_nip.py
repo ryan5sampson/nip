@@ -153,6 +153,15 @@ class Brief(unittest.TestCase):
         self.assertEqual([p["text"] for p in phrases(self.clips())],
                          ["Linderballs are great.", "They bounce", "um", "and you can play anywhere"])
 
+    def test_labelled_clips_can_be_picked_whole(self):
+        from nip.brief import phrases, pieces, prompt
+        clips = self.clips()
+        clips[0]["edit"]["labels"] = [{"start": 4.0, "end": 9.0, "text": "slow motion throw"}]
+        phs = phrases(clips)
+        self.assertEqual((phs[-1]["id"], phs[-1]["text"]), (5, "slow motion throw"))
+        self.assertIn("[5] v 4.0s (5.0s) kept CLIP: slow motion throw", prompt("b", phs))
+        self.assertEqual(pieces([5], phs, {"v": 20.0}), [{"stem": "v", "start": 3.9, "end": 9.25}])
+
     def test_ask_checks_claudes_picks(self):
         from types import SimpleNamespace
         from nip import brief
@@ -325,6 +334,14 @@ class Viewer(unittest.TestCase):
                 post("/api/cuts/p/v", {"action": "reset"})
                 clip = cli.load(lib / "p" / "v.nip.json")
                 self.assertEqual((cli.decisions(clip)["cuts"], clip.get("overrides")), (clip["edit"]["cuts"], None))
+                # describe a clip; Reset leaves descriptions alone; the library card counts the tiers
+                post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "the hello"})
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "x" * 201})
+                post("/api/cuts/p/v", {"action": "reset"})
+                card = json.loads(get("/api/projects").read())[0]
+                self.assertEqual((card["tiers"], card["exported"]), ({"keep": 0, "unmarked": 1, "cut": 1}, False))
+                self.assertIn("the hello", card["search"])
                 # three tiers: mark the unmarked footage keep by hand; export can settle the rest as cut
                 post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})  # splits "hello" in two
                 left = json.loads(get("/api/project/p").read())["clips"][0]["unmarked"]
@@ -354,9 +371,15 @@ class Export(unittest.TestCase):
                 with mock.patch.object(cli, "transcribe", return_value=words), \
                         mock.patch.object(cli, "settled", return_value=True):
                     cli.ingest()
-                proj = cli.find("")
+                projs = sorted(cli.LIBRARY.iterdir())  # each loose video is its own project
+                self.assertEqual([p.name[11:] for p in projs], ["a_demo-day", "b_demo-day"])
+                with self.assertRaises(ValueError):
+                    cli.bundle(projs[:1], "Demo day")
+                proj = cli.bundle(projs, "Demo day")
+                self.assertEqual([p.name for p in cli.LIBRARY.iterdir()], [proj.name])  # the old folders are gone
                 self.assertTrue(proj.name.endswith("_demo-day"))
-                self.assertEqual(json.loads((proj / "project.json").read_text())["clips"], ["a", "b"])
+                info = json.loads((proj / "project.json").read_text())
+                self.assertEqual((info["clips"], info["my_description"]), (["a", "b"], "Demo day"))
                 cli.export(proj, combined=True)
                 outs = sorted(p.name for p in (cli.EXPORTS / proj.name).iterdir())
                 self.assertEqual(outs, ["01_a_s1t2.mp4", "02_b_s1t2.mp4", f"{proj.name}.mp4"])

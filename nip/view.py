@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from nip import brief, cli
-from nip.commands import kept_ranges, unmarked
+from nip.commands import kept_ranges, tiers, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
@@ -44,11 +44,15 @@ def summary(proj):
     desc, tags = info.get("my_description") or info["description"], info.get("my_tags", info["tags"])
     notes = [n["text"] for c in clips for n in c["edit"].get("notes", [])]
     names = sorted({t["name"] for c in clips for t in c["edit"]["takes"] if t.get("name")})
+    labels = [l["text"] for c in clips for l in c["edit"]["labels"]]
+    ts = [tiers(c["edit"], c["duration"]) for c in clips]
     return {"name": proj.name, "description": desc, "tags": tags, "videos": len(clips),
             "clips": names, "filmed": sum(c["duration"] for c in clips), "kept": sum(map(kept_seconds, clips)),
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
-            "search": " ".join([proj.name, desc or "", *tags, *names, *notes,
+            "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
+            "exported": (cli.EXPORTS / proj.name).exists(),
+            "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
 
@@ -260,6 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                         cli.add_cut(clip, start, body.get("end"))
                     elif act == "keep":
                         cli.add_cut(clip, start, body.get("end"), "my_keeps")
+                    elif act == "label":
+                        cli.set_label(clip, start, body.get("end"), body.get("text"))
                     elif act in ("uncut", "unkeep"):
                         k = "my_cuts" if act == "uncut" else "my_keeps"
                         clip[k] = [c for c in clip.get(k, []) if not isinstance(start, (int, float)) or abs(c["start"] - start) >= 0.01]
@@ -267,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                         for k in cli.HAND:
                             clip.pop(k, None)
                     else:
-                        raise ValueError("action must be restore, cut, uncut, keep, unkeep or reset")
+                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, label or reset")
                     cli.save(f, clip)
                 self.send_json(project_data(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse
@@ -331,6 +337,13 @@ class Handler(BaseHTTPRequestHandler):
                             cli.save(f, clip)
                 cli.export(proj, bool(body.get("combined")))
                 self.send_json({"done": str(cli.EXPORTS / proj.name)})
+            elif p == ["api", "bundle"]:  # several projects become one, named by the user
+                names = body.get("projects")
+                if not isinstance(names, list) or not isinstance(body.get("name"), str):
+                    raise ValueError("send projects (a list) and name")
+                with LOCK:
+                    dest = cli.bundle([self.project(str(n)) for n in dict.fromkeys(names)], body["name"])
+                self.send_json({"name": dest.name})
             elif p == ["api", "open"]:  # show a folder in Finder
                 if body.get("what") == "inbox":
                     cli.INBOX.mkdir(parents=True, exist_ok=True)
