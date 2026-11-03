@@ -3,34 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NIP Viewer</title>
+<title>NIP</title>
 <style>
   :root {
     --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e2dd;
-    --keep: #2f9e5b; --drop: #c9c9c3; --cut: #d9483b; --mark: #e0a100; --note: #3b7bd9; --accent: #1d1d1b;
+    --keep: #2f9e5b; --drop: #c9c9c3; --cut: #d9483b; --mark: #e0a100; --note: #3b7bd9; --accent: #1d1d1b; --claude: #c96442;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #161615; --panel: #20201e; --text: #ecece8; --muted: #9a9a94; --line: #34342f;
-      --keep: #3fbf72; --drop: #4a4a45; --cut: #ef6457; --mark: #f2b928; --note: #6aa0f0; --accent: #ecece8;
+      --keep: #3fbf72; --drop: #4a4a45; --cut: #ef6457; --mark: #f2b928; --note: #6aa0f0; --accent: #ecece8; --claude: #e08a6a;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
-  header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .04em; }
-  select, button, input[type=text] { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
-  button { cursor: pointer; }
-  button:hover { border-color: var(--muted); }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 15px; margin: 0 6px 0 0; letter-spacing: .04em; }
+  header h1 a { color: inherit; text-decoration: none; }
+  select, button, input[type=text], input[type=search], textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  textarea { width: 100%; resize: vertical; min-height: 64px; }
+  button { cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  button.claude { background: var(--claude); color: #fff; border-color: var(--claude); }
   button.on { border-color: var(--accent); font-weight: 600; }
-  #status { color: var(--muted); margin-left: auto; }
-  main { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  button.link { border: none; background: none; padding: 0 2px; color: var(--muted); text-decoration: underline; }
+  #inbox { color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  #status { color: var(--muted); margin-left: auto; max-width: 50%; text-align: right; }
+  .err { color: var(--cut) !important; }
+  .muted, .why { color: var(--muted); font-size: 12px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  video { width: 100%; max-height: 72vh; background: #000; border-radius: 8px; display: block; }
-  #videos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  #meta { color: var(--muted); margin: 0 0 10px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  [hidden] { display: none !important; }
+
+  /* library */
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .filters input { flex: 1; min-width: 200px; }
+  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .card { cursor: pointer; padding: 0; overflow: hidden; display: flex; flex-direction: column; color: inherit; text-decoration: none; }
+  .card:hover { border-color: var(--muted); }
+  .card .thumb { aspect-ratio: 4 / 5; background: #000 center / cover no-repeat; }
+  .card .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .card b { font-size: 14px; line-height: 1.3; }
+  .tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tags span { font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  /* project */
+  .projbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .projbar #desc { flex: 2; min-width: 220px; font-weight: 600; }
+  .projbar #tags { flex: 1; min-width: 160px; }
+  .cols { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  video { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; display: block; }
+  #videos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  #meta { color: var(--muted); margin: 0 0 8px; }
   #timeline { position: relative; height: 34px; margin: 12px 0 4px; background: var(--bg); border-radius: 6px; cursor: pointer; overflow: hidden; }
   #timeline > div { position: absolute; }
   .take { top: 4px; bottom: 4px; border-radius: 3px; }
@@ -39,19 +70,19 @@
   .cut { top: 0; bottom: 0; background: var(--cut); opacity: .55; }
   .mark { top: 0; height: 5px; background: var(--mark); min-width: 2px; }
   .note { bottom: 0; height: 6px; width: 6px; border-radius: 50%; background: var(--note); transform: translateX(-3px); }
+  .story { top: 12px; height: 10px; background: var(--claude); border-radius: 2px; }
   #playhead { top: 0; bottom: 0; width: 2px; background: var(--text); pointer-events: none; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
-  h2:first-child { margin-top: 0; }
-  .takes { display: flex; flex-direction: column; gap: 8px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
   .row { border: 1px solid var(--line); border-left: 4px solid var(--drop); border-radius: 8px; padding: 8px; }
   .row.keep { border-left-color: var(--keep); }
+  .row.storyrow { border-left-color: var(--claude); }
   .row .top { display: flex; gap: 6px; align-items: center; }
   .row input.name { flex: 1; min-width: 0; }
   .row .bottom { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
-  .why { color: var(--muted); font-size: 12px; }
+  .row .bottom label { margin-right: auto; }
   .list div { padding: 4px 0; cursor: pointer; border-bottom: 1px solid var(--line); }
   .list div:hover { color: var(--note); }
   .list b { font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 6px; }
@@ -59,55 +90,85 @@
   #words span { cursor: pointer; border-radius: 3px; padding: 0 1px; }
   #words span.gone { color: var(--muted); text-decoration: line-through; opacity: .6; }
   #words span.now { background: var(--mark); color: #000; }
-  .err { color: var(--cut); }
+  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
   label { user-select: none; }
 </style>
 </head>
 <body>
 <header>
-  <h1>NIP</h1>
-  <select id="project" aria-label="Project"></select>
-  <label><input type="checkbox" id="combined"> one joined video too</label>
-  <button class="primary" id="export">Export</button>
-  <span id="status" role="status"></span>
+  <h1><a href="#/">NIP</a></h1>
+  <span id="inbox"></span>
+  <span id="status" role="status" aria-live="polite"></span>
 </header>
-<main>
-  <section class="panel" aria-label="Takes">
-    <h2>Clips and takes</h2>
-    <div class="takes" id="takes"></div>
-    <h2>Notes and highlights</h2>
-    <div class="list" id="notes"></div>
-  </section>
-  <section>
-    <div class="panel">
-      <div id="videos"></div>
-      <p id="meta"></p>
-      <video id="video" controls playsinline preload="metadata"></video>
-      <div id="timeline" aria-label="Timeline: click to jump"><div id="playhead"></div></div>
-      <div class="legend">
-        <span><i style="background:var(--keep)"></i>kept take</span>
-        <span><i style="background:var(--drop)"></i>dropped</span>
-        <span><i style="background:var(--cut)"></i>cut</span>
-        <span><i style="background:var(--mark)"></i>highlight</span>
-        <span><i style="background:var(--note);border-radius:50%"></i>note</span>
-      </div>
+
+<div class="wrap" id="library" hidden>
+  <div class="filters">
+    <input type="search" id="search" placeholder="Search descriptions, tags, clips, notes and everything said" aria-label="Search footage">
+    <span id="tagchips" class="tags"></span>
+  </div>
+  <div class="grid" id="cards"></div>
+</div>
+
+<div class="wrap" id="project" hidden>
+  <div class="projbar">
+    <button onclick="location.hash = '#/'">← Library</button>
+    <input type="text" id="desc" aria-label="Description" placeholder="Describe this footage">
+    <input type="text" id="tags" aria-label="Tags" placeholder="tags, comma separated">
+    <label><input type="checkbox" id="combined"> one joined video too</label>
+    <button class="primary" id="export">Export kept takes</button>
+    <button id="reveal">Show exports</button>
+  </div>
+  <div class="cols">
+    <section class="panel" aria-label="Edit">
+      <h2>Clips and takes</h2>
+      <div class="stack" id="takes"></div>
+      <h2>Edit with Claude</h2>
+      <textarea id="brief" placeholder="e.g. Give me a 30 second video where I explain why Linderballs are great"></textarea>
       <div class="controls">
-        <button id="preview">▶ Preview the edit</button>
-        <button id="stop">Stop preview</button>
+        <button class="claude" id="ask">Make the edit</button>
+        <span class="muted" id="claudehint"></span>
       </div>
-    </div>
-    <div class="panel" style="margin-top:16px">
-      <h2>Transcript <span class="why">(click a word to jump; struck words won't be exported)</span></h2>
-      <div id="words"></div>
-    </div>
-  </section>
-</main>
+      <div class="stack" id="stories" style="margin-top:10px"></div>
+      <h2>Notes and highlights</h2>
+      <div class="list" id="notes"></div>
+    </section>
+    <section>
+      <div class="panel">
+        <div id="videos"></div>
+        <p id="meta"></p>
+        <video id="video" controls playsinline preload="metadata"></video>
+        <div id="timeline" aria-label="Timeline: click to jump"></div>
+        <div class="legend">
+          <span><i style="background:var(--keep)"></i>kept take</span>
+          <span><i style="background:var(--drop)"></i>dropped</span>
+          <span><i style="background:var(--cut)"></i>cut</span>
+          <span><i style="background:var(--mark)"></i>highlight</span>
+          <span><i style="background:var(--note);border-radius:50%"></i>note</span>
+          <span><i style="background:var(--claude)"></i>Claude edit (while previewing)</span>
+        </div>
+        <div class="controls">
+          <button id="preview">▶ Preview kept takes</button>
+          <button id="stop">Stop preview</button>
+          <span class="muted"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> skip 2s · <kbd>I</kbd><kbd>O</kbd> set in/out · <kbd>K</kbd> keep</span>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Transcript <span class="why">(click a word to jump; struck words aren't in the kept takes)</span></h2>
+        <div id="words"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const video = $('#video');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const mmss = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
-let data = null, proj = '', clipIdx = 0, playing = null, kept = [], wordEls = [], nowWord = null;
+const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+const enc = encodeURIComponent;
+let projects = [], tagFilter = null, data = null, proj = '', clipIdx = 0;
+let playing = null, pendingSeek = null, kept = [], wordEls = [], nowWord = null, storyBar = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -116,9 +177,41 @@ async function api(path, body) {
   return j;
 }
 const status = (msg, bad) => { $('#status').textContent = msg; $('#status').className = bad ? 'err' : ''; };
+async function run(btn, busyMsg, fn) {  // disable a button while its request runs, report errors in the header
+  btn.disabled = true;
+  status(busyMsg);
+  try { await fn(); } catch (e) { status(e.message, true); }
+  btn.disabled = false;
+}
+
+// ---------- library ----------
+async function loadLibrary() {
+  try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
+  drawLibrary();
+}
+function drawLibrary() {
+  const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const tags = [...new Set(projects.flatMap(p => p.tags))].sort();
+  $('#tagchips').innerHTML = tags.map(t => `<button class="chip ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('');
+  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)));
+  $('#cards').innerHTML = shown.length ? shown.map(p => `
+    <a class="panel card" href="#/p/${enc(p.name)}">
+      <div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div>
+      <div class="body">
+        <b>${esc(p.description || p.name)}</b>
+        <span class="muted">${esc(p.name.slice(0, 10))} · ${p.videos} video${p.videos > 1 ? 's' : ''} · ${mins(p.filmed)} filmed · ${mins(p.kept)} kept</span>
+        ${p.clips.length ? `<span class="muted">Clips: ${esc(p.clips.join(', '))}</span>` : ''}
+        <span class="muted">${[p.highlights && `${p.highlights} highlight${p.highlights > 1 ? 's' : ''}`, p.notes && `${p.notes} note${p.notes > 1 ? 's' : ''}`, p.stories && `${p.stories} Claude edit${p.stories > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</span>
+        <div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>
+      </div>
+    </a>`).join('') : `<div class="empty">${projects.length ? 'Nothing matches.' : 'No footage yet. Drop videos into the inbox and NIP will process them here.'}</div>`;
+}
+$('#search').oninput = drawLibrary;
+$('#tagchips').onclick = e => { const t = e.target.dataset.tag; if (t) { tagFilter = tagFilter === t ? null : t; drawLibrary(); } };
+
+// ---------- project ----------
 const clip = () => data.clips[clipIdx];
 const pct = t => `${100 * t / clip().duration}%`;
-
 // same as kept_ranges() in commands.py: the pieces of a take that survive the cuts
 function pieces(t, cuts) {
   let ps = [[t.start, t.end]];
@@ -127,9 +220,9 @@ function pieces(t, cuts) {
 }
 const label = t => t.name || (t.group ? `section ${t.group}` : 'before any take');
 
-async function loadProject(name, idx = 0) {
+async function loadProject(name) {
   proj = name;
-  try { show(await api('/api/project/' + encodeURIComponent(name)), idx); }
+  try { show(await api('/api/project/' + enc(name)), 0); }
   catch (e) { status(e.message, true); }
 }
 
@@ -137,21 +230,24 @@ function show(d, idx = clipIdx) {
   data = d;
   clipIdx = Math.min(idx, data.clips.length - 1);
   const c = clip(), e = c.edit;
-  const src = `/media/${encodeURIComponent(proj)}/${encodeURIComponent(c.source)}`;
+  const src = `/media/${enc(proj)}/${enc(c.source)}`;
   if (video.dataset.src !== src) { video.src = src; video.dataset.src = src; }
   kept = e.takes.filter(t => t.keep).flatMap(t => pieces(t, e.cuts)).sort((a, b) => a[0] - b[0]);
   const keptLen = kept.reduce((s, [a, b]) => s + b - a, 0);
 
+  if (document.activeElement !== $('#desc')) $('#desc').value = data.description || '';
+  if (document.activeElement !== $('#tags')) $('#tags').value = data.tags.join(', ');
   $('#videos').innerHTML = data.clips.length > 1 ? data.clips.map((c, i) =>
     `<button data-i="${i}" class="${i === clipIdx ? 'on' : ''}">${esc(c.stem)}</button>`).join('') : '';
-  $('#meta').textContent = `${data.description || 'No description'} · ${c.source} · ${mmss(c.duration)} filmed, ${mmss(keptLen)} kept`
-    + (data.tags.length ? ` · tags: ${data.tags.join(', ')}` : '');
+  $('#meta').textContent = `${c.source} · ${mmss(c.duration)} filmed, ${mmss(keptLen)} kept`;
 
+  const bar = storyBar ? storyBar.filter(p => p.ci === clipIdx) : [];
   $('#timeline').innerHTML =
     e.takes.map(t => `<div class="take ${t.keep ? 'keep' : 'drop'}" style="left:${pct(t.start)};width:${pct(t.end - t.start)}" title="${esc(label(t))}"></div>`).join('') +
     e.cuts.map(x => `<div class="cut" style="left:${pct(x.start)};width:${pct(x.end - x.start)}" title="cut: ${esc(x.why)}"></div>`).join('') +
     e.markers.map(m => `<div class="mark" style="left:${pct(m.t)};width:${m.end != null ? pct(m.end - m.t) : '2px'}" title="${esc(m.label)}"></div>`).join('') +
     (e.notes || []).map(n => `<div class="note" style="left:${pct(n.t)}" title="${esc(n.text)}"></div>`).join('') +
+    bar.map(p => `<div class="story" style="left:${pct(p.a)};width:${pct(p.b - p.a)}"></div>`).join('') +
     '<div id="playhead"></div>';
 
   $('#takes').innerHTML = e.takes.map((t, i) => `
@@ -161,14 +257,28 @@ function show(d, idx = clipIdx) {
         ${t.group ? `<span class="why">take ${t.take}</span>` : ''}
       </div>
       <div class="bottom">
-        <button data-act="play">▶ ${mmss(t.start)}–${mmss(t.end)}</button>
         <label><input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''}> keep</label>
-        <button data-act="in" title="Start this take at the playhead">Set in</button>
-        <button data-act="out" title="End this take at the playhead">Set out</button>
-        ${t.edited ? '<button data-act="reset">Undo my changes</button>' : ''}
-        <span class="why">${esc(t.why)}${t.edited ? ' · edited' : ''}</span>
+        <button data-act="play">▶ ${mmss(t.start)}–${mmss(t.end)}</button>
+        <button data-act="in" title="Start this take at the playhead (I)">In</button>
+        <button data-act="out" title="End this take at the playhead (O)">Out</button>
+        ${t.edited ? '<button data-act="reset" title="Undo my changes">Undo</button>' : ''}
       </div>
+      <div class="why">${esc(t.why)}${t.edited ? ' · edited by you' : ''}</div>
     </div>`).join('');
+
+  $('#stories').innerHTML = data.stories.slice().reverse().map(s => {
+    const len = s.pieces.reduce((n, p) => n + p.end - p.start, 0);
+    return `<div class="row storyrow" data-id="${s.id}">
+      <div class="top"><b style="flex:1">${esc(s.title)}</b><span class="why">${mins(len)}</span></div>
+      <div class="why">“${esc(s.brief)}”</div>
+      <div class="muted" style="margin-top:4px">${esc(s.note)}</div>
+      <div class="bottom">
+        <button data-act="play">▶ Preview</button>
+        <button data-act="export">Export</button>
+        <button class="link" data-act="delete">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
 
   const items = [
     ...e.markers.map(m => ({t: m.t, text: `${m.end != null ? `highlight to ${mmss(m.end)}: ` : 'mark: '}${m.label}`})),
@@ -185,22 +295,36 @@ function show(d, idx = clipIdx) {
 
 async function edit(i, fields) {
   const t = clip().edit.takes[i];
-  try { show(await api(`/api/override/${encodeURIComponent(proj)}/${encodeURIComponent(clip().stem)}`, {at: t.at, ...fields})); status('Saved'); }
+  try { show(await api(`/api/override/${enc(proj)}/${enc(clip().stem)}`, {at: t.at, ...fields})); status('Saved'); }
   catch (e) { status(e.message, true); }
 }
+const takeAt = t => clip().edit.takes.findIndex(x => x.start <= t && t < x.end);
 
-function play(ps) {
-  if (!ps.length) return status('Nothing kept to play', true);
-  playing = ps;
-  video.currentTime = ps[0][0];
-  video.play();
+// ---------- playback: a list of pieces {ci, a, b}, possibly across videos, in order ----------
+function playList(list, bar = null) {
+  if (!list.length) return status('Nothing to play', true);
+  playing = {list, i: 0};
+  storyBar = bar;
+  if (bar) show(data);  // draw the edit's pieces on the timeline
+  goPiece();
 }
-const seek = t => { playing = null; video.currentTime = t; };
+function goPiece() {
+  const p = playing.list[playing.i];
+  if (p.ci !== clipIdx) { pendingSeek = p.a; show(data, p.ci); }
+  else { video.currentTime = p.a; video.play(); }
+}
+function stopPlaying() { playing = null; if (storyBar) { storyBar = null; show(data); } }
+video.addEventListener('loadedmetadata', () => {
+  if (pendingSeek == null) return;
+  video.currentTime = pendingSeek;
+  pendingSeek = null;
+  if (playing) video.play();
+});
+const seek = t => { stopPlaying(); video.currentTime = t; };
 
-// follow the playhead; while previewing, skip whatever the export would leave out
 function follow() {
   requestAnimationFrame(follow);
-  if (!data) return;
+  if (!data || $('#project').hidden) return;
   const t = video.currentTime;
   const ph = $('#playhead');
   if (ph) ph.style.left = pct(t);
@@ -211,49 +335,97 @@ function follow() {
     nowWord = wordEls[k];
     nowWord?.classList.add('now');
   }
-  if (!playing || video.paused) return;
-  const p = playing.find(([, b]) => t < b - 0.03);
-  if (!p) { video.pause(); playing = null; return; }
-  if (t < p[0] - 0.05) video.currentTime = p[0];
+  if (!playing || video.paused || pendingSeek != null) return;
+  const p = playing.list[playing.i];
+  if (t >= p.b - 0.03) {
+    if (++playing.i >= playing.list.length) { video.pause(); stopPlaying(); }
+    else goPiece();
+  } else if (t < p.a - 0.3) video.currentTime = p.a;
 }
 
-$('#project').onchange = e => loadProject(e.target.value);
-$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) show(data, +b.dataset.i); };
+$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); show(data, +b.dataset.i); } };
 $('#timeline').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); seek(clip().duration * (e.clientX - r.left) / r.width); };
 $('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
 $('#words').onclick = e => { if (e.target.dataset.t) seek(+e.target.dataset.t); };
-$('#preview').onclick = () => play(kept);
-$('#stop').onclick = () => { playing = null; video.pause(); };
+$('#preview').onclick = () => playList(kept.map(([a, b]) => ({ci: clipIdx, a, b})));
+$('#stop').onclick = () => { stopPlaying(); video.pause(); };
 $('#takes').onclick = e => {
   const act = e.target.dataset.act, row = e.target.closest('.row');
   if (!act || !row) return;
   const i = +row.dataset.i, t = clip().edit.takes[i];
-  if (act === 'play') play(pieces(t, clip().edit.cuts));
+  if (act === 'play') playList(pieces(t, clip().edit.cuts).map(([a, b]) => ({ci: clipIdx, a, b})));
   if (act === 'keep') edit(i, {keep: e.target.checked});
   if (act === 'in') edit(i, {start: video.currentTime});
   if (act === 'out') edit(i, {end: video.currentTime});
   if (act === 'reset') edit(i, {reset: true});
 };
 $('#takes').onchange = e => {
-  if (!e.target.classList.contains('name')) return;
-  edit(+e.target.closest('.row').dataset.i, {name: e.target.value});
+  if (e.target.classList.contains('name')) edit(+e.target.closest('.row').dataset.i, {name: e.target.value});
 };
-$('#export').onclick = async () => {
-  $('#export').disabled = true;
-  status('Exporting… this takes about a tenth of the footage length');
-  try { status(`Exported to ${(await api('/api/export/' + encodeURIComponent(proj), {combined: $('#combined').checked})).done}`); }
-  catch (e) { status(e.message, true); }
-  $('#export').disabled = false;
+$('#stories').onclick = e => {
+  const act = e.target.dataset.act, row = e.target.closest('.row');
+  if (!act || !row) return;
+  const s = data.stories.find(s => s.id === +row.dataset.id);
+  if (act === 'play') {
+    const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
+    playList(list, list);
+  }
+  if (act === 'export') run(e.target, `Exporting “${s.title}”…`, async () =>
+    status(`Exported ${(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'})).done}`));
+  if (act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files stay.`))
+    run(e.target, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Deleted'); });
 };
+$('#ask').onclick = () => {
+  const text = $('#brief').value.trim();
+  if (!text) return status('Write what you want first', true);
+  run($('#ask'), 'Claude is reading the transcript and picking lines… (about a minute)', async () => {
+    show(await api('/api/brief/' + enc(proj), {brief: text}));
+    status(`Claude made “${data.stories.at(-1).title}”. Preview it below the brief.`);
+  });
+};
+$('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
+$('#tags').onchange = () => run($('#tags'), 'Saving…', async () => {
+  show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')}));
+  status('Saved');
+});
+$('#export').onclick = () => run($('#export'), 'Exporting… about a tenth of the footage length', async () =>
+  status(`Exported to ${(await api('/api/export/' + enc(proj), {combined: $('#combined').checked})).done}`));
+$('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
-(async () => {
+document.addEventListener('keydown', e => {
+  if ($('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  const t = video.currentTime, i = takeAt(t);
+  if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
+  else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
+  else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
+});
+
+// ---------- inbox status and routing ----------
+async function poll() {
   try {
-    const names = await api('/api/projects');
-    $('#project').innerHTML = names.map(n => `<option>${esc(n)}</option>`).join('');
-    if (names.length) loadProject(names[0]); else status('No projects yet. Run nip ingest first.');
-  } catch (e) { status(e.message, true); }
-  follow();
-})();
+    const s = await api('/api/status');
+    $('#inbox').innerHTML = `${s.processing ? `<b>Processing ${s.processing} new video${s.processing > 1 ? 's' : ''}…</b>` : 'Inbox empty'}
+      <button class="link" id="openinbox" title="${esc(s.inbox)}">Open inbox</button>`;
+    $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
+    $('#claudehint').textContent = s.claude ? '' : 'Needs ANTHROPIC_API_KEY set before starting nip.';
+    if (lastProcessing && !s.processing && !$('#library').hidden) loadLibrary();
+    lastProcessing = s.processing;
+  } catch (e) { $('#inbox').textContent = 'NIP isn’t running'; }
+}
+function route() {
+  const m = location.hash.match(/^#\/p\/(.+)$/);
+  $('#library').hidden = !!m;
+  $('#project').hidden = !m;
+  stopPlaying();
+  video.pause();
+  if (m) loadProject(decodeURIComponent(m[1])); else loadLibrary();
+}
+window.onhashchange = route;
+route();
+poll();
+setInterval(poll, 5000);
+follow();
 </script>
 </body>
 </html>

@@ -127,6 +127,35 @@ class Commands(unittest.TestCase):
         self.assertTrue(all(a >= words[1]["end"] for a, _ in kept))
 
 
+class Brief(unittest.TestCase):
+    def clips(self):
+        words, dur = script("NIP take one / Linderballs are great. They bounce / um / and you can play anywhere")
+        return [{"stem": "v", "words": words, "duration": dur, "edit": build_edit(words, dur)}]
+
+    def test_phrases_skip_commands_and_split_at_pauses(self):
+        from nip.brief import phrases
+        self.assertEqual([p["text"] for p in phrases(self.clips())],
+                         ["Linderballs are great.", "They bounce", "um", "and you can play anywhere"])
+
+    def test_ask_checks_claudes_picks(self):
+        from types import SimpleNamespace
+        from nip import brief
+        calls = []
+
+        def create(**kw):
+            calls.append(kw)
+            text = json.dumps({"title": "Why", "note": "n", "phrases": [4, 1, 1, 99]})  # dupe and unknown id
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)])
+        client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+        out = brief.ask("30 seconds on why they're great", self.clips(), client=client)
+        self.assertEqual(calls[0]["model"], "claude-opus-5-5")
+        self.assertIn("[1] v", calls[0]["messages"][0]["content"])
+        phs = brief.phrases(self.clips())
+        self.assertEqual([(p["start"], p["end"]) for p in out["pieces"]],
+                         [(round(phs[3]["start"] - 0.1, 2), round(phs[3]["end"] + 0.25, 2)),
+                          (round(phs[0]["start"] - 0.1, 2), round(phs[0]["end"] + 0.25, 2))])
+
+
 class Overrides(unittest.TestCase):
     def test_hand_edits_match_by_original_start(self):
         _, e = summary("NIP new clip intro / one / NIP take two / two")
@@ -210,6 +239,11 @@ class Export(unittest.TestCase):
                                       capture_output=True, text=True, check=True).stdout.strip()
                 self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertFalse(any(cli.INBOX.iterdir()))
+                story = {"title": "Best bits", "pieces": [{"stem": "b", "start": 1.0, "end": 2.0},
+                                                          {"stem": "a", "start": 3.0, "end": 4.5}]}
+                dur, _ = cli.probe(cli.export_story(proj, story))
+                self.assertAlmostEqual(dur, 2.5, delta=0.2)  # two videos joined in Claude's order
+                self.assertEqual(sorted(f.name for f in (cli.EXPORTS / proj.name).glob(".*")), [])
 
 
 if __name__ == "__main__":

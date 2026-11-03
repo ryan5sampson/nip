@@ -1,26 +1,58 @@
-"""nip view: a local page to review and adjust the edit decisions before export."""
+"""nip view: the local NIP app. Library, review and adjust takes, Claude edits, export. Also keeps ingesting the inbox."""
 import json
+import os
 import re
+import subprocess
 import threading
+import time
+import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from nip import cli
+from nip import brief, cli
+from nip.commands import kept_ranges
 
 PAGE = Path(__file__).with_name("viewer.html")
-LOCK = threading.Lock()  # one writer at a time for the .nip.json files
+LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
+STATE = {"processing": 0}  # videos the background ingest is working on
+
+
+def clips_of(proj):
+    info = cli.load(proj / "project.json")
+    out = []
+    for stem in info["clips"]:
+        c = cli.load(proj / f"{stem}.nip.json")
+        out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
+                    "words": c["words"], "edit": cli.decisions(c)})
+    return info, out
+
+
+def kept_seconds(clip):
+    e = clip["edit"]
+    return sum(b - a for t in e["takes"] if t["keep"] for a, b in kept_ranges(t, e["cuts"]))
+
+
+def summary(proj):
+    """One library card: what the project is, how much footage, and text to search."""
+    info, clips = clips_of(proj)
+    desc, tags = info.get("my_description") or info["description"], info.get("my_tags", info["tags"])
+    notes = [n["text"] for c in clips for n in c["edit"].get("notes", [])]
+    names = sorted({t["name"] for c in clips for t in c["edit"]["takes"] if t.get("name")})
+    return {"name": proj.name, "description": desc, "tags": tags, "videos": len(clips),
+            "clips": names, "filmed": sum(c["duration"] for c in clips), "kept": sum(map(kept_seconds, clips)),
+            "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
+            "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
+            "search": " ".join([proj.name, desc or "", *tags, *names, *notes,
+                                *(w["w"] for c in clips for w in c["words"])]).lower()}
 
 
 def project_data(proj):
-    info = cli.load(proj / "project.json")
-    clips = []
-    for stem in info["clips"]:
-        c = cli.load(proj / f"{stem}.nip.json")
-        clips.append({"stem": stem, "source": c["source"], "duration": c["duration"],
-                      "words": c["words"], "edit": cli.decisions(c)})
-    return {**info, "name": proj.name, "clips": clips}
+    info, clips = clips_of(proj)
+    return {**info, "name": proj.name, "clips": clips,
+            "description": info.get("my_description") or info["description"],
+            "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
 def clean_override(body, duration):
@@ -41,6 +73,19 @@ def clean_override(body, duration):
             raise ValueError("name must be text, 80 characters at most")
         out["name"] = body["name"].strip()
     return out
+
+
+def thumbnail(proj):
+    """A small frame from the first kept take, made once and cached in the project folder."""
+    f = proj / "thumb.jpg"
+    if not f.exists():
+        _, clips = clips_of(proj)
+        c = clips[0]
+        t = next((t["start"] for t in c["edit"]["takes"] if t["keep"]), 0) + 1
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{min(t, c['duration'] - 0.1):.2f}",
+                        "-i", str(proj / "raw" / c["source"]), "-frames:v", "1", "-vf", "scale=360:-2",
+                        str(f)], check=True)
+    return f
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -99,12 +144,17 @@ class Handler(BaseHTTPRequestHandler):
             p = self.parts()
             if p == [""]:
                 self.send_file(PAGE, "text/html; charset=utf-8")
+            elif p == ["api", "status"]:
+                waiting = [v for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO] if cli.INBOX.exists() else []
+                self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "processing": STATE["processing"],
+                                "claude": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))})
             elif p == ["api", "projects"]:
-                projs = sorted((d for d in cli.LIBRARY.iterdir() if (d / "project.json").exists()),
-                               key=lambda d: d.stat().st_mtime, reverse=True)
-                self.send_json([d.name for d in projs])
+                projs = [d for d in cli.LIBRARY.iterdir() if (d / "project.json").exists()] if cli.LIBRARY.exists() else []
+                self.send_json(sorted((summary(d) for d in projs), key=lambda s: s["modified"], reverse=True))
             elif len(p) == 3 and p[:2] == ["api", "project"]:
                 self.send_json(project_data(self.project(p[2])))
+            elif len(p) == 2 and p[0] == "thumb":
+                self.send_file(thumbnail(self.project(p[1])), "image/jpeg")
             elif len(p) == 3 and p[0] == "media":
                 f = self.project(p[1]) / "raw" / p[2]
                 if not f.is_file():
@@ -114,8 +164,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise FileNotFoundError
         except FileNotFoundError:
             self.send_json({"error": "not found"}, 404)
+        except subprocess.CalledProcessError:
+            self.send_json({"error": "ffmpeg couldn't read this video"}, 500)
         except (BrokenPipeError, ConnectionResetError):
             pass  # the browser dropped a video range it no longer needs
+        except Exception as e:  # answer the page instead of dropping the connection
+            traceback.print_exc()
+            self.send_json({"error": f"NIP hit an error: {e}"}, 500)
 
     def do_POST(self):
         try:
@@ -145,22 +200,102 @@ class Handler(BaseHTTPRequestHandler):
                         overrides[key] = o
                     cli.save(f, clip)
                 self.send_json(project_data(proj))
+            elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse
+                proj = self.project(p[2])
+                with LOCK:
+                    info = cli.load(proj / "project.json")
+                    if "description" in body:
+                        if not isinstance(body["description"], str) or len(body["description"]) > 200:
+                            raise ValueError("description must be text, 200 characters at most")
+                        info["my_description"] = body["description"].strip()
+                    if "tags" in body:
+                        tags = body["tags"]
+                        if not isinstance(tags, list) or not all(isinstance(t, str) and len(t) <= 40 for t in tags):
+                            raise ValueError("tags must be a list of short texts")
+                        info["my_tags"] = [t.strip().lower() for t in tags if t.strip()]
+                    cli.save(proj / "project.json", info)
+                self.send_json(project_data(proj))
+            elif len(p) == 3 and p[:2] == ["api", "brief"]:
+                proj = self.project(p[2])
+                text = body.get("brief")
+                if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                    raise ValueError("write a brief of up to 2000 characters")
+                _, clips = clips_of(proj)
+                try:
+                    story = brief.ask(text.strip(), clips)
+                except RuntimeError as e:
+                    raise ValueError(str(e))
+                with LOCK:
+                    info = cli.load(proj / "project.json")
+                    stories = info.setdefault("stories", [])
+                    story["id"] = max((s["id"] for s in stories), default=0) + 1
+                    story["created"] = time.time()
+                    stories.append(story)
+                    cli.save(proj / "project.json", info)
+                self.send_json(project_data(proj))
+            elif len(p) == 4 and p[:2] == ["api", "story"]:
+                proj = self.project(p[2])
+                info = cli.load(proj / "project.json")
+                story = next((s for s in info.get("stories", []) if str(s["id"]) == p[3]), None)
+                if story is None:
+                    raise FileNotFoundError
+                if body.get("action") == "export":
+                    self.send_json({"done": str(cli.export_story(proj, story))})
+                elif body.get("action") == "delete":
+                    with LOCK:
+                        info = cli.load(proj / "project.json")
+                        info["stories"] = [s for s in info["stories"] if s["id"] != story["id"]]
+                        cli.save(proj / "project.json", info)
+                    self.send_json(project_data(proj))
+                else:
+                    raise ValueError("action must be export or delete")
             elif len(p) == 3 and p[:2] == ["api", "export"]:
                 proj = self.project(p[2])
                 cli.export(proj, bool(body.get("combined")))
                 self.send_json({"done": str(cli.EXPORTS / proj.name)})
+            elif p == ["api", "open"]:  # show a folder in Finder
+                if body.get("what") == "inbox":
+                    cli.INBOX.mkdir(parents=True, exist_ok=True)
+                    target = cli.INBOX
+                elif body.get("what") == "exports":
+                    target = cli.EXPORTS / self.project(str(body.get("project", ""))).name
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    raise ValueError("what must be inbox or exports")
+                subprocess.run(["open", str(target)], check=True)
+                self.send_json({"opened": str(target)})
             else:
                 raise FileNotFoundError
         except FileNotFoundError:
             self.send_json({"error": "not found"}, 404)
         except ValueError as e:  # includes bad JSON
             self.send_json({"error": str(e)}, 400)
+        except subprocess.CalledProcessError:
+            self.send_json({"error": "ffmpeg failed; see the terminal running nip"}, 500)
+        except Exception as e:  # answer the page instead of dropping the connection
+            traceback.print_exc()
+            self.send_json({"error": f"NIP hit an error: {e}"}, 500)
+
+
+def watch_inbox():
+    while True:
+        try:
+            STATE["processing"] = sum(1 for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO)
+            if STATE["processing"]:
+                cli.ingest()
+        except Exception as e:  # keep watching; a bad file shouldn't take the app down
+            print(f"inbox: {e}")
+        STATE["processing"] = 0
+        time.sleep(10)
 
 
 def serve(port=8765):
+    for d in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
+        d.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
+    threading.Thread(target=watch_inbox, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
-    print(f"NIP viewer at {url}  (Ctrl+C to stop)")
+    print(f"NIP at {url}  (watching {cli.INBOX}; Ctrl+C to stop)")
     webbrowser.open(url)
     try:
         server.serve_forever()

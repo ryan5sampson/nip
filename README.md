@@ -18,11 +18,20 @@ The first transcription downloads the Whisper model (about 1.6 GB).
 
 ## Use
 
-1. Put footage in `~/NIP/inbox/`. Loose files become one project named after today's date. A folder of files becomes one project named after the folder, so you can group several videos.
-2. Run `nip ingest` once, or `nip watch` to keep checking the inbox.
-3. Read what NIP found: `nip report`.
-4. Optional: review in the browser with `nip view`. Play each take, preview the whole edit with the cuts skipped, keep or drop takes, set a take's in and out points from the playhead, and rename clips. Your changes are saved next to NIP's own decisions, so `nip reparse` keeps them. Export from the page, or:
-5. Export the kept takes as numbered clips: `nip export`. Add `--combined` for one joined video too.
+Run `nip` (same as `nip view`). It opens NIP in your browser and keeps processing the inbox while it runs.
+
+1. **Drop footage in the inbox** (`~/NIP/inbox/`, or click *Open inbox* in the app). Loose files become one project named after today's date. A folder of files becomes one project named after the folder, so you can group several videos. New footage shows up in the library within a minute or so.
+2. **Library.** Every project is a card with a thumbnail, description, tags, clip names, and filmed and kept length. Search finds anything in a project: description, tags, clip names, notes, and every word said. Click a tag to filter.
+3. **Review a project.** Play each take, preview the kept takes with the cuts skipped, keep or drop takes, set a take's in and out points from the playhead, rename clips, and fix the description and tags. Shortcuts: <kbd>Space</kbd> play, <kbd>←</kbd>/<kbd>→</kbd> skip 2s (<kbd>Shift</kbd> for 10s), <kbd>I</kbd>/<kbd>O</kbd> set in/out, <kbd>K</kbd> keep. Your changes are saved next to NIP's own decisions, so `nip reparse` keeps them.
+4. **Edit with Claude** for talking-heavy footage. Write a brief like "give me a 30 second video where I explain why Linderballs are great". Claude reads the transcript, picks the lines, and saves the result as an edit you can preview and export as one video. It never sees the video, only what was said. This needs an Anthropic API key in your environment when you start NIP:
+
+   ```bash
+   export ANTHROPIC_API_KEY=...
+   ```
+
+5. **Export** the kept takes as numbered clips, or a Claude edit as one video. *Show exports* opens the folder.
+
+The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, and `nip export` (add `--combined` for one joined video too).
 
 Exports land in `~/NIP/exports/<project>/`. Originals stay untouched in `~/NIP/library/<project>/raw/`.
 

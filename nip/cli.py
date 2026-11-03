@@ -131,7 +131,8 @@ def mmss(t):
 
 def report(proj):
     info = load(proj / "project.json")
-    print(f"\n{proj.name}\n  {info['description'] or '(no description)'}  tags: {info['tags']}")
+    desc, tags = info.get("my_description") or info["description"], info.get("my_tags", info["tags"])
+    print(f"\n{proj.name}\n  {desc or '(no description)'}  tags: {tags}")
     for stem in info["clips"]:
         e = decisions(load(proj / f"{stem}.nip.json"))
         print(f"\n  {stem}")
@@ -206,6 +207,32 @@ def export(proj, combined):
     print(f"done: {out}")
 
 
+def export_story(proj, story):
+    """Export a Claude edit: its pieces, in order, as one video."""
+    out = EXPORTS / proj.name
+    out.mkdir(parents=True, exist_ok=True)
+    srcs = {stem: proj / "raw" / load(proj / f"{stem}.nip.json")["source"] for stem in load(proj / "project.json")["clips"]}
+    runs = []  # consecutive pieces from one video going forward in time encode in one pass
+    for p in story["pieces"]:
+        if runs and runs[-1][0] == p["stem"] and p["start"] >= runs[-1][1][-1][1]:
+            runs[-1][1].append((p["start"], p["end"]))
+        else:
+            runs.append((p["stem"], [(p["start"], p["end"])]))
+    final = out / f"story_{slug(story['title']) or 'edit'}.mp4"
+    parts = [out / f".part{i}.mp4" for i in range(len(runs))] if len(runs) > 1 else [final]
+    for (stem, pieces), part in zip(runs, parts):
+        cut(srcs[stem], pieces[0][0], pieces, part)
+    if len(runs) > 1:  # same encoder settings for every part, so stream-copy joining is safe
+        lst = out / ".list.txt"
+        lst.write_text("".join(f"file '{f.name}'\n" for f in parts))
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst),
+                        "-c", "copy", str(final)], check=True)
+        for f in [lst, *parts]:
+            f.unlink()
+    print(f"done: {final}")
+    return final
+
+
 def find(name):
     if name and (LIBRARY / name / "project.json").exists():  # exact name beats "newest containing it"
         return LIBRARY / name
@@ -220,11 +247,11 @@ def find(name):
 
 def main():
     ap = argparse.ArgumentParser(prog="nip")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("ingest", help="process everything waiting in the inbox once")
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
-    sub.add_parser("view", help="open the viewer in your browser to review and adjust takes")
+    sub.add_parser("view", help="open NIP in your browser and keep processing the inbox (the default)")
     for c in ("report", "reparse", "export"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")
@@ -241,7 +268,7 @@ def main():
         while True:
             ingest()
             time.sleep(10)
-    elif a.cmd == "view":
+    elif a.cmd in ("view", None):
         from nip.view import serve  # here, not at the top: view imports cli
         serve()
     elif a.cmd == "list":
