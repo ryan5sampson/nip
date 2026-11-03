@@ -212,6 +212,7 @@ class BriefViaClaudeCode(unittest.TestCase):
         self.assertEqual(seen["cmd"][:2], ["claude", "-p"])
         self.assertNotIn("ANTHROPIC_API_KEY", seen["env"])  # a key would move the bill to the API
         self.assertIn("[1] v", seen["input"])
+        self.assertEqual(seen["cmd"][seen["cmd"].index("--model"):][:4], ["--model", "opus", "--effort", "medium"])
         self.assertEqual((out["title"], len(out["pieces"])), ("T", 1))
 
     def test_signed_out_gives_a_clear_message(self):
@@ -243,6 +244,23 @@ class EditNotes(unittest.TestCase):
         e = cli.decisions(clip)
         self.assertIn({"start": 3.0, "end": 3.5, "why": "cut by you"}, e["cuts"])
         self.assertEqual([(t["keep"], t["name"]) for t in e["takes"]], [(True, "Intro"), (True, "Intro")])
+
+    def test_notes_use_sonnet_and_only_nearby_words_on_long_videos(self):
+        from types import SimpleNamespace
+        from nip import brief
+        words, dur = script(" ".join(f"w{i} /" if i % 20 == 19 else f"w{i}" for i in range(700)))
+        clip = {"duration": dur, "words": words, "edit": build_edit(words, dur)}
+        calls = []
+
+        def create(**kw):
+            calls.append(kw)
+            text = json.dumps({"ops": [], "notes": [{"id": 1, "done": False, "summary": "s"}]})
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)])
+        client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+        brief.plan_notes(clip, [{"id": 1, "t": 100.0, "text": "cut"}], client=client)
+        self.assertEqual((calls[0]["model"], calls[0]["output_config"]["effort"]), ("claude-sonnet-5-5", "low"))
+        sent = [w for w in words if f' {w["w"]}\n' in calls[0]["messages"][0]["content"]]
+        self.assertTrue(sent and all(70 <= w["start"] <= 130 for w in sent))  # 30s either side of the note
 
     def test_notes_prompt_has_words_takes_and_notes(self):
         from nip.brief import notes_prompt

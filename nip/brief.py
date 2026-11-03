@@ -11,7 +11,11 @@ import tempfile
 from nip import cli
 from nip.commands import kept_ranges
 
-MODEL = "claude-opus-5-5"
+MODELS = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5"}  # Claude Code alias -> API model id
+BRIEF_AI = ("opus", "medium")  # picking the best lines from a whole transcript is real judgement
+NOTES_AI = ("sonnet", "low")   # a note is usually one obvious cut or restore: fast and light on the plan
+NOTE_WINDOW = 30.0  # seconds of transcript sent around each note, once a video is long
+NOTE_ALL_WORDS = 600  # transcripts up to this many words go whole
 PHRASE_GAP = 0.6   # a pause this long starts a new phrase
 PHRASE_MAX = 30    # words; long run-ons get split so Claude can trim them
 PAD_BEFORE, PAD_AFTER = 0.1, 0.25
@@ -87,10 +91,10 @@ def pieces(ids, phs, durations):
     return out
 
 
-def via_claude_code(text, system=SYSTEM, schema=SCHEMA):
+def via_claude_code(text, system=SYSTEM, schema=SCHEMA, ai=BRIEF_AI):
     """Ask through the Claude Code CLI, so the edit counts against the user's Claude plan, not API billing."""
     env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}  # a key here would bill the API
-    cmd = ["claude", "-p", "--output-format", "json", "--model", "opus", "--effort", "high",
+    cmd = ["claude", "-p", "--output-format", "json", "--model", ai[0], "--effort", ai[1],
            "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
            "--system-prompt", system, "--json-schema", json.dumps(schema)]
     try:  # run outside the repo so no project CLAUDE.md is loaded
@@ -111,17 +115,17 @@ def via_claude_code(text, system=SYSTEM, schema=SCHEMA):
     return data if isinstance(data, dict) else json.loads(out["result"])
 
 
-def via_api(text, client=None, system=SYSTEM, schema=SCHEMA):
+def via_api(text, client=None, system=SYSTEM, schema=SCHEMA, ai=BRIEF_AI):
     """Ask through the Anthropic API (needs ANTHROPIC_API_KEY; billed to the API account)."""
     import anthropic
     client = client or anthropic.Anthropic()
     try:
         r = client.beta.messages.create(
-            model=MODEL,
+            model=MODELS[ai[0]],
             max_tokens=16000,
             system=system,
             messages=[{"role": "user", "content": text}],
-            output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}},
+            output_config={"effort": ai[1], "format": {"type": "json_schema", "schema": schema}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",  # if a model declines, the API retries on another instead of failing
         )
@@ -144,11 +148,11 @@ def via_api(text, client=None, system=SYSTEM, schema=SCHEMA):
     return json.loads(next(b.text for b in r.content if b.type == "text"))
 
 
-def claude_json(text, system, schema, client=None):
+def claude_json(text, system, schema, client=None, ai=BRIEF_AI):
     """One structured answer from Claude: through Claude Code (the user's plan) when installed, else the API."""
     if client is None and shutil.which("claude"):
-        return via_claude_code(text, system, schema)
-    return via_api(text, client, system, schema)
+        return via_claude_code(text, system, schema, ai)
+    return via_api(text, client, system, schema, ai)
 
 
 def ask(brief, clips, client=None):
@@ -173,7 +177,7 @@ def ask(brief, clips, client=None):
 
 NOTES_SYSTEM = """You apply a video creator's edit notes to their footage in NIP, a tool that prepares raw footage for the final edit. You don't change the video directly: you return operations, and NIP checks and applies them.
 
-The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time, and the notes. Each note is pinned to the moment in the source video where the creator was when writing it. It usually refers to what was said or shown around that moment, most often the few seconds just before it.
+The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes. Each note is pinned to the moment in the source video where the creator was when writing it. It usually refers to what was said or shown around that moment, most often the few seconds just before it.
 
 Operations, with times in seconds of the source video:
 - cut (start, end): remove footage. When cutting speech, start at the first removed word's start and end at the next kept word's start, so no word is clipped.
@@ -208,7 +212,9 @@ def notes_prompt(clip, notes):
     takes = "\n".join(f'take at={t["at"]} clip="{t.get("name") or ""}" take={t["take"]} {"kept" if t["keep"] else "dropped"} '
                       f'{t["start"]:.2f}-{t["end"]:.2f} ({t["why"]})' for t in e["takes"])
     cuts = "\n".join(f'cut start={c["start"]:.2f} end={c["end"]:.2f} why={c["why"]}' for c in e["cuts"])
-    words = "\n".join(f'{w["start"]:.2f}-{w["end"]:.2f} {w["w"]}' for w in clip["words"])
+    near = [w for w in clip["words"] if len(clip["words"]) <= NOTE_ALL_WORDS
+            or any(abs(w["start"] - n["t"]) <= NOTE_WINDOW for n in notes)]  # long videos: only around the notes
+    words = "\n".join(f'{w["start"]:.2f}-{w["end"]:.2f} {w["w"]}' for w in near)
     ns = "\n".join(f'[{n["id"]}] at {n["t"]:.2f}s: {n["text"]}' for n in notes)
     return (f'<video duration="{clip["duration"]:.2f}">\n<takes>\n{takes}\n</takes>\n<cuts>\n{cuts}\n</cuts>\n'
             f'<transcript>\n{words}\n</transcript>\n</video>\n\n<notes>\n{ns}\n</notes>')
@@ -216,7 +222,7 @@ def notes_prompt(clip, notes):
 
 def plan_notes(clip, notes, client=None):
     """Ask Claude what operations carry out these notes. Returns {"ops": [...], "notes": [...]}, not yet applied."""
-    data = claude_json(notes_prompt(clip, notes), NOTES_SYSTEM, NOTES_SCHEMA, client)
+    data = claude_json(notes_prompt(clip, notes), NOTES_SYSTEM, NOTES_SCHEMA, client, NOTES_AI)
     if not isinstance(data.get("ops"), list) or not isinstance(data.get("notes"), list):
         raise RuntimeError("Claude's answer wasn't in the expected shape; try again")
     return data
