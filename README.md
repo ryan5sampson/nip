@@ -1,6 +1,8 @@
-# NIP
+# Footage Flow
 
-NIP preps footage for editing. Drop videos into a folder; NIP transcribes them, finds the takes and commands you spoke while filming, and exports cleaned-up clips ready for CapCut.
+Footage Flow preps footage for editing. Drop videos into a folder; Footage Flow transcribes them, and NIP, its assistant, finds the takes and commands you spoke while filming and helps you cut the footage down. It exports cleaned-up clips ready for CapCut.
+
+NIP runs on Claude. The code, the `nip` command and the `~/NIP` folder keep the short name.
 
 ## Set up (Apple Silicon Mac)
 
@@ -12,37 +14,37 @@ brew install ffmpeg
 python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
-Homebrew's Python won't install packages globally, hence the venv. Run NIP as `.venv/bin/nip`, or activate the venv first.
+Homebrew's Python won't install packages globally, hence the venv. Run Footage Flow as `.venv/bin/nip`, or activate the venv first.
 
 The first transcription downloads the Whisper model (about 1.6 GB).
 
 ## Use
 
-Run `nip` (same as `nip view`). It opens NIP in your browser and keeps processing the inbox while it runs.
+Run `nip` (same as `nip view`). It opens Footage Flow in your browser and keeps processing the inbox while it runs.
 
 For a double-click app, make one on your Desktop once:
 
 ```bash
-osacompile -o ~/Desktop/NIP.app -e 'do shell script quoted form of "'"$PWD"'/open-nip.sh"'
+osacompile -o ~/Desktop/"Footage Flow.app" -e 'do shell script quoted form of "'"$PWD"'/open-nip.sh"'
 ```
 
-Opening it starts NIP in the background, restarting it if it's already running so the latest code loads, and opens it in your browser after about 10 seconds. You can also bookmark `http://127.0.0.1:8765/` and refresh it while NIP runs. NIP's output goes to `~/NIP/nip.log`.
+Opening it starts Footage Flow in the background, restarting it if it's already running so the latest code loads, and opens it in your browser after about 10 seconds. You can also bookmark `http://127.0.0.1:8765/` and refresh it while Footage Flow runs. Its output goes to `~/NIP/nip.log`.
 
 1. **Drop footage in the inbox** (`~/NIP/inbox/`, or click *Open inbox* in the app). Each loose video becomes its own project. A folder of files becomes one project named after the folder. New footage shows up in the library within a minute or so.
 2. **Inbox and library.** Every project is a card with a thumbnail, description, filmed and kept length, and its clip counts: kept (green), not marked yet (white) and cut (red). Footage moves through four stages, each with its own list in the sidebar: **Inbox** (new, not opened yet), **Processing** (opened), **Processed** (you clicked **Mark Complete** after going through every clip) and **Exported**. In the Inbox or Processing, drag a card onto another to bundle them into one project and name the bundle; the videos are ordered by when they were filmed. An exported project can be **Cleared**: its footage and edits move to the Trash to free space, and the exports stay. Search finds anything in a project: description, tags, clip names, clip descriptions, notes, and every word said. Click a tag to filter.
 3. **Review the pre-edit.** A project opens on the cut version your voice commands made. The timeline shows only kept footage; everything removed (earlier and scratched takes, footage before the first take, the command words, pauses, silences, "cut everything up to here") is folded into a small bar showing its length. Playback plays the edit and skips those bars. Click a bar to open it: it plays through, and lists why each part was cut, with **Keep** or **Restore** to bring it back. Click a clip on the timeline to describe it ("curve throw in slow motion"), play it, keep it or cut it. Footage has three tiers: **cut** (red, folded away), **keep** (green: "NIP, keep", highlights, and what you mark), and **not marked** (plain). For a second pass, go through the plain footage and press <kbd>C</kbd> or <kbd>G</kbd> at the start and end of a range to cut or keep it, or <kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>Shift</kbd>+<kbd>G</kbd> for the whole stretch under the playhead (<kbd>Shift</kbd>+<kbd>G</kbd> on your own keep unmarks it). When you mark a project complete or export it with footage still unmarked, NIP says how many stretches in how many clips and how much footage, and asks whether to cut or keep it. Also set a take's in and out with <kbd>I</kbd>/<kbd>O</kbd>, keep or drop takes with <kbd>K</kbd>, rename clips, and fix the description and tags. <kbd>Space</kbd> plays, <kbd>←</kbd>/<kbd>→</kbd> skip 2s (<kbd>Shift</kbd> for 10s). Your changes sit on top of the voice edit, so `nip reparse` keeps them; *Info → Reset My Changes* goes back to the voice edit.
-4. **Leave edit notes.** Wherever something should change, pause and type (or press the mic and say) what you want, like "cut the stumble" or "bring back the last line". <kbd>N</kbd> jumps to the note box. Each note is pinned to that moment. Go through the whole video, then hit **Apply Notes** in the Notes tab: Claude reads the notes with the transcript and your current edit, and sends back edit operations (cut, restore a cut, keep or drop a take, move a take's in or out, rename a clip). NIP checks each one before applying it. Each note then shows what changed, or why it couldn't be done. Switch on **Apply instantly** to have each note done as soon as you add it. **Undo Last Apply** reverts the last batch. Speech uses your browser's built-in recognition; in Chrome that audio goes to Google.
-5. **Edit with Claude** for talking-heavy footage. Write a brief like "give me a 30 second video where I explain why Linderballs are great". Claude reads the transcript and your clip descriptions, picks lines and described clips, and saves the result as an edit you can preview and export as one video. It never sees the video, only what was said and how you described it.
+4. **Leave edit notes.** Wherever something should change, pause and type (or press the mic and say) what you want, like "cut the stumble" or "bring back the last line". <kbd>N</kbd> jumps to the note box. Each note is pinned to that moment. Go through the whole video, then hit **Apply Notes** in the Notes tab: NIP reads the notes with the transcript and your current edit, and sends back edit operations (cut, restore a cut, keep or drop a take, move a take's in or out, rename a clip). Footage Flow checks each one before applying it. Each note then shows what changed, or why it couldn't be done. Switch on **Apply instantly** to have each note done as soon as you add it. **Undo Last Apply** reverts the last batch. Speech uses your browser's built-in recognition; in Chrome that audio goes to Google.
+5. **Edit with NIP** for talking-heavy footage. Write a brief like "give me a 30 second video where I explain why Linderballs are great". NIP reads the transcript and your clip descriptions, picks lines and described clips, and saves the result as an edit you can preview and export as one video. It never sees the video, only what was said and how you described it.
 
-   Claude edits run through [Claude Code](https://claude.com/claude-code), so they count against your Claude plan's usage, not a separate bill. Sign Claude Code in once:
+   NIP runs on Claude through [Claude Code](https://claude.com/claude-code), so they count against your Claude plan's usage, not a separate bill. Sign Claude Code in once:
 
    ```bash
    claude
    ```
 
-   Then type `/login` and follow the browser steps. If Claude Code isn't installed, NIP falls back to the Anthropic API (set `ANTHROPIC_API_KEY`; billed per use in the Anthropic Console).
+   Then type `/login` and follow the browser steps. If Claude Code isn't installed, Footage Flow falls back to the Anthropic API (set `ANTHROPIC_API_KEY`; billed per use in the Anthropic Console).
 
-6. **Mark Complete, then Export.** When you've gone through every clip, **Mark Complete** moves the project to Processed (click it again to reopen). **Export** makes the kept takes into numbered clips, or a Claude edit into one video, and moves the project to Exported. *Show exports* opens the folder.
+6. **Mark Complete, then Export.** When you've gone through every clip, **Mark Complete** moves the project to Processed (click it again to reopen). **Export** makes the kept takes into numbered clips, or an edit by NIP into one video, and moves the project to Exported. *Show exports* opens the folder.
 
 The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, and `nip export` (add `--combined` for one joined video too).
 
@@ -52,7 +54,7 @@ Exports are sized for Instagram Reels, TikTok and YouTube Shorts: 1080×1920 for
 
 `report`, `reparse`, and `export` act on the newest project by default. Pass part of a folder name to pick another, for example `nip export linderball`.
 
-To use a Google Drive folder as the inbox so you can upload from your phone, set `NIP_INBOX`. NIP moves files out of the inbox, so they're removed from Drive after ingest.
+To use a Google Drive folder as the inbox so you can upload from your phone, set `NIP_INBOX`. Footage Flow moves files out of the inbox, so they're removed from Drive after ingest.
 
 ```bash
 export NIP_INBOX="$HOME/Library/CloudStorage/GoogleDrive-you@gmail.com/My Drive/NIP Inbox"

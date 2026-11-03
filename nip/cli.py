@@ -375,7 +375,7 @@ def main():
     sub.add_parser("ingest", help="process everything waiting in the inbox once")
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
-    sub.add_parser("view", help="open NIP in your browser and keep processing the inbox (the default)")
+    sub.add_parser("view", help="open Footage Flow in your browser and keep processing the inbox (the default)")
     for c in ("report", "reparse", "export"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")

@@ -95,7 +95,7 @@ def apply_notes(f, ids):
             if n["id"] in ids:
                 r, errs = said.get(n["id"], {}), errors.get(n["id"], [])
                 n["status"] = "applied" if r.get("done") and not errs else "failed"
-                n["result"] = " ".join([str(r.get("summary") or "Claude didn't report on this note.")]
+                n["result"] = " ".join([str(r.get("summary") or "NIP didn't report on this note.")]
                                        + [f"Couldn't apply: {e}." for e in errs])
         cli.save(f, clip)
 
@@ -189,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 raise FileNotFoundError
         except FileNotFoundError as e:  # a program NIP runs (ffmpeg, claude) that's missing names itself
-            self.send_json({"error": f"NIP can't find {e.filename}; is it installed?" if e.filename else "not found"},
+            self.send_json({"error": f"Footage Flow can't find {e.filename}; is it installed?" if e.filename else "not found"},
                            500 if e.filename else 404)
         except subprocess.CalledProcessError:
             self.send_json({"error": "ffmpeg couldn't read this video"}, 500)
@@ -197,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             pass  # the browser dropped a video range it no longer needs
         except Exception as e:  # answer the page instead of dropping the connection
             traceback.print_exc()
-            self.send_json({"error": f"NIP hit an error: {e}"}, 500)
+            self.send_json({"error": f"Footage Flow hit an error: {e}"}, 500)
 
     def do_POST(self):
         try:
@@ -376,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 raise FileNotFoundError
         except FileNotFoundError as e:  # a program NIP runs (ffmpeg, claude) that's missing names itself
-            self.send_json({"error": f"NIP can't find {e.filename}; is it installed?" if e.filename else "not found"},
+            self.send_json({"error": f"Footage Flow can't find {e.filename}; is it installed?" if e.filename else "not found"},
                            500 if e.filename else 404)
         except ValueError as e:  # includes bad JSON
             self.send_json({"error": str(e)}, 400)
@@ -384,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "ffmpeg failed; see the terminal running nip"}, 500)
         except Exception as e:  # answer the page instead of dropping the connection
             traceback.print_exc()
-            self.send_json({"error": f"NIP hit an error: {e}"}, 500)
+            self.send_json({"error": f"Footage Flow hit an error: {e}"}, 500)
 
 
 def watch_inbox():
@@ -405,7 +405,7 @@ def serve(port=8765):
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
     threading.Thread(target=watch_inbox, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
-    print(f"NIP at {url}  (watching {cli.INBOX}; Ctrl+C to stop)")
+    print(f"Footage Flow at {url}  (watching {cli.INBOX}; Ctrl+C to stop)")
     webbrowser.open(url)
     try:
         server.serve_forever()

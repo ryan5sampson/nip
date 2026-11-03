@@ -1,6 +1,6 @@
-# NIP
+# Footage Flow
 
-Voice-directed footage prep for an Apple Silicon Mac. NIP does not finish videos; it cuts footage down so the final edit in CapCut is fast.
+Voice-directed footage prep for an Apple Silicon Mac. The app is Footage Flow; NIP is its assistant (the voice wake word, and the Claude-backed editing in the app). The code, the `nip` command, `~/NIP` and `.nip.json` keep the short name. Footage Flow does not finish videos; it cuts footage down so the final edit in CapCut is fast.
 
 - `nip/commands.py`: transcript words → edit decisions (takes, cuts, markers, tags). Pure, no I/O. All voice-command rules live here.
 - `nip/cli.py`: inbox → library → transcription (mlx-whisper) → report → ffmpeg export.

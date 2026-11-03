@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NIP</title>
+<title>Footage Flow</title>
 <style>
   /* macOS system colors, light and dark */
   :root {
@@ -283,7 +283,7 @@
           <button data-tab="takes" class="on">Takes</button>
           <button data-tab="notes">Notes</button>
           <button data-tab="text">Text</button>
-          <button data-tab="claude">Claude</button>
+          <button data-tab="claude">NIP</button>
           <button data-tab="info">Info</button>
         </div>
         <div class="pane" id="pane-takes">
@@ -292,8 +292,8 @@
         </div>
         <div class="pane" id="pane-notes" hidden>
           <div class="actions-line" style="margin-top:2px"><button class="btn default" id="applynotes">Apply Notes</button>
-            <label class="check" style="margin:0" title="Each note becomes its own Claude request. Applying them together is faster overall and uses less of your plan."><input type="checkbox" id="instant"> Apply instantly</label></div>
-          <p class="hint">Claude reads each note with the transcript and your current edit, and makes the cuts, restores and take changes it describes. Every change is checked before it’s applied.</p>
+            <label class="check" style="margin:0" title="Each note becomes its own request to NIP. Applying them together is faster overall and uses less of your plan."><input type="checkbox" id="instant"> Apply instantly</label></div>
+          <p class="hint">NIP reads each note with the transcript and your current edit, and makes the cuts, restores and take changes it describes. Every change is checked before it’s applied.</p>
           <div class="group" id="editnotes"></div>
           <div class="actions-line"><button class="btn" id="undonotes" hidden>Undo Last Apply</button></div>
         </div>
@@ -305,7 +305,7 @@
           <h4>New Edit</h4>
           <textarea id="brief" placeholder="Describe the video you want. For example: a 30 second video where I explain why Linderballs are great."></textarea>
           <div class="actions-line"><button class="btn default" id="ask">Create Edit</button><span class="hint" id="claudehint"></span></div>
-          <p class="hint">Claude works from the transcript: it picks and orders lines, it doesn't watch the video.</p>
+          <p class="hint">NIP works from the transcript and your clip descriptions: it picks and orders lines and clips, it doesn't watch the video. NIP runs on Claude.</p>
           <h4>Edits</h4>
           <div class="group" id="stories"></div>
         </div>
@@ -804,7 +804,7 @@ $('#stories').onclick = e => {
 $('#ask').onclick = () => {
   const text = $('#brief').value.trim();
   if (!text) return status('Describe the video you want first', true);
-  run($('#ask'), 'Claude is reading the transcript… this takes about a minute', async () => {
+  run($('#ask'), 'NIP is reading the transcript…', async () => {
     show(await api('/api/brief/' + enc(proj), {brief: text}));
     status(`Created “${data.stories.at(-1).title}”`);
   });
@@ -824,7 +824,7 @@ $('#complete').onclick = () => data.stage === 'processed'
   ? run($('#complete'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Back in Processing'); })
   : settleThen(complete);
 $('#export').onclick = () => settleThen(exportAll);
-$('#clear').onclick = () => confirm(`Move “${data.description || data.name}” to the Trash? Its footage and edits leave NIP; the exported videos stay. Empty the Trash to free the space.`)
+$('#clear').onclick = () => confirm(`Move “${data.description || data.name}” to the Trash? Its footage and edits leave Footage Flow; the exported videos stay. Empty the Trash to free the space.`)
   && run($('#clear'), 'Clearing…', async () => { await api('/api/clear/' + enc(proj), {}); location.hash = '#/'; status('Moved to the Trash'); });
 let afterSettle = null;
 function settleThen(fn) {  // ask about unmarked footage first, if there is any
@@ -856,14 +856,14 @@ async function addNote(text) {
   const t = noteT ?? video.currentTime;
   $('#notein').value = '';
   noteT = null;
-  const ok = await notesAction({action: 'add', t, text, apply: instant()}, instant() ? 'Claude is applying your note…' : null);
+  const ok = await notesAction({action: 'add', t, text, apply: instant()}, instant() ? 'NIP is applying your note…' : null);
   if (!ok) return;
   const n = clip().edit_notes.at(-1);
   status(instant() ? (n.status === 'applied' ? `Done: ${n.result}` : `Not applied: ${n.result}`) : `Note added at ${mmss(editTime(t))}`, instant() && n.status !== 'applied');
 }
 $('#noteform').onsubmit = e => { e.preventDefault(); addNote($('#notein').value); };
 $('#notein').onkeydown = e => { if (e.key === 'Escape') { $('#notein').value = ''; noteT = null; $('#notein').blur(); } };
-$('#applynotes').onclick = () => run($('#applynotes'), 'Claude is reading your notes and making the edits…', async () => {
+$('#applynotes').onclick = () => run($('#applynotes'), 'NIP is reading your notes and making the edits…', async () => {
   if (!(await notesAction({action: 'apply'}))) return;
   const done = clip().edit_notes.filter(n => n.status === 'applied').length, bad = clip().edit_notes.filter(n => n.status === 'failed').length;
   status(bad ? `${plural(done, 'note')} applied, ${bad} not applied. See the Notes tab.` : `All notes applied`, !!bad);
@@ -916,7 +916,7 @@ async function poll() {
     $('#claudehint').textContent = {plan: 'Uses your Claude plan', api: 'Uses your API key'}[s.claude] || 'Needs Claude Code or an API key';
     if (lastProcessing && !s.transcribing) loadLibrary();
     lastProcessing = s.transcribing;
-  } catch (e) { $('#inbox').textContent = 'NIP isn’t running'; }
+  } catch (e) { $('#inbox').textContent = 'Footage Flow isn’t running'; }
 }
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/);

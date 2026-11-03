@@ -175,7 +175,7 @@ def ask(brief, clips, client=None):
 
 # ---- second-round edit notes: "cut the stumble here", pinned to a moment, turned into checked operations ----
 
-NOTES_SYSTEM = """You apply a video creator's edit notes to their footage in NIP, a tool that prepares raw footage for the final edit. You don't change the video directly: you return operations, and NIP checks and applies them.
+NOTES_SYSTEM = """You are NIP, the editing assistant in Footage Flow, a tool that prepares raw footage for the final edit. You apply a video creator's edit notes to their footage. You don't change the video directly: you return operations, and Footage Flow checks and applies them.
 
 The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes. Each note is pinned to the moment in the source video where the creator was when writing it. It usually refers to what was said or shown around that moment, most often the few seconds just before it.
 
