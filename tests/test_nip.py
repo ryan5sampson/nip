@@ -72,6 +72,36 @@ class Commands(unittest.TestCase):
         kept = [w for a, b in pieces for w in spoken(a, b)]
         self.assertEqual(kept, ["good", "sentence", "more", "good"])
 
+    def test_nip_prefixed_takes_scrap_and_best(self):
+        takes, _ = summary("NIP take one / hello I'm NIP scrap that / NIP take two / good / "
+                           "NIP take three / worse / NIP tag that as the best one / NIP take one / next")
+        self.assertEqual(takes, [(1, 1, False), (1, 2, False), (1, 3, True), (2, 1, True)])
+
+    def test_new_clip_groups_takes_by_name(self):
+        _, e = summary("intro / NIP new clip curve throw / throwing / NIP take two / throw / "
+                       "NIP take two / again / NIP take three / last / NIP best one / "
+                       "NIP new clip / just one try")
+        self.assertEqual([(t["name"], t["take"], t["keep"]) for t in e["takes"]],
+                         [(None, 0, False), ("curve throw", 1, False), ("curve throw", 2, False),
+                          ("curve throw", 2, False), ("curve throw", 3, True), (None, 1, True)])
+
+    def test_try_again_cuts_back_to_last_pause(self):
+        words, dur = script("good line / bad line / NIP let me try that again / good line two")
+        e = build_edit(words, dur)
+        pieces = kept_ranges(e["takes"][0], e["cuts"])
+        kept = [w["w"] for a, b in pieces for w in words if w["start"] >= a and w["end"] <= b]
+        self.assertEqual(kept, ["good", "line", "good", "line", "two"])
+
+    def test_pause_resume_and_cut_silence(self):
+        words, dur = script("NIP take one / NIP cut the silence / one / / / two NIP pause / waiting / "
+                            "NIP resume three / / / NIP pause and cut the silence at the end / gone")
+        e = build_edit(words, dur)
+        pieces = kept_ranges(e["takes"][-1], e["cuts"])
+        kept = [w["w"] for a, b in pieces for w in words if w["start"] >= a and w["end"] <= b]
+        self.assertEqual(kept, ["one", "two", "three"])
+        self.assertLess(sum(b - a for a, b in pieces), 3)  # the 3.6s gap after "one" was shortened
+        self.assertEqual(e["pending"], [])
+
     def test_command_words_are_cut(self):
         words, dur = script("/ Take one. / hello")
         e = build_edit(words, dur)

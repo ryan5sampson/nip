@@ -28,6 +28,10 @@ def save(p, data):
     p.write_text(json.dumps(data, indent=1))
 
 
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
+
+
 def probe(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", str(path)],
                          capture_output=True, text=True, check=True).stdout
@@ -97,18 +101,22 @@ def process(proj, vids):
         info["tags"] += clip["edit"]["tags"]
     save(proj / "project.json", info)
     if info["description"]:
-        slug = re.sub(r"[^a-z0-9]+", "-", info["description"].lower()).strip("-")[:40]
-        proj = proj.rename(free_path(f"{proj.name}_{slug}"))
+        proj = proj.rename(free_path(f"{proj.name}_{slug(info['description'])}"))
     report(proj)
 
 
 def reparse(proj):
     """Re-run command detection on saved transcripts (after tuning commands.py), no re-transcribing."""
-    for stem in load(proj / "project.json")["clips"]:
+    info = load(proj / "project.json")
+    info["description"], info["tags"] = None, []
+    for stem in info["clips"]:
         p = proj / f"{stem}.nip.json"
         clip = load(p)
         clip["edit"] = build_edit(clip["words"], clip["duration"])
         save(p, clip)
+        info["description"] = info["description"] or clip["edit"]["description"]
+        info["tags"] += clip["edit"]["tags"]
+    save(proj / "project.json", info)
     report(proj)
 
 
@@ -125,7 +133,8 @@ def report(proj):
         for t in e["takes"]:
             label = f"take {t['take']}" if t["group"] else "untaken"
             mark = "KEEP" if t["keep"] else "drop"
-            print(f"    {mark}  {mmss(t['start'])}-{mmss(t['end'])}  section {t['group']} {label} ({t['why']})")
+            where = f'"{t["name"]}"' if t.get("name") else f"section {t['group']}"
+            print(f"    {mark}  {mmss(t['start'])}-{mmss(t['end'])}  {where} {label} ({t['why']})")
         for m in e["markers"]:
             print(f"    mark  {mmss(m['t'])}  {m['label']}")
         for c in e["cuts"]:
@@ -166,7 +175,10 @@ def export(proj, combined):
             pieces = kept_ranges(t, clip["edit"]["cuts"]) if t["keep"] else []
             if not pieces:
                 continue
-            name = f"{n:02d}_{stem}" + (f"_s{t['group']}t{t['take']}" if t["group"] else "") + ".mp4"
+            if t.get("name"):
+                name = f"{n:02d}_{slug(t['name'])}_t{t['take']}.mp4"
+            else:
+                name = f"{n:02d}_{stem}" + (f"_s{t['group']}t{t['take']}" if t["group"] else "") + ".mp4"
             print(f"exporting {name}")
             cut(proj / "raw" / clip["source"], pieces[0][0], pieces, out / name)
             files.append(out / name)

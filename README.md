@@ -9,8 +9,10 @@ brew install ffmpeg
 ```
 
 ```bash
-pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e .
 ```
+
+Homebrew's Python won't install packages globally, hence the venv. Run NIP as `.venv/bin/nip`, or activate the venv first.
 
 The first transcription downloads the Whisper model (about 1.6 GB).
 
@@ -33,18 +35,23 @@ export NIP_INBOX="$HOME/Library/CloudStorage/GoogleDrive-you@gmail.com/My Drive/
 
 ## Voice commands
 
+Start every command with "NIP" and pause for a second after it, so NIP knows where the command ends and your speech begins.
+
 | Say | What NIP does |
 |---|---|
-| "Take one", "Take two", … | Starts a take. Say it as its own phrase, with a short pause before and after. The last take in a run is kept. Starting again from a lower number (back to "take one") starts a new section. |
-| "Scratch that" / "Reset" | Drops the current take. "Reset" needs a pause on both sides. |
+| "NIP, new clip" / "NIP, new clip curve throw" | Starts a new clip, optionally named. Its takes compete only with each other, and the best one is exported as `01_curve-throw_t3.mp4`. Footage right after it counts as take one. |
+| "Take one", "Take two", … | Starts a take. Say it as its own phrase, with a short pause before and after, or as "NIP, take two". The last take in a run is kept. Without "new clip", starting again from the same or a lower number starts a new section; after "new clip", a repeated number is just another take. |
+| "Scratch that" / "Scrap that" / "Reset" | Drops the current take. "Reset" needs a pause on both sides, or "NIP" before it. |
 | "NIP, this is …" | Sets the project description. The project folder is renamed to match. |
 | "NIP, tag …" | Adds a tag. |
-| "NIP, best take" | Keeps this take instead of the last one in the section. |
+| "NIP, best take" / "NIP, that's the best one" | Keeps this take instead of the last one in the clip. |
+| "NIP, pause" … "NIP, resume" | Cuts everything between them. A pause with no resume cuts to the end of the take. |
+| "NIP, cut the silence" | Shortens every pause longer than 1 second in this take. |
 | "NIP, mark that" / "highlight" | Adds a marker. |
-| "NIP, cut that" | Cuts back to the last pause of at least 1 second. |
+| "NIP, cut that" / "NIP, let me try that again" | Cuts back to the last pause of at least 1 second. |
 | "NIP, …" anything else | Listed as not understood in the report, for now. |
 
-NIP always cuts the command words themselves. Footage before the first "take" is dropped. Clips without any take commands are kept whole.
+NIP always cuts the command words themselves. Footage before the first "take" is dropped. Videos without any take or clip commands are kept whole.
 
 ## Tuning
 
