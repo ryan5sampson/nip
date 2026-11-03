@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges, unmarked
 
 
 def script(text):
@@ -82,8 +82,8 @@ class Commands(unittest.TestCase):
         hl = e["markers"][0]
         self.assertEqual((hl["t"], hl["end"]), (e["takes"][2]["start"], words[-6]["start"]))  # clamped to clip start
 
-    def test_cut_that_removes_previous_sentence(self):
-        words, dur = script("good sentence / bad sentence NIP cut that / more good")
+    def test_cut_that_removes_since_last_nip(self):
+        words, dur = script("good sentence / NIP / bad sentence / still bad NIP cut that / more good")
         e = build_edit(words, dur)
         pieces = kept_ranges(e["takes"][0], e["cuts"])
         spoken = lambda a, b: [w["w"] for w in words if w["start"] >= a and w["end"] <= b]
@@ -119,6 +119,22 @@ class Commands(unittest.TestCase):
         self.assertEqual(kept, ["one", "two", "three"])
         self.assertLess(sum(b - a for a, b in pieces), 3)  # the 3.6s gap after "one" was shortened
         self.assertEqual(e["pending"], [])
+
+    def test_bare_nip_divider_cut_and_tag(self):
+        words, dur = script("keep this / NIP / bad stuff here / NIP cut to the last nip / "
+                            "good stuff / NIP / great bit / NIP tag that as a good clip / end NIP keep")
+        e = build_edit(words, dur)
+        kept = [w["w"] for a, b in kept_ranges(e["takes"][0], e["cuts"]) for w in words
+                if w["start"] >= a and w["end"] <= b]
+        self.assertEqual(kept, ["keep", "this", "good", "stuff", "great", "bit", "end"])
+        self.assertEqual([m["label"] for m in e["markers"]], ["divider", "divider", "good clip", "keep"])
+        self.assertEqual((e["markers"][2]["t"], e["markers"][2]["end"]), (words[14]["end"], words[17]["start"]))
+        self.assertEqual(e["markers"][3]["t"], words[-4]["end"])  # "NIP keep" starts after the previous NIP command
+        self.assertEqual(e["pending"], [])
+        # three tiers: what's neither cut nor marked keep is unmarked
+        left = unmarked(apply_cut_edits(e, [], [], [{"start": 0.0, "end": words[1]["end"]}]))
+        said = [[w["w"] for w in words if a <= w["start"] and w["end"] <= b] for a, b in left]
+        self.assertEqual([x for x in said if x], [["good", "stuff"]])  # the rest is the test's silent pauses
 
     def test_command_words_are_cut(self):
         words, dur = script("/ Take one. / hello")
@@ -309,6 +325,16 @@ class Viewer(unittest.TestCase):
                 post("/api/cuts/p/v", {"action": "reset"})
                 clip = cli.load(lib / "p" / "v.nip.json")
                 self.assertEqual((cli.decisions(clip)["cuts"], clip.get("overrides")), (clip["edit"]["cuts"], None))
+                # three tiers: mark the unmarked footage keep by hand; export can settle the rest as cut
+                post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})  # splits "hello" in two
+                left = json.loads(get("/api/project/p").read())["clips"][0]["unmarked"]
+                self.assertEqual(len(left), 2)
+                post("/api/cuts/p/v", {"action": "keep", "start": left[0][0], "end": left[0][1]})
+                self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], left[1:])
+                with mock.patch.object(cli, "export") as export:
+                    post("/api/export/p", {"unmarked": "cut"})
+                export.assert_called_once()
+                self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
                 server.shutdown()
 
 

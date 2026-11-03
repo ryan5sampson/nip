@@ -12,7 +12,7 @@
     --label: rgba(0, 0, 0, .85); --secondary: rgba(0, 0, 0, .5); --tertiary: rgba(0, 0, 0, .26);
     --separator: rgba(0, 0, 0, .1); --fill: rgba(0, 0, 0, .05); --fill-strong: rgba(0, 0, 0, .09);
     --control: #ffffff; --control-edge: rgba(0, 0, 0, .14); --field: #ffffff;
-    --accent: #007aff; --red: #ff3b30; --yellow: #ffcc00; --purple: #af52de; --orange: #ff9500; --gray: #8e8e93;
+    --accent: #007aff; --red: #ff3b30; --yellow: #ffcc00; --purple: #af52de; --orange: #ff9500; --gray: #8e8e93; --green: #34c759;
     --track: #f2f2f4; --seg-on: #ffffff;
     --shadow: 0 .5px 1px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .06);
   }
@@ -22,7 +22,7 @@
       --label: rgba(255, 255, 255, .86); --secondary: rgba(255, 255, 255, .55); --tertiary: rgba(255, 255, 255, .25);
       --separator: rgba(255, 255, 255, .1); --fill: rgba(255, 255, 255, .06); --fill-strong: rgba(255, 255, 255, .11);
       --control: #656567; --control-edge: rgba(255, 255, 255, .06); --field: rgba(255, 255, 255, .06);
-      --accent: #0a84ff; --red: #ff453a; --yellow: #ffd60a; --purple: #bf5af2; --orange: #ff9f0a; --gray: #98989d;
+      --accent: #0a84ff; --red: #ff453a; --yellow: #ffd60a; --purple: #bf5af2; --orange: #ff9f0a; --gray: #98989d; --green: #30d158;
       --track: #141414; --seg-on: #636366;
       --shadow: 0 .5px 1px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12);
     }
@@ -108,8 +108,9 @@
   .timeline-area { grid-column: 1; padding: 10px 12px 12px; border-top: .5px solid var(--separator); background: var(--window); }
   #timeline { position: relative; display: flex; gap: 2px; height: 46px; padding: 9px 4px; background: var(--track); border-radius: 7px; box-shadow: inset 0 0 0 .5px var(--separator); overflow: hidden; }
   .tk, .gap { position: relative; border-radius: 5px; font-size: 11px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
-  .tk { flex: var(--s) 1 0; min-width: 4px; padding: 0 6px; background: var(--accent); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
-  .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--secondary); background: repeating-linear-gradient(135deg, var(--fill-strong) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px var(--separator); cursor: pointer; }
+  .tk { flex: var(--s) 1 0; min-width: 4px; padding: 0 6px; background: var(--control); color: var(--label); box-shadow: inset 0 0 0 .5px var(--control-edge); }
+  .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
+  .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
   .gap:hover { color: var(--label); box-shadow: inset 0 0 0 1px var(--secondary); }
   .gap.open { flex: var(--s) 1 0; width: auto; min-width: 40px; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 26%, transparent) 0 3px, transparent 3px 7px); box-shadow: inset 0 0 0 1.5px var(--red); cursor: text; }
   .tk i, .gap i { position: absolute; pointer-events: none; }
@@ -136,6 +137,11 @@
   #gapinfo .why-row span { flex: 1; min-width: 0; }
   .transport .tc-total { color: rgba(255, 255, 255, .45); font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; margin-left: -4px; }
   #cutbtn.armed { color: var(--red); background: rgba(255, 59, 48, .15); }
+  #keepbtn.armed { color: var(--green); background: rgba(52, 199, 89, .15); }
+  dialog { border: none; border-radius: 12px; padding: 18px 20px 14px; width: 340px; background: var(--window); color: var(--label); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); }
+  dialog::backdrop { background: rgba(0, 0, 0, .25); }
+  dialog p { color: var(--secondary); margin: 6px 0 10px; line-height: 1.4; }
+  dialog .actions-line { justify-content: flex-end; }
   .inspector { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
   .inspector .seg { margin: 10px 12px; }
   .pane { flex: 1; overflow-y: auto; padding: 0 12px 16px; }
@@ -193,6 +199,7 @@
   <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.6v10.8c0 .5.5.8.9.5l8.3-5.4c.4-.2.4-.8 0-1L5.4 2.1c-.4-.3-.9 0-.9.5z"/></symbol>
   <symbol id="i-mic" viewBox="0 0 16 16"><rect x="5.8" y="1.8" width="4.4" height="8" rx="2.2"/><path d="M3.4 7.6a4.6 4.6 0 0 0 9.2 0M8 12.2v2"/></symbol>
   <symbol id="i-pause" viewBox="0 0 16 16"><rect x="4" y="2.8" width="2.8" height="10.4" rx=".8"/><rect x="9.2" y="2.8" width="2.8" height="10.4" rx=".8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.4 3.2 3.2L13 4.6"/></symbol>
   <symbol id="i-cut" viewBox="0 0 16 16"><circle cx="4.2" cy="11.6" r="2"/><circle cx="11.8" cy="11.6" r="2"/><path d="M5.6 10.2 12 2.4M10.4 10.2 4 2.4"/></symbol>
   <symbol id="i-stop" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></symbol>
   <symbol id="i-share" viewBox="0 0 16 16"><path d="M8 1.8v8.4M5.2 4.5 8 1.8l2.8 2.7M5 6.8H3.8v7.4h8.4V6.8H11"/></symbol>
@@ -240,7 +247,8 @@
         <div class="transport">
           <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg></button>
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
-          <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C)"><svg class="i"><use href="#i-cut"/></svg>Cut</button>
+          <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C). Shift+C cuts the whole stretch at the playhead."><svg class="i"><use href="#i-cut"/></svg>Cut</button>
+          <button class="icon-btn" id="keepbtn" title="Keep: press at the start, then again at the end (G). Shift+G keeps the whole stretch at the playhead."><svg class="i"><use href="#i-check"/></svg>Keep</button>
           <div id="videos"></div>
           <small id="meta" class="num"></small>
         </div>
@@ -255,6 +263,12 @@
         </form>
         <div id="gapinfo" hidden></div>
       </div>
+      <dialog id="settle"><form method="dialog">
+        <b>Some footage isn’t marked</b>
+        <p id="settletext"></p>
+        <p>Cut it or keep it before exporting? You can change it afterwards.</p>
+        <div class="actions-line"><button class="btn" value="">Cancel</button><button class="btn" value="cut">Cut Unmarked</button><button class="btn default" value="keep" autofocus>Keep Unmarked</button></div>
+      </form></dialog>
       <aside class="inspector" aria-label="Inspector">
         <div class="seg" role="tablist">
           <button data-tab="takes" class="on">Takes</button>
@@ -265,7 +279,7 @@
         </div>
         <div class="pane" id="pane-takes">
           <div class="group" id="takes"></div>
-          <p class="hint">Space plays the edit · ← → skip 2s · I and O set a take’s in and out · K keeps or drops it · C cuts</p>
+          <p class="hint">Space plays the edit · ← → skip 2s · I and O set a take’s in and out · K keeps or drops it · C cuts and G keeps a range; with Shift, the whole stretch</p>
         </div>
         <div class="pane" id="pane-notes" hidden>
           <div class="actions-line" style="margin-top:2px"><button class="btn default" id="applynotes">Apply Notes</button>
@@ -314,7 +328,7 @@ const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, data = null, proj = '', clipIdx = 0;
-let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, cutFrom = null, wordEls = [], nowWord = null, lastProcessing = 0;
+let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -415,13 +429,13 @@ function show(d, idx = clipIdx) {
   $('#timeline').innerHTML = segs.map((s, k) => {
     const len = s.b - s.a, open = s.gap && s.a === openGap, at = t => `left:${100 * (t - s.a) / len}%`;
     const marks = s.gap && !open ? '' : [
-      ...e.markers.filter(m => m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:${m.end != null ? 100 * (Math.min(m.end, s.b) - m.t) / len + '%' : '4px'}"></i>`),
+      ...e.markers.filter(m => m.end == null && m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:4px"></i>`),
       ...(e.notes || []).filter(n => n.t >= s.a && n.t < s.b).map(n => `<i class="nt" style="${at(n.t)}"></i>`),
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
     if (s.gap) return `<div class="gap ${open ? 'open' : ''}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${short(len)}${marks}</div>`;
     const t = e.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
     const name = t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '';
-    return `<div class="tk" data-k="${k}" style="--s:${len}" title="${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
+    return `<div class="tk ${s.keep ? 'keep' : ''}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
   }).join('') + '<div id="playhead"></div>';
   drawGap();
 
@@ -472,7 +486,7 @@ function show(d, idx = clipIdx) {
     </div>`).join('') : '<div class="muted-empty">No notes yet. Pause anywhere and type what to change.</div>';
 
   const items = [
-    ...e.markers.map(m => ({t: m.t, color: 'var(--yellow)', text: m.end != null ? `Highlight to ${mmss(m.end)}` : m.label})),
+    ...e.markers.map(m => ({t: m.t, color: 'var(--yellow)', text: m.end != null ? `Keep to ${mmss(m.end)}${/seconds?$|^keep$/.test(m.label) ? '' : ': ' + m.label}` : m.label === 'divider' ? 'Divider' : m.label})),
     ...(e.notes || []).map(n => ({t: n.t, color: 'var(--purple)', text: n.text.replace(/^that was /, '')})),
     ...e.pending.map(n => ({t: n.t, color: 'var(--gray)', text: `Not understood: “${n.text}”`})),
   ].sort((a, b) => a.t - b.t);
@@ -497,7 +511,13 @@ function segments() {  // the edited timeline: kept pieces, and the cut stretche
   let t = 0;
   for (const [a, b] of kept) {
     if (a - t > 0.05) out.push({gap: true, a: t, b: a});
-    out.push({gap: false, a, b});
+    let x = a;  // inside a kept piece: unmarked stretches, and keep between them
+    for (const [ua, ub] of clip().unmarked.filter(([ua, ub]) => ua < b && ub > a)) {
+      if (ua - x > 0.05) out.push({gap: false, keep: true, a: x, b: ua});
+      out.push({gap: false, a: Math.max(ua, a), b: Math.min(ub, b)});
+      x = Math.min(ub, b);
+    }
+    if (b - x > 0.05) out.push({gap: false, keep: true, a: x, b});
     t = b;
   }
   if (end - t > 0.05) out.push({gap: true, a: t, b: end});
@@ -506,8 +526,8 @@ function segments() {  // the edited timeline: kept pieces, and the cut stretche
 const short = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const editTime = t => kept.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, t) - a), 0);
 const WHY = {take: '“Take” command', reset: '“Scratch that” command', nip: 'NIP command', 'nip cut that': '“Cut that”',
-  silence: 'Silence', paused: 'Pause', 'cut everything': '“Cut everything up to here”', 'cut by you': 'Cut by you'};
-const SAID = ['take', 'reset', 'nip', 'nip cut that', 'cut everything'];
+  silence: 'Silence', paused: 'Pause', 'cut everything': '“Cut everything up to here”', 'nip cut': '“NIP cut”', 'cut by you': 'Cut by you'};
+const SAID = ['take', 'reset', 'nip', 'nip cut that', 'cut everything', 'nip cut'];
 let gapWhy = [];
 function reasons(g) {  // why each part of a cut stretch was cut, with a way to bring it back
   const e = clip().edit, over = x => x.start < g.b - 0.01 && x.end > g.a + 0.01, out = [];
@@ -605,18 +625,29 @@ function follow() {
   }
 }
 
-function markCut() {
-  const t = video.currentTime;
-  if (cutFrom == null) {
-    cutFrom = t;
-    $('#cutbtn').classList.add('armed');
-    return status(`Cut starts at ${mmss(t)}. Go to where it should end and press C again (Esc cancels).`, false, true);
+function disarm() { armed = null; $('#cutbtn').classList.remove('armed'); $('#keepbtn').classList.remove('armed'); }
+function mark(kind) {  // Cut or Keep: first press marks the start, the second the end
+  const t = video.currentTime, Kind = kind === 'cut' ? 'Cut' : 'Keep';
+  if (armed?.kind !== kind) {
+    disarm();
+    armed = {kind, t};
+    $(`#${kind}btn`).classList.add('armed');
+    return status(`${Kind} starts at ${mmss(t)}. Go to where it should end and press ${kind === 'cut' ? 'C' : 'G'} again (Esc cancels).`, false, true);
   }
-  const [a, b] = cutFrom < t ? [cutFrom, t] : [t, cutFrom];
-  cutFrom = null;
-  $('#cutbtn').classList.remove('armed');
-  if (b - a < 0.1) return status('Cut cancelled');
-  cutAction('cut', a, b).then(ok => ok && status(`Cut ${(b - a).toFixed(1)}s`));
+  const [a, b] = armed.t < t ? [armed.t, t] : [t, armed.t];
+  disarm();
+  if (b - a < 0.1) return status(`${Kind} cancelled`);
+  cutAction(kind, a, b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(b - a).toFixed(1)}s`));
+}
+function markStretch(kind) {  // Shift+C / Shift+G: the whole stretch at the playhead; Shift+G on your own keep unmarks it
+  const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t < s.b);
+  if (!s) return status('Move the playhead onto footage that isn’t cut', true);
+  if (kind === 'keep' && s.keep) {
+    const k = clip().edit.keeps.find(k => k.why === 'kept by you' && k.start <= t && t < k.end);
+    if (!k) return status('Marked keep by voice. Shift+C cuts it instead.', true);
+    return cutAction('unkeep', k.start).then(ok => ok && status('Unmarked'));
+  }
+  cutAction(kind, s.a, s.b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(s.b - s.a).toFixed(1)}s`));
 }
 
 document.querySelector('.inspector .seg').onclick = e => {
@@ -662,7 +693,8 @@ async function restoreAll(rows) {  // one request at a time: each answer is the 
   status('Restored');
 }
 $('#play').onclick = togglePlay;
-$('#cutbtn').onclick = markCut;
+$('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : mark('cut');
+$('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : mark('keep');
 $('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
   && cutAction('reset').then(ok => ok && status('Back to the voice edit'));
 $('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
@@ -703,8 +735,20 @@ $('#ask').onclick = () => {
 };
 $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
-$('#export').onclick = () => run($('#export'), 'Exporting kept takes…', async () =>
-  status(`Exported to ${(await api('/api/export/' + enc(proj), {combined: $('#combined').checked})).done}`));
+const exportAll = unmarked => run($('#export'), 'Exporting kept takes…', async () => {
+  const r = await api('/api/export/' + enc(proj), {combined: $('#combined').checked, unmarked});
+  if (unmarked) show(await api('/api/project/' + enc(proj)));
+  status(`Exported to ${r.done}`);
+});
+$('#export').onclick = () => {
+  const open = data.clips.filter(c => c.unmarked.length), parts = open.flatMap(c => c.unmarked);
+  if (!parts.length) return exportAll();
+  const secs = parts.reduce((n, [a, b]) => n + b - a, 0);
+  $('#settletext').textContent = `${parts.length} ${parts.length === 1 ? 'stretch' : 'stretches'} in ${plural(open.length, 'clip')}, ${mmss(secs)} in total, ${parts.length === 1 ? 'is' : 'are'} not marked cut or keep.`;
+  $('#settle').returnValue = '';  // Esc closes without an answer
+  $('#settle').showModal();
+};
+$('#settle').onclose = () => $('#settle').returnValue && exportAll($('#settle').returnValue);
 $('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
 // ---------- second-round edit notes ----------
@@ -763,9 +807,10 @@ document.addEventListener('keydown', e => {
   if ($('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   const t = video.currentTime, i = takeAt(t);
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-  else if (e.key === 'c') markCut();
+  else if (e.key === 'c' || e.key === 'g') mark(e.key === 'c' ? 'cut' : 'keep');
+  else if (e.key === 'C' || e.key === 'G') markStretch(e.key === 'C' ? 'cut' : 'keep');
   else if (e.key === 'n') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
-  else if (e.key === 'Escape' && cutFrom != null) { cutFrom = null; $('#cutbtn').classList.remove('armed'); status('Cut cancelled'); }
+  else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});

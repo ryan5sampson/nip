@@ -91,6 +91,7 @@ def build_edit(words, duration):
     cur = {"start": 0.0, "group": 0, "take": 0, "keep": True, "why": "no take markers", "name": None}
     last_n = 0  # last spoken take number; "scratch that, take two" must not start a new group
     clips = False  # "new clip" was used, so take numbers no longer start groups
+    since = 0.0  # end of the last NIP command: "NIP cut", "NIP keep" and "tag that" act on footage since then
 
     def close(at):
         cur["end"] = at
@@ -106,6 +107,7 @@ def build_edit(words, duration):
             takes.append(cur)
 
     for e in events:
+        prev, since = since, e["end"]
         # pad the command cut, but never into a neighbouring word ("NIP resume as a way")
         prev_end = max((w["end"] for w in words if w["end"] <= e["start"]), default=0.0)
         next_start = min((w["start"] for w in words if w["start"] >= e["end"]), default=duration)
@@ -126,9 +128,14 @@ def build_edit(words, duration):
             text = e["text"]
             clip = re.match(r"(new clip|clip(?:ped)? (\w+))\b(.*)", text)  # "new clip x", "clip two x"
             last = re.search(r"\blast (\w+) seconds?\b", text)
-            if last and number(last[1]):
-                edit["markers"].append({"t": max(cur["start"], e["start"] - number(last[1])), "end": e["start"],
-                                        "label": text})
+            if not text:  # a bare "NIP" is a divider to refer back to
+                edit["markers"].append({"t": e["end"], "label": "divider"})
+            elif last and number(last[1]):
+                a = max(cur["start"], e["start"] - number(last[1]))
+                if re.match(r"(cut|delete|remove)\b", text):  # "cut the last 5 seconds"
+                    edit["cuts"].append({"start": a, "end": e["start"], "why": "nip cut"})
+                else:
+                    edit["markers"].append({"t": a, "end": e["start"], "label": text})
             elif clip and (clip[2] is None or number(clip[2])):
                 close(e["start"])
                 name = re.sub(r"^(called|named)\b", "", clip[3].strip()).strip()
@@ -147,13 +154,20 @@ def build_edit(words, duration):
                 cur["why"] = "picked as best"
             elif re.search(r"\bcut everything\b", text):
                 edit["cuts"].append({"start": cur["start"], "end": e["start"], "why": "cut everything"})
-            elif re.search(r"\b(cut|delete|remove|scrap)\b", text) and "that" in text or re.search(r"\bagain\b", text):
+            elif re.search(r"\bagain\b", text):  # a retry: only the line just said goes
                 edit["cuts"].append({"start": last_pause_before(words, e["start"], cur["start"]),
                                      "end": e["start"], "why": "nip cut that"})
+            elif re.match(r"(cut|delete|remove)\b", text):  # "NIP cut (that / to the last nip)"
+                edit["cuts"].append({"start": max(prev, cur["start"]), "end": e["start"], "why": "nip cut"})
+            elif re.match(r"keep\b", text):  # "NIP keep (that)": since the last NIP is worth keeping
+                edit["markers"].append({"t": max(prev, cur["start"]), "end": e["start"], "label": "keep"})
             elif text.startswith("that was"):  # a note on the stretch just filmed
                 edit["notes"].append({"t": e["start"], "text": text})
             elif text.startswith("this is"):
                 edit["description"] = text[len("this is"):].strip()
+            elif text.startswith("tag that"):  # "tag that as a good clip" highlights since the last NIP
+                tag = re.sub(r"^tag that( as)?( an?| the)?\b", "", text).strip()
+                edit["markers"].append({"t": max(prev, cur["start"]), "end": e["start"], "label": tag or "tagged"})
             elif text.startswith("tag"):
                 edit["tags"].append(text[3:].strip())
             elif re.search(r"\b(mark|highlight|flag|clip)\b", text):
@@ -186,6 +200,13 @@ def kept_ranges(take, cuts):
     return pieces
 
 
+def unmarked(edit):
+    """Kept footage the user hasn't marked keep: the pieces of kept takes outside every cut and keep."""
+    keeps = [{"start": k["start"], "end": k["end"]} for k in edit["keeps"]]
+    out = [p for t in edit["takes"] if t["keep"] for p in kept_ranges(t, edit["cuts"] + keeps)]
+    return sorted(p for p in out if p[1] - p[0] >= 0.5)  # slivers between marks aren't worth asking about
+
+
 def apply_overrides(edit, overrides):
     """Hand edits from the viewer on top of the voice decisions.
 
@@ -211,8 +232,13 @@ def apply_overrides(edit, overrides):
     return {**edit, "takes": takes}
 
 
-def apply_cut_edits(edit, restored, added):
-    """Hand changes to the cuts: restore voice cuts (matched by start time) and add the user's own."""
+def apply_cut_edits(edit, restored, added, kept=()):
+    """Hand changes to the cuts: restore voice cuts (matched by start time) and add the user's own.
+
+    Also lists the keeps: voice highlights ("NIP keep", "last 10 seconds", "tag that") and the user's own.
+    """
     cuts = [c for c in edit["cuts"] if not any(abs(c["start"] - r) < 0.01 for r in restored)]
     cuts += [{"start": a["start"], "end": a["end"], "why": "cut by you"} for a in added]
-    return {**edit, "cuts": cuts}
+    keeps = [{"start": m["t"], "end": m["end"], "why": m["label"]} for m in edit["markers"] if "end" in m]
+    keeps += [{"start": k["start"], "end": k["end"], "why": "kept by you"} for k in kept]
+    return {**edit, "cuts": cuts, "keeps": keeps}

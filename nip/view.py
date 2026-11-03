@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from nip import brief, cli
-from nip.commands import kept_ranges
+from nip.commands import kept_ranges, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
@@ -26,8 +26,9 @@ def clips_of(proj):
     out = []
     for stem in info["clips"]:
         c = cli.load(proj / f"{stem}.nip.json")
+        e = cli.decisions(c)
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
-                    "words": c["words"], "edit": cli.decisions(c),
+                    "words": c["words"], "edit": e, "unmarked": unmarked(e),
                     "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes"))})
     return info, out
 
@@ -257,13 +258,16 @@ class Handler(BaseHTTPRequestHandler):
                         cli.restore_cut(clip, start)
                     elif act == "cut":
                         cli.add_cut(clip, start, body.get("end"))
-                    elif act == "uncut":
-                        clip["my_cuts"] = [c for c in clip.get("my_cuts", []) if not isinstance(start, (int, float)) or abs(c["start"] - start) >= 0.01]
+                    elif act == "keep":
+                        cli.add_cut(clip, start, body.get("end"), "my_keeps")
+                    elif act in ("uncut", "unkeep"):
+                        k = "my_cuts" if act == "uncut" else "my_keeps"
+                        clip[k] = [c for c in clip.get(k, []) if not isinstance(start, (int, float)) or abs(c["start"] - start) >= 0.01]
                     elif act == "reset":  # back to exactly what the voice commands decided
                         for k in cli.HAND:
                             clip.pop(k, None)
                     else:
-                        raise ValueError("action must be restore, cut, uncut or reset")
+                        raise ValueError("action must be restore, cut, uncut, keep, unkeep or reset")
                     cli.save(f, clip)
                 self.send_json(project_data(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse
@@ -317,6 +321,14 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("action must be export or delete")
             elif len(p) == 3 and p[:2] == ["api", "export"]:
                 proj = self.project(p[2])
+                if body.get("unmarked") in ("cut", "keep"):  # settle footage still unmarked before exporting
+                    layer = "my_cuts" if body["unmarked"] == "cut" else "my_keeps"
+                    with LOCK:
+                        for stem in cli.load(proj / "project.json")["clips"]:
+                            f = proj / f"{stem}.nip.json"
+                            clip = cli.load(f)
+                            clip.setdefault(layer, []).extend({"start": a, "end": b} for a, b in unmarked(cli.decisions(clip)))
+                            cli.save(f, clip)
                 cli.export(proj, bool(body.get("combined")))
                 self.send_json({"done": str(cli.EXPORTS / proj.name)})
             elif p == ["api", "open"]:  # show a folder in Finder

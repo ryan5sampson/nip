@@ -32,10 +32,10 @@ def save(p, data):
 def decisions(clip):
     """Voice decisions with the user's hand edits on top (all kept through reparse)."""
     e = apply_overrides(clip["edit"], clip.get("overrides", {}))
-    return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []))
+    return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []), clip.get("my_keeps", []))
 
 
-HAND = ("overrides", "restored_cuts", "my_cuts")  # the user's hand edits on a clip, on top of the voice edit
+HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps")  # the user's hand edits on a clip, on top of the voice edit
 
 
 def clean_override(body, duration):
@@ -73,11 +73,11 @@ def override_take(clip, at, body):
     overrides[key] = o
 
 
-def add_cut(clip, start, end):
+def add_cut(clip, start, end, layer="my_cuts"):  # layer "my_keeps" marks it keep instead
     ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
     if not (ok and 0 <= start < end <= clip["duration"]):
-        raise ValueError("a cut must end after it starts, inside the video")
-    clip.setdefault("my_cuts", []).append({"start": round(float(start), 2), "end": round(float(end), 2)})
+        raise ValueError("a range must end after it starts, inside the video")
+    clip.setdefault(layer, []).append({"start": round(float(start), 2), "end": round(float(end), 2)})
 
 
 def restore_cut(clip, start):
@@ -200,8 +200,8 @@ def report(proj):
         for n in e.get("notes", []):
             print(f"    note  {mmss(n['t'])}  {n['text']}")
         for c in e["cuts"]:
-            if c["why"] == "nip cut that":
-                print(f"    cut   {mmss(c['start'])}-{mmss(c['end'])}  (nip cut that)")
+            if c["why"] in ("nip cut that", "nip cut"):
+                print(f"    cut   {mmss(c['start'])}-{mmss(c['end'])}  ({c['why']})")
         for n in e["pending"]:
             print(f"    ????  {mmss(n['t'])}  \"{n['text']}\" (not understood yet)")
 
