@@ -10,7 +10,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_overrides, build_edit, kept_ranges
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
@@ -30,7 +30,60 @@ def save(p, data):
 
 
 def decisions(clip):
-    return apply_overrides(clip["edit"], clip.get("overrides", {}))
+    """Voice decisions with the user's hand edits on top (all kept through reparse)."""
+    e = apply_overrides(clip["edit"], clip.get("overrides", {}))
+    return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []))
+
+
+HAND = ("overrides", "restored_cuts", "my_cuts")  # the user's hand edits on a clip, on top of the voice edit
+
+
+def clean_override(body, duration):
+    """Validate a hand edit to a take; raises ValueError on anything unexpected."""
+    out = {}
+    if "keep" in body:
+        if not isinstance(body["keep"], bool):
+            raise ValueError("keep must be true or false")
+        out["keep"] = body["keep"]
+    for k in ("start", "end"):
+        if k in body:
+            v = body[k]
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 <= v <= duration:
+                raise ValueError(f"{k} must be a time inside the video")
+            out[k] = round(float(v), 2)
+    if "name" in body:
+        if not isinstance(body["name"], str) or len(body["name"]) > 80:
+            raise ValueError("name must be text, 80 characters at most")
+        out["name"] = body["name"].strip()
+    return out
+
+
+def override_take(clip, at, body):
+    """Change one take (found by its original start, `at`) with the validated fields in body."""
+    if not isinstance(at, (int, float)) or isinstance(at, bool):
+        raise ValueError("at must be the take's original start time")
+    t = next((t for t in decisions(clip)["takes"] if abs(t["at"] - at) < 0.01), None)
+    if t is None:
+        raise ValueError(f"no take starts at {at}")
+    overrides = clip.setdefault("overrides", {})
+    key = str(round(float(t["at"]), 2))
+    o = {**overrides.get(key, {}), **clean_override(body, clip["duration"])}
+    if o.get("start", t["start"]) >= o.get("end", t["end"]):
+        raise ValueError("a take must start before it ends")
+    overrides[key] = o
+
+
+def add_cut(clip, start, end):
+    ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
+    if not (ok and 0 <= start < end <= clip["duration"]):
+        raise ValueError("a cut must end after it starts, inside the video")
+    clip.setdefault("my_cuts", []).append({"start": round(float(start), 2), "end": round(float(end), 2)})
+
+
+def restore_cut(clip, start):
+    if not any(isinstance(start, (int, float)) and abs(c["start"] - start) < 0.01 for c in clip["edit"]["cuts"]):
+        raise ValueError(f"no voice cut starts at {start}")
+    clip.setdefault("restored_cuts", []).append(round(float(start), 2))
 
 
 def slug(text):

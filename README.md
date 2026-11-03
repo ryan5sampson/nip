@@ -22,14 +22,19 @@ Run `nip` (same as `nip view`). It opens NIP in your browser and keeps processin
 
 1. **Drop footage in the inbox** (`~/NIP/inbox/`, or click *Open inbox* in the app). Loose files become one project named after today's date. A folder of files becomes one project named after the folder, so you can group several videos. New footage shows up in the library within a minute or so.
 2. **Library.** Every project is a card with a thumbnail, description, tags, clip names, and filmed and kept length. Search finds anything in a project: description, tags, clip names, notes, and every word said. Click a tag to filter.
-3. **Review a project.** Play each take, preview the kept takes with the cuts skipped, keep or drop takes, set a take's in and out points from the playhead, rename clips, and fix the description and tags. Shortcuts: <kbd>Space</kbd> play, <kbd>←</kbd>/<kbd>→</kbd> skip 2s (<kbd>Shift</kbd> for 10s), <kbd>I</kbd>/<kbd>O</kbd> set in/out, <kbd>K</kbd> keep. Your changes are saved next to NIP's own decisions, so `nip reparse` keeps them.
-4. **Edit with Claude** for talking-heavy footage. Write a brief like "give me a 30 second video where I explain why Linderballs are great". Claude reads the transcript, picks the lines, and saves the result as an edit you can preview and export as one video. It never sees the video, only what was said. This needs an Anthropic API key in your environment when you start NIP:
+3. **Review the pre-edit.** A project opens on the cut version your voice commands made. The timeline shows only kept footage; everything removed (earlier and scratched takes, footage before the first take, the command words, pauses, silences, "cut everything up to here") is folded into a small bar showing its length. Playback plays the edit and skips those bars. Click a bar to open it: it plays through, and lists why each part was cut, with **Keep** or **Restore** to bring it back. For a second pass, press <kbd>C</kbd> at the start and end of anything else to cut, set a take's in and out with <kbd>I</kbd>/<kbd>O</kbd>, keep or drop takes with <kbd>K</kbd>, rename clips, and fix the description and tags. <kbd>Space</kbd> plays, <kbd>←</kbd>/<kbd>→</kbd> skip 2s (<kbd>Shift</kbd> for 10s). Your changes sit on top of the voice edit, so `nip reparse` keeps them; *Info → Reset My Changes* goes back to the voice edit.
+4. **Leave edit notes.** Wherever something should change, pause and type (or press the mic and say) what you want, like "cut the stumble" or "bring back the last line". <kbd>N</kbd> jumps to the note box. Each note is pinned to that moment. Go through the whole video, then hit **Apply Notes** in the Notes tab: Claude reads the notes with the transcript and your current edit, and sends back edit operations (cut, restore a cut, keep or drop a take, move a take's in or out, rename a clip). NIP checks each one before applying it. Each note then shows what changed, or why it couldn't be done. Switch on **Apply instantly** to have each note done as soon as you add it. **Undo Last Apply** reverts the last batch. Speech uses your browser's built-in recognition; in Chrome that audio goes to Google.
+5. **Edit with Claude** for talking-heavy footage. Write a brief like "give me a 30 second video where I explain why Linderballs are great". Claude reads the transcript, picks the lines, and saves the result as an edit you can preview and export as one video. It never sees the video, only what was said.
+
+   Claude edits run through [Claude Code](https://claude.com/claude-code), so they count against your Claude plan's usage, not a separate bill. Sign Claude Code in once:
 
    ```bash
-   export ANTHROPIC_API_KEY=...
+   claude
    ```
 
-5. **Export** the kept takes as numbered clips, or a Claude edit as one video. *Show exports* opens the folder.
+   Then type `/login` and follow the browser steps. If Claude Code isn't installed, NIP falls back to the Anthropic API (set `ANTHROPIC_API_KEY`; billed per use in the Anthropic Console).
+
+6. **Export** the kept takes as numbered clips, or a Claude edit as one video. *Show exports* opens the folder.
 
 The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, and `nip export` (add `--combined` for one joined video too).
 

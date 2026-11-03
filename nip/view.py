@@ -1,7 +1,9 @@
 """nip view: the local NIP app. Library, review and adjust takes, Claude edits, export. Also keeps ingesting the inbox."""
+import copy
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -25,7 +27,8 @@ def clips_of(proj):
     for stem in info["clips"]:
         c = cli.load(proj / f"{stem}.nip.json")
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
-                    "words": c["words"], "edit": cli.decisions(c)})
+                    "words": c["words"], "edit": cli.decisions(c),
+                    "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes"))})
     return info, out
 
 
@@ -55,24 +58,28 @@ def project_data(proj):
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
-def clean_override(body, duration):
-    """Validate a hand edit from the page; raises ValueError on anything unexpected."""
-    out = {}
-    if "keep" in body:
-        if not isinstance(body["keep"], bool):
-            raise ValueError("keep must be true or false")
-        out["keep"] = body["keep"]
-    for k in ("start", "end"):
-        if k in body:
-            v = body[k]
-            if not isinstance(v, (int, float)) or not 0 <= v <= duration:
-                raise ValueError(f"{k} must be a time inside the video")
-            out[k] = round(float(v), 2)
-    if "name" in body:
-        if not isinstance(body["name"], str) or len(body["name"]) > 80:
-            raise ValueError("name must be text, 80 characters at most")
-        out["name"] = body["name"].strip()
-    return out
+def apply_notes(f, ids):
+    """Send these edit notes to Claude, then apply its checked operations. Claude is asked outside the lock."""
+    clip = cli.load(f)
+    notes = [n for n in clip.get("edit_notes", []) if n["id"] in ids]
+    if not notes:
+        raise ValueError("there are no notes to apply")
+    try:
+        plan = brief.plan_notes(clip, notes)
+    except RuntimeError as e:
+        raise ValueError(str(e))
+    with LOCK:
+        clip = cli.load(f)
+        clip["undo_notes"] = {"ids": ids, **{k: copy.deepcopy(clip.get(k)) for k in cli.HAND}}
+        errors = brief.apply_ops(clip, plan["ops"])
+        said = {r.get("id"): r for r in plan["notes"] if isinstance(r, dict)}
+        for n in clip.get("edit_notes", []):
+            if n["id"] in ids:
+                r, errs = said.get(n["id"], {}), errors.get(n["id"], [])
+                n["status"] = "applied" if r.get("done") and not errs else "failed"
+                n["result"] = " ".join([str(r.get("summary") or "Claude didn't report on this note.")]
+                                       + [f"Couldn't apply: {e}." for e in errs])
+        cli.save(f, clip)
 
 
 def thumbnail(proj):
@@ -147,7 +154,8 @@ class Handler(BaseHTTPRequestHandler):
             elif p == ["api", "status"]:
                 waiting = [v for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO] if cli.INBOX.exists() else []
                 self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "processing": STATE["processing"],
-                                "claude": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))})
+                                "claude": "plan" if shutil.which("claude") else
+                                "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
             elif p == ["api", "projects"]:
                 projs = [d for d in cli.LIBRARY.iterdir() if (d / "project.json").exists()] if cli.LIBRARY.exists() else []
                 self.send_json(sorted((summary(d) for d in projs), key=lambda s: s["modified"], reverse=True))
@@ -185,19 +193,77 @@ class Handler(BaseHTTPRequestHandler):
                 f = proj / f"{p[3]}.nip.json"
                 with LOCK:
                     clip = cli.load(f)
-                    at = body.get("at")
-                    if not isinstance(at, (int, float)):
-                        raise ValueError("at must be the take's original start time")
-                    overrides = clip.setdefault("overrides", {})
-                    key = str(round(float(at), 2))
                     if body.get("reset"):
-                        overrides.pop(key, None)
+                        clip.get("overrides", {}).pop(str(round(float(body.get("at", -1)), 2)), None)
                     else:
-                        o = {**overrides.get(key, {}), **clean_override(body, clip["duration"])}
-                        t = next((t for t in cli.decisions(clip)["takes"] if abs(t["at"] - at) < 0.01), None)
-                        if t and o.get("start", t["start"]) >= o.get("end", t["end"]):
-                            raise ValueError("a take must start before it ends")
-                        overrides[key] = o
+                        cli.override_take(clip, body.get("at"), body)
+                    cli.save(f, clip)
+                self.send_json(project_data(proj))
+            elif len(p) == 4 and p[:2] == ["api", "notes"]:  # second-round edit notes for Claude
+                proj = self.project(p[2])
+                if p[3] not in cli.load(proj / "project.json")["clips"]:
+                    raise FileNotFoundError
+                f = proj / f"{p[3]}.nip.json"
+                act = body.get("action")
+                if act == "add":
+                    text, t = body.get("text"), body.get("t")
+                    if not isinstance(text, str) or not text.strip() or len(text) > 500:
+                        raise ValueError("write a note of up to 500 characters")
+                    with LOCK:
+                        clip = cli.load(f)
+                        if not isinstance(t, (int, float)) or not 0 <= t <= clip["duration"]:
+                            raise ValueError("a note needs a time inside the video")
+                        notes = clip.setdefault("edit_notes", [])
+                        note = {"id": max((n["id"] for n in notes), default=0) + 1, "t": round(float(t), 2),
+                                "text": text.strip(), "status": "pending"}
+                        notes.append(note)
+                        cli.save(f, clip)
+                    if body.get("apply"):
+                        apply_notes(f, [note["id"]])
+                elif act == "apply":
+                    apply_notes(f, [n["id"] for n in cli.load(f).get("edit_notes", []) if n["status"] != "applied"])
+                elif act == "delete":
+                    with LOCK:
+                        clip = cli.load(f)
+                        clip["edit_notes"] = [n for n in clip.get("edit_notes", []) if n["id"] != body.get("id")]
+                        cli.save(f, clip)
+                elif act == "undo":  # put the hand edits back to before the last batch of notes
+                    with LOCK:
+                        clip = cli.load(f)
+                        before = clip.pop("undo_notes", None)
+                        if not before:
+                            raise ValueError("nothing to undo")
+                        for k in cli.HAND:
+                            if before.get(k) is None:
+                                clip.pop(k, None)
+                            else:
+                                clip[k] = before[k]
+                        for n in clip.get("edit_notes", []):
+                            if n["id"] in before["ids"]:
+                                n["status"], n["result"] = "pending", "Undone."
+                        cli.save(f, clip)
+                else:
+                    raise ValueError("action must be add, apply, delete or undo")
+                self.send_json(project_data(proj))
+            elif len(p) == 4 and p[:2] == ["api", "cuts"]:  # restore a voice cut, add or remove your own, or reset
+                proj = self.project(p[2])
+                if p[3] not in cli.load(proj / "project.json")["clips"]:
+                    raise FileNotFoundError
+                f = proj / f"{p[3]}.nip.json"
+                with LOCK:
+                    clip = cli.load(f)
+                    act, start = body.get("action"), body.get("start")
+                    if act == "restore":
+                        cli.restore_cut(clip, start)
+                    elif act == "cut":
+                        cli.add_cut(clip, start, body.get("end"))
+                    elif act == "uncut":
+                        clip["my_cuts"] = [c for c in clip.get("my_cuts", []) if not isinstance(start, (int, float)) or abs(c["start"] - start) >= 0.01]
+                    elif act == "reset":  # back to exactly what the voice commands decided
+                        for k in cli.HAND:
+                            clip.pop(k, None)
+                    else:
+                        raise ValueError("action must be restore, cut, uncut or reset")
                     cli.save(f, clip)
                 self.send_json(project_data(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse

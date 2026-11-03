@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import apply_overrides, build_edit, kept_ranges
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges
 
 
 def script(text):
@@ -156,6 +156,87 @@ class Brief(unittest.TestCase):
                           (round(phs[0]["start"] - 0.1, 2), round(phs[0]["end"] + 0.25, 2))])
 
 
+class BriefPieces(unittest.TestCase):
+    def test_overlapping_neighbours_merge_instead_of_repeating(self):
+        from nip.brief import pieces
+        phs = [{"id": 1, "stem": "v", "start": 10.0, "end": 20.0}, {"id": 2, "stem": "v", "start": 20.1, "end": 30.0},
+               {"id": 3, "stem": "v", "start": 50.0, "end": 55.0}]
+        self.assertEqual(pieces([1, 2, 3], phs, {"v": 60}),
+                         [{"stem": "v", "start": 9.9, "end": 30.25}, {"stem": "v", "start": 49.9, "end": 55.25}])
+
+
+class BriefViaClaudeCode(unittest.TestCase):
+    def run_cli(self, stdout):
+        from types import SimpleNamespace
+        from nip import brief
+        words, dur = script("NIP take one / Linderballs are great. They bounce")
+        clips = [{"stem": "v", "words": words, "duration": dur, "edit": build_edit(words, dur)}]
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen.update(cmd=cmd, env=kw["env"], input=kw["input"])
+            return SimpleNamespace(stdout=stdout, stderr="")
+        with mock.patch("nip.brief.shutil.which", return_value="/usr/local/bin/claude"), \
+                mock.patch("nip.brief.subprocess.run", fake_run), \
+                mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
+            return brief.ask("short one", clips), seen
+
+    def test_uses_the_plan_not_the_api_key(self):
+        out, seen = self.run_cli(json.dumps({"is_error": False, "result": "",
+                                             "structured_output": {"title": "T", "note": "n", "phrases": [2]}}))
+        self.assertEqual(seen["cmd"][:2], ["claude", "-p"])
+        self.assertNotIn("ANTHROPIC_API_KEY", seen["env"])  # a key would move the bill to the API
+        self.assertIn("[1] v", seen["input"])
+        self.assertEqual((out["title"], len(out["pieces"])), ("T", 1))
+
+    def test_signed_out_gives_a_clear_message(self):
+        with self.assertRaisesRegex(RuntimeError, "/login"):
+            self.run_cli(json.dumps({"is_error": True, "result": "Failed to authenticate: OAuth session expired"}))
+
+
+class EditNotes(unittest.TestCase):
+    def clip(self):
+        words, dur = script("NIP take one / hello there um I mean hi / NIP take two / good one")
+        return {"duration": dur, "words": words, "edit": build_edit(words, dur)}
+
+    def test_ops_are_checked_before_applying(self):
+        import nip.cli as cli
+        from nip.brief import apply_ops
+        clip = self.clip()
+        first, second = cli.decisions(clip)["takes"]
+        blank = {"start": 0, "end": 0, "at": 0, "time": 0, "name": ""}
+        ops = [{**blank, "note": 1, "op": "cut", "start": 3.0, "end": 3.5},
+               {**blank, "note": 1, "op": "keep", "at": first["at"]},
+               {**blank, "note": 2, "op": "rename", "at": second["at"], "name": "Intro"},
+               {**blank, "note": 3, "op": "cut", "start": 5.0, "end": 4.0},        # backwards
+               {**blank, "note": 3, "op": "drop", "at": 999.0},                    # no such take
+               {**blank, "note": 3, "op": "restore_cut", "start": 1.234},          # no such cut
+               {**blank, "note": 3, "op": "delete_everything"}]
+        errors = apply_ops(clip, ops)
+        self.assertEqual(sorted(errors), [3])
+        self.assertEqual(len(errors[3]), 4)
+        e = cli.decisions(clip)
+        self.assertIn({"start": 3.0, "end": 3.5, "why": "cut by you"}, e["cuts"])
+        self.assertEqual([(t["keep"], t["name"]) for t in e["takes"]], [(True, "Intro"), (True, "Intro")])
+
+    def test_notes_prompt_has_words_takes_and_notes(self):
+        from nip.brief import notes_prompt
+        text = notes_prompt(self.clip(), [{"id": 7, "t": 4.2, "text": "cut the um"}])
+        self.assertIn("[7] at 4.20s: cut the um", text)
+        self.assertIn(" um\n", text)
+        self.assertIn("take at=", text)
+
+
+class CutEdits(unittest.TestCase):
+    def test_restore_voice_cuts_and_add_your_own(self):
+        _, e = summary("NIP take one / hello there / NIP take two / again")
+        first = e["cuts"][0]["start"]
+        out = apply_cut_edits(e, [first], [{"start": 5.0, "end": 6.0}])
+        self.assertNotIn(first, [c["start"] for c in out["cuts"]])
+        self.assertEqual(out["cuts"][-1], {"start": 5.0, "end": 6.0, "why": "cut by you"})
+        self.assertEqual(len(out["cuts"]), len(e["cuts"]))
+
+
 class Overrides(unittest.TestCase):
     def test_hand_edits_match_by_original_start(self):
         _, e = summary("NIP new clip intro / one / NIP take two / two")
@@ -207,6 +288,27 @@ class Viewer(unittest.TestCase):
                 self.assertEqual(cm.exception.code, 400)
                 post("/api/override/p/v", {"at": take["at"], "keep": False})
                 self.assertFalse(cli.decisions(cli.load(lib / "p" / "v.nip.json"))["takes"][-1]["keep"])
+                cut = cli.decisions(cli.load(lib / "p" / "v.nip.json"))["cuts"][0]
+                post("/api/cuts/p/v", {"action": "restore", "start": cut["start"]})
+                post("/api/cuts/p/v", {"action": "cut", "start": 1.0, "end": 1.5})
+                self.assertEqual([c["why"] for c in cli.decisions(cli.load(lib / "p" / "v.nip.json"))["cuts"]], ["cut by you"])
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/cuts/p/v", {"action": "cut", "start": 2.0, "end": 1.0})
+                plan = {"ops": [{"note": 1, "op": "cut", "start": 1.0, "end": 1.2, "at": 0, "time": 0, "name": ""}],
+                        "notes": [{"id": 1, "done": True, "summary": "Cut the pause."}]}
+                with mock.patch("nip.brief.plan_notes", return_value=plan) as planner:
+                    post("/api/notes/p/v", {"action": "add", "t": 1.5, "text": "cut the pause"})
+                    data = json.loads(post("/api/notes/p/v", {"action": "apply"}).read())
+                self.assertEqual(planner.call_args[0][1][0]["text"], "cut the pause")
+                note = data["clips"][0]["edit_notes"][0]
+                self.assertEqual((note["status"], note["result"]), ("applied", "Cut the pause."))
+                self.assertTrue(data["clips"][0]["can_undo"])
+                data = json.loads(post("/api/notes/p/v", {"action": "undo"}).read())
+                self.assertEqual(data["clips"][0]["edit_notes"][0]["status"], "pending")
+                self.assertNotIn({"start": 1.0, "end": 1.2, "why": "cut by you"}, data["clips"][0]["edit"]["cuts"])
+                post("/api/cuts/p/v", {"action": "reset"})
+                clip = cli.load(lib / "p" / "v.nip.json")
+                self.assertEqual((cli.decisions(clip)["cuts"], clip.get("overrides")), (clip["edit"]["cuts"], None))
                 server.shutdown()
 
 

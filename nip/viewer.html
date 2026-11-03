@@ -106,17 +106,36 @@
   #videos button { height: 22px; padding: 0 8px; border: none; border-radius: 5px; background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .7); font-size: 11px; }
   #videos button.on { background: rgba(255, 255, 255, .28); color: #fff; }
   .timeline-area { grid-column: 1; padding: 10px 12px 12px; border-top: .5px solid var(--separator); background: var(--window); }
-  #timeline { position: relative; height: 54px; background: var(--track); border-radius: 7px; cursor: text; overflow: hidden; box-shadow: inset 0 0 0 .5px var(--separator); }
-  #timeline > div { position: absolute; }
-  .clip { top: 9px; height: 26px; border-radius: 5px; padding: 0 6px; font-size: 11px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
-  .clip.keep { background: color-mix(in srgb, var(--accent) 82%, #000 0%); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
-  .clip.drop { background: var(--fill-strong); color: var(--secondary); box-shadow: inset 0 0 0 .5px var(--separator); }
-  .cut { top: 9px; height: 26px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 75%, transparent) 0 3px, transparent 3px 7px); pointer-events: none; }
-  .hl { bottom: 6px; height: 5px; border-radius: 3px; background: var(--yellow); min-width: 4px; }
-  .nt { bottom: 4px; width: 9px; height: 9px; background: var(--purple); border-radius: 2px; transform: translateX(-4px) rotate(45deg); }
-  .pc { top: 3px; height: 4px; border-radius: 2px; background: var(--orange); }
-  #playhead { top: 0; bottom: 0; width: 1.5px; background: var(--red); pointer-events: none; }
+  #timeline { position: relative; display: flex; gap: 2px; height: 46px; padding: 9px 4px; background: var(--track); border-radius: 7px; box-shadow: inset 0 0 0 .5px var(--separator); overflow: hidden; }
+  .tk, .gap { position: relative; border-radius: 5px; font-size: 11px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+  .tk { flex: var(--s) 1 0; min-width: 4px; padding: 0 6px; background: var(--accent); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
+  .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--secondary); background: repeating-linear-gradient(135deg, var(--fill-strong) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px var(--separator); cursor: pointer; }
+  .gap:hover { color: var(--label); box-shadow: inset 0 0 0 1px var(--secondary); }
+  .gap.open { flex: var(--s) 1 0; width: auto; min-width: 40px; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 26%, transparent) 0 3px, transparent 3px 7px); box-shadow: inset 0 0 0 1.5px var(--red); cursor: text; }
+  .tk i, .gap i { position: absolute; pointer-events: none; }
+  .hl { bottom: 2px; height: 4px; border-radius: 2px; background: var(--yellow); min-width: 4px; }
+  .nt { top: 3px; width: 7px; height: 7px; border-radius: 2px; background: var(--purple); transform: translateX(-3px) rotate(45deg); }
+  #playhead { position: absolute; top: 0; bottom: 0; left: 0; width: 1.5px; background: var(--red); pointer-events: none; }
   #playhead::before { content: ""; position: absolute; top: 0; left: -4px; border: 5px solid transparent; border-top-color: var(--red); }
+  .notebar { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+  .notebar .at { color: var(--secondary); font-size: 11px; min-width: 70px; }
+  .notebar input { flex: 1; min-width: 0; }
+  #mic.live { color: var(--red); background: rgba(255, 59, 48, .14); }
+  .en { top: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .25); transform: translateX(-3px); }
+  .gap .en { top: 2px; }
+  .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--fill-strong); color: var(--secondary); }
+  .badge.applied { background: color-mix(in srgb, #34c759 22%, transparent); color: #248a3d; }
+  .badge.failed { background: color-mix(in srgb, var(--orange) 22%, transparent); color: #c76a00; }
+  @media (prefers-color-scheme: dark) { .badge.applied { color: #30d158; } .badge.failed { color: var(--orange); } }
+  .seek { cursor: pointer; }
+  .seek:hover { color: var(--accent); }
+  #gapinfo { margin-top: 8px; padding: 4px 10px; border-radius: 8px; background: var(--fill); }
+  #gapinfo .head, #gapinfo .why-row { display: flex; gap: 8px; align-items: center; padding: 5px 0; }
+  #gapinfo .head b { flex: 1; font-weight: 600; }
+  #gapinfo .why-row { border-top: .5px solid var(--separator); }
+  #gapinfo .why-row span { flex: 1; min-width: 0; }
+  .transport .tc-total { color: rgba(255, 255, 255, .45); font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; margin-left: -4px; }
+  #cutbtn.armed { color: var(--red); background: rgba(255, 59, 48, .15); }
   .inspector { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
   .inspector .seg { margin: 10px 12px; }
   .pane { flex: 1; overflow-y: auto; padding: 0 12px 16px; }
@@ -172,6 +191,9 @@
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.6v10.8c0 .5.5.8.9.5l8.3-5.4c.4-.2.4-.8 0-1L5.4 2.1c-.4-.3-.9 0-.9.5z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 16 16"><rect x="5.8" y="1.8" width="4.4" height="8" rx="2.2"/><path d="M3.4 7.6a4.6 4.6 0 0 0 9.2 0M8 12.2v2"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><rect x="4" y="2.8" width="2.8" height="10.4" rx=".8"/><rect x="9.2" y="2.8" width="2.8" height="10.4" rx=".8"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 16 16"><circle cx="4.2" cy="11.6" r="2"/><circle cx="11.8" cy="11.6" r="2"/><path d="M5.6 10.2 12 2.4M10.4 10.2 4 2.4"/></symbol>
   <symbol id="i-stop" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></symbol>
   <symbol id="i-share" viewBox="0 0 16 16"><path d="M8 1.8v8.4M5.2 4.5 8 1.8l2.8 2.7M5 6.8H3.8v7.4h8.4V6.8H11"/></symbol>
   <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2v8.6c0 .4.3.7.7.7h11c.4 0 .7-.3.7-.7V5.6c0-.4-.3-.7-.7-.7H7.6L6.2 3.5H2.5c-.4 0-.7.3-.7.7z"/></symbol>
@@ -214,28 +236,43 @@
 
     <div id="project" hidden>
       <div class="viewer">
-        <video id="video" playsinline preload="metadata" controls></video>
+        <video id="video" playsinline preload="metadata"></video>
         <div class="transport">
-          <button class="icon-btn" id="preview" title="Play the Edit: kept takes with cuts skipped"><svg class="i solid"><use href="#i-play"/></svg>Play Edit</button>
-          <button class="icon-btn" id="stop" title="Stop"><svg class="i solid"><use href="#i-stop"/></svg></button>
-          <span class="tc num" id="timecode">0:00.0</span>
+          <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg></button>
+          <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
+          <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C)"><svg class="i"><use href="#i-cut"/></svg>Cut</button>
           <div id="videos"></div>
           <small id="meta" class="num"></small>
         </div>
       </div>
       <div class="timeline-area">
-        <div id="timeline" role="slider" aria-label="Timeline" title="Click to move the playhead"></div>
+        <div id="timeline" aria-label="Edited timeline: kept footage, with cut sections folded into small bars"></div>
+        <form class="notebar" id="noteform" autocomplete="off">
+          <span class="at num" id="noteat"></span>
+          <input type="text" id="notein" placeholder="Note an edit here, e.g. “cut the stumble”, then Enter (N)" aria-label="Edit note at the playhead">
+          <button type="button" class="icon-btn" id="mic" title="Speak the note" hidden><svg class="i"><use href="#i-mic"/></svg></button>
+          <button type="submit" class="btn">Add</button>
+        </form>
+        <div id="gapinfo" hidden></div>
       </div>
       <aside class="inspector" aria-label="Inspector">
         <div class="seg" role="tablist">
           <button data-tab="takes" class="on">Takes</button>
-          <button data-tab="text">Transcript</button>
+          <button data-tab="notes">Notes</button>
+          <button data-tab="text">Text</button>
           <button data-tab="claude">Claude</button>
           <button data-tab="info">Info</button>
         </div>
         <div class="pane" id="pane-takes">
           <div class="group" id="takes"></div>
-          <p class="hint">Space plays · ← → skip 2s · I and O set a take's in and out · K keeps or drops it</p>
+          <p class="hint">Space plays the edit · ← → skip 2s · I and O set a take’s in and out · K keeps or drops it · C cuts</p>
+        </div>
+        <div class="pane" id="pane-notes" hidden>
+          <div class="actions-line" style="margin-top:2px"><button class="btn default" id="applynotes">Apply Notes</button>
+            <label class="check" style="margin:0"><input type="checkbox" id="instant"> Apply instantly</label></div>
+          <p class="hint">Claude reads each note with the transcript and your current edit, and makes the cuts, restores and take changes it describes. Every change is checked before it’s applied.</p>
+          <div class="group" id="editnotes"></div>
+          <div class="actions-line"><button class="btn" id="undonotes" hidden>Undo Last Apply</button></div>
         </div>
         <div class="pane" id="pane-text" hidden>
           <p class="hint" style="margin-top:2px">Click a word to jump to it. Dimmed words aren't in the kept takes.</p>
@@ -255,6 +292,9 @@
           <div class="field"><label for="tags">Tags</label><input type="text" id="tags" placeholder="Separate with commas"></div>
           <h4>Export</h4>
           <label class="check"><input type="checkbox" id="combined"> Also export one joined video</label>
+          <h4>Changes</h4>
+          <button class="btn" id="resetall">Reset My Changes to This Video</button>
+          <p class="hint">Goes back to exactly what your voice commands decided.</p>
           <h4>Markers</h4>
           <div class="group" id="notes"></div>
         </div>
@@ -274,7 +314,7 @@ const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, data = null, proj = '', clipIdx = 0;
-let playing = null, pendingSeek = null, kept = [], wordEls = [], nowWord = null, storyBar = null, lastProcessing = 0;
+let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, cutFrom = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -347,8 +387,10 @@ const label = t => t.name || (t.group ? `Section ${t.group}` : 'Before first tak
 
 async function loadProject(name) {
   proj = name;
+  openGap = null;
   try { show(await api('/api/project/' + enc(name)), 0); }
-  catch (e) { status(e.message, true); }
+  catch (e) { return status(e.message, true); }
+  if (kept.length) video.readyState ? video.currentTime = kept[0][0] : pendingSeek = kept[0][0];  // open on the first kept frame
 }
 
 function show(d, idx = clipIdx) {
@@ -357,7 +399,7 @@ function show(d, idx = clipIdx) {
   const c = clip(), e = c.edit;
   const src = `/media/${enc(proj)}/${enc(c.source)}`;
   if (video.dataset.src !== src) { video.src = src; video.dataset.src = src; }
-  kept = e.takes.filter(t => t.keep).flatMap(t => pieces(t, e.cuts)).sort((a, b) => a[0] - b[0]);
+  kept = merge(e.takes.filter(t => t.keep).flatMap(t => pieces(t, e.cuts)));
   const keptLen = kept.reduce((s, [a, b]) => s + b - a, 0);
 
   $('#title').textContent = data.description || data.name;
@@ -366,16 +408,22 @@ function show(d, idx = clipIdx) {
   if (document.activeElement !== $('#tags')) $('#tags').value = data.tags.join(', ');
   $('#videos').innerHTML = data.clips.length > 1 ? data.clips.map((c, i) =>
     `<button data-i="${i}" class="${i === clipIdx ? 'on' : ''}">${esc(c.stem)}</button>`).join('') : '';
-  $('#meta').textContent = `${mmss(keptLen)} kept of ${mmss(c.duration)}`;
+  $('#meta').textContent = `${mmss(c.duration - keptLen)} cut from ${mmss(c.duration)} filmed`;
+  $('#edittotal').textContent = `/ ${mmss(keptLen)}`;
 
-  const bar = storyBar ? storyBar.filter(p => p.ci === clipIdx) : [];
-  $('#timeline').innerHTML =
-    e.takes.map(t => `<div class="clip ${t.keep ? 'keep' : 'drop'}" style="left:${pct(t.start)};width:calc(${pct(t.end - t.start)} - 1px)" title="${esc(label(t))}">${esc(label(t))}${t.group ? ` · Take ${t.take}` : ''}</div>`).join('') +
-    e.cuts.map(x => `<div class="cut" style="left:${pct(x.start)};width:${pct(x.end - x.start)}" title="Cut: ${esc(x.why)}"></div>`).join('') +
-    e.markers.map(m => `<div class="hl" style="left:${pct(m.t)};width:${m.end != null ? pct(m.end - m.t) : '4px'}" title="${esc(m.label)}"></div>`).join('') +
-    (e.notes || []).map(n => `<div class="nt" style="left:${pct(n.t)}" title="${esc(n.text)}"></div>`).join('') +
-    bar.map(p => `<div class="pc" style="left:${pct(p.a)};width:${pct(p.b - p.a)}"></div>`).join('') +
-    '<div id="playhead"></div>';
+  segs = segments();
+  $('#timeline').innerHTML = segs.map((s, k) => {
+    const len = s.b - s.a, open = s.gap && s.a === openGap, at = t => `left:${100 * (t - s.a) / len}%`;
+    const marks = s.gap && !open ? '' : [
+      ...e.markers.filter(m => m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:${m.end != null ? 100 * (Math.min(m.end, s.b) - m.t) / len + '%' : '4px'}"></i>`),
+      ...(e.notes || []).filter(n => n.t >= s.a && n.t < s.b).map(n => `<i class="nt" style="${at(n.t)}"></i>`),
+      ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
+    if (s.gap) return `<div class="gap ${open ? 'open' : ''}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${short(len)}${marks}</div>`;
+    const t = e.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
+    const name = t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '';
+    return `<div class="tk" data-k="${k}" style="--s:${len}" title="${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
+  }).join('') + '<div id="playhead"></div>';
+  drawGap();
 
   $('#takes').innerHTML = e.takes.map((t, i) => `
     <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
@@ -408,6 +456,21 @@ function show(d, idx = clipIdx) {
     </div>`;
   }).join('') : '<div class="muted-empty">No edits yet.</div>';
 
+  const pending = c.edit_notes.filter(n => n.status !== 'applied').length;
+  $('#applynotes').textContent = pending ? `Apply ${plural(pending, 'Note')}` : 'Apply Notes';
+  $('#applynotes').disabled = !pending;
+  $('#undonotes').hidden = !c.can_undo;
+  $('#editnotes').innerHTML = c.edit_notes.length ? c.edit_notes.map(n => `
+    <div class="row" data-id="${n.id}">
+      <div class="main-col">
+        <div class="title-line"><b class="num seek" data-t="${n.t}" title="Go to this moment">${mmss(editTime(n.t))}</b>
+          <span class="badge ${n.status}">${{pending: 'Pending', applied: 'Applied', failed: 'Not applied'}[n.status]}</span></div>
+        <span>${esc(n.text)}</span>
+        ${n.result ? `<span class="sub">${esc(n.result)}</span>` : ''}
+      </div>
+      <div class="acts"><button class="icon-btn small" data-act="del" title="Delete note">${icon('trash')}</button></div>
+    </div>`).join('') : '<div class="muted-empty">No notes yet. Pause anywhere and type what to change.</div>';
+
   const items = [
     ...e.markers.map(m => ({t: m.t, color: 'var(--yellow)', text: m.end != null ? `Highlight to ${mmss(m.end)}` : m.label})),
     ...(e.notes || []).map(n => ({t: n.t, color: 'var(--purple)', text: n.text.replace(/^that was /, '')})),
@@ -421,6 +484,55 @@ function show(d, idx = clipIdx) {
   nowWord = null;
 }
 
+function merge(ps) {  // kept pieces in time order, overlaps joined
+  const out = [];
+  for (const [a, b] of ps.sort((x, y) => x[0] - y[0])) {
+    const l = out.at(-1);
+    if (l && a <= l[1] + 0.01) l[1] = Math.max(l[1], b); else out.push([a, b]);
+  }
+  return out;
+}
+function segments() {  // the edited timeline: kept pieces, and the cut stretches between them
+  const out = [], end = clip().duration;
+  let t = 0;
+  for (const [a, b] of kept) {
+    if (a - t > 0.05) out.push({gap: true, a: t, b: a});
+    out.push({gap: false, a, b});
+    t = b;
+  }
+  if (end - t > 0.05) out.push({gap: true, a: t, b: end});
+  return out;
+}
+const short = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const editTime = t => kept.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, t) - a), 0);
+const WHY = {take: '“Take” command', reset: '“Scratch that” command', nip: 'NIP command', 'nip cut that': '“Cut that”',
+  silence: 'Silence', paused: 'Pause', 'cut everything': '“Cut everything up to here”', 'cut by you': 'Cut by you'};
+const SAID = ['take', 'reset', 'nip', 'nip cut that', 'cut everything'];
+let gapWhy = [];
+function reasons(g) {  // why each part of a cut stretch was cut, with a way to bring it back
+  const e = clip().edit, over = x => x.start < g.b - 0.01 && x.end > g.a + 0.01, out = [];
+  e.takes.forEach((t, i) => { if (!t.keep && over(t)) out.push({take: i, text: `${label(t)}${t.group ? ` · Take ${t.take}` : ''}: ${t.why} · ${short(t.end - t.start)}`}); });
+  e.cuts.filter(c => over(c) && e.takes.some(t => t.keep && c.start < t.end && c.end > t.start)).forEach(c => {
+    const said = SAID.includes(c.why) ? clip().words.filter(w => w.start >= c.start && w.start < c.end).map(w => w.w).join(' ') : '';
+    out.push({cut: c, text: `${WHY[c.why] || c.why}${said ? ` “${said}”` : ''} · ${short(c.end - c.start)}`});
+  });
+  return out;
+}
+function drawGap() {
+  const g = segs.find(s => s.gap && s.a === openGap);
+  $('#gapinfo').hidden = !g;
+  if (!g) return;
+  gapWhy = reasons(g);
+  const rows = gapWhy.length ? gapWhy : [{text: 'Between takes. Move a neighbouring take’s In or Out to bring it back.'}];
+  $('#gapinfo').innerHTML = `<div class="head"><b class="num">${(g.b - g.a).toFixed(1)}s cut · ${mmss(g.a)}–${mmss(g.b)}</b>
+      <button class="btn" data-act="playgap">${icon('play', true)}Play</button>${gapWhy.length > 1 ? '<button class="btn" data-act="all">Restore All</button>' : ''}<button class="btn" data-act="fold">Fold</button></div>` +
+    rows.map((r, j) => `<div class="why-row"><span>${esc(r.text)}</span>${r.take != null ? `<button class="btn" data-j="${j}">Keep</button>`
+      : r.cut ? `<button class="btn" data-j="${j}">${r.cut.why === 'cut by you' ? 'Remove Cut' : 'Restore'}</button>` : ''}</div>`).join('');
+}
+async function cutAction(action, start, end) {
+  try { show(await api(`/api/cuts/${enc(proj)}/${enc(clip().stem)}`, {action, start, end})); return true; }
+  catch (e) { status(e.message, true); return false; }
+}
 async function edit(i, fields) {
   const t = clip().edit.takes[i];
   try { show(await api(`/api/override/${enc(proj)}/${enc(clip().stem)}`, {at: t.at, ...fields})); }
@@ -429,11 +541,9 @@ async function edit(i, fields) {
 const takeAt = t => clip().edit.takes.findIndex(x => x.start <= t && t < x.end);
 
 // ---------- playback: a list of pieces {ci, a, b}, possibly across videos, in order ----------
-function playList(list, bar = null) {
+function playList(list) {
   if (!list.length) return status('Nothing to play', true);
   playing = {list, i: 0};
-  storyBar = bar;
-  if (bar) show(data);  // draw the edit's pieces on the timeline
   goPiece();
 }
 function goPiece() {
@@ -441,7 +551,7 @@ function goPiece() {
   if (p.ci !== clipIdx) { pendingSeek = p.a; show(data, p.ci); }
   else { video.currentTime = p.a; video.play(); }
 }
-function stopPlaying() { playing = null; if (storyBar) { storyBar = null; show(data); } }
+function stopPlaying() { playing = null; }
 video.addEventListener('loadedmetadata', () => {
   if (pendingSeek == null) return;
   video.currentTime = pendingSeek;
@@ -450,26 +560,63 @@ video.addEventListener('loadedmetadata', () => {
 });
 const seek = t => { stopPlaying(); video.currentTime = t; };
 
+function togglePlay() {
+  if (!video.paused) return video.pause();
+  stopPlaying();
+  const t = video.currentTime, s = segs.find(s => t < s.b - 0.05);
+  if (!s || (s.gap && s.a !== openGap && s.b >= clip().duration - 0.05)) video.currentTime = kept.length ? kept[0][0] : 0;  // at the end: start over
+  else if (s.gap && s.a !== openGap) video.currentTime = s.b;
+  video.play();
+}
+const playIcon = () => $('#play').innerHTML = icon(video.paused ? 'play' : 'pause', true);
+video.addEventListener('play', playIcon);
+video.addEventListener('pause', playIcon);
+
+// follow the playhead; plain playback plays the edit, skipping folded cuts
 function follow() {
   requestAnimationFrame(follow);
-  if (!data || $('#project').hidden) return;
+  if (!data || $('#project').hidden || !segs.length) return;
   const t = video.currentTime;
-  const ph = $('#playhead');
-  if (ph) ph.style.left = pct(t);
-  $('#timecode').textContent = mmss(t);
-  let k = -1;
-  for (let i = 0; i < clip().words.length && clip().words[i].start <= t; i++) k = i;
-  if (wordEls[k] !== nowWord) {
+  let k = segs.findIndex(s => t < s.b);
+  if (k < 0) k = segs.length - 1;
+  const s = segs[k], el = $('#timeline').children[k], ph = $('#playhead');
+  if (el && ph) {
+    const folded = s.gap && s.a !== openGap;
+    ph.style.left = `${el.offsetLeft + (folded ? el.offsetWidth / 2 : Math.min(1, Math.max(0, (t - s.a) / (s.b - s.a))) * el.offsetWidth)}px`;
+  }
+  $('#timecode').textContent = mmss(editTime(t));
+  $('#noteat').textContent = `Note at ${mmss(editTime(noteT ?? t))}`;
+  let w = -1;
+  for (let i = 0; i < clip().words.length && clip().words[i].start <= t; i++) w = i;
+  if (wordEls[w] !== nowWord) {
     nowWord?.classList.remove('now');
-    nowWord = wordEls[k];
+    nowWord = wordEls[w];
     nowWord?.classList.add('now');
   }
-  if (!playing || video.paused || pendingSeek != null) return;
-  const p = playing.list[playing.i];
-  if (t >= p.b - 0.03) {
-    if (++playing.i >= playing.list.length) { video.pause(); stopPlaying(); }
-    else goPiece();
-  } else if (t < p.a - 0.3) video.currentTime = p.a;
+  if (video.paused || pendingSeek != null) return;
+  if (playing) {
+    const p = playing.list[playing.i];
+    if (t >= p.b - 0.03) {
+      if (++playing.i >= playing.list.length) { video.pause(); stopPlaying(); }
+      else goPiece();
+    } else if (t < p.a - 0.3) video.currentTime = p.a;
+  } else if (s.gap && s.a !== openGap && t >= s.a) {
+    if (s.b >= clip().duration - 0.05) video.pause(); else video.currentTime = s.b;
+  }
+}
+
+function markCut() {
+  const t = video.currentTime;
+  if (cutFrom == null) {
+    cutFrom = t;
+    $('#cutbtn').classList.add('armed');
+    return status(`Cut starts at ${mmss(t)}. Go to where it should end and press C again (Esc cancels).`, false, true);
+  }
+  const [a, b] = cutFrom < t ? [cutFrom, t] : [t, cutFrom];
+  cutFrom = null;
+  $('#cutbtn').classList.remove('armed');
+  if (b - a < 0.1) return status('Cut cancelled');
+  cutAction('cut', a, b).then(ok => ok && status(`Cut ${(b - a).toFixed(1)}s`));
 }
 
 document.querySelector('.inspector .seg').onclick = e => {
@@ -479,12 +626,47 @@ document.querySelector('.inspector .seg').onclick = e => {
   document.querySelectorAll('.inspector .pane').forEach(p => p.hidden = p.id !== 'pane-' + tab);
   try { localStorage.setItem('nip-tab', tab); } catch {}
 };
-$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); show(data, +b.dataset.i); } };
-$('#timeline').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); seek(clip().duration * (e.clientX - r.left) / r.width); };
+$('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); openGap = null; show(data, +b.dataset.i); } };
+$('#timeline').onclick = e => {
+  const el = e.target.closest('[data-k]');
+  if (!el) return;
+  const s = segs[+el.dataset.k];
+  if (s.gap && s.a !== openGap) { openGap = s.a; show(data); seek(s.a); return; }
+  const r = el.getBoundingClientRect();
+  seek(s.a + (s.b - s.a) * Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
+};
+$('#gapinfo').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const g = segs.find(s => s.gap && s.a === openGap);
+  if (b.dataset.act === 'fold') { openGap = null; show(data); }
+  else if (b.dataset.act === 'playgap' && g) playList([{ci: clipIdx, a: g.a, b: g.b}]);
+  else if (b.dataset.act === 'all') restoreAll(gapWhy);
+  else if (b.dataset.j != null) restoreOne(gapWhy[+b.dataset.j]);
+};
+async function restoreOne(r) {
+  const before = editTime(Infinity);
+  if (r.take != null) await edit(r.take, {keep: true});
+  else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.start);
+  const still = segs.find(s => s.gap && s.a === openGap);
+  if (editTime(Infinity) - before >= 0.05 || !still) return;
+  const range = x => x.take != null ? clip().edit.takes[x.take] : x.cut, mine = range(r);  // overlapping reasons: this one alone frees nothing
+  const others = reasons(still).filter(x => range(x).start < mine.end && range(x).end > mine.start);
+  status(`Still cut by: ${others.map(x => x.text.split(' · ')[0]).join(', ')}. Restore those too, or use Restore All.`);
+}
+async function restoreAll(rows) {  // one request at a time: each answer is the new state the next builds on
+  for (const r of rows) {
+    if (r.take != null) await edit(r.take, {keep: true});
+    else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.start);
+  }
+  status('Restored');
+}
+$('#play').onclick = togglePlay;
+$('#cutbtn').onclick = markCut;
+$('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
+  && cutAction('reset').then(ok => ok && status('Back to the voice edit'));
 $('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
 $('#words').onclick = e => { if (e.target.dataset.t) seek(+e.target.dataset.t); };
-$('#preview').onclick = () => playList(kept.map(([a, b]) => ({ci: clipIdx, a, b})));
-$('#stop').onclick = () => { stopPlaying(); video.pause(); };
 $('#takes').onclick = e => {
   const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
   if (!b || !row) return;
@@ -504,7 +686,7 @@ $('#stories').onclick = e => {
   const s = data.stories.find(s => s.id === +row.dataset.id);
   if (b.dataset.act === 'play') {
     const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
-    playList(list, list);
+    playList(list);
   }
   if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () =>
     status(`Exported to ${(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'})).done}`));
@@ -525,10 +707,65 @@ $('#export').onclick = () => run($('#export'), 'Exporting kept takes…', async 
   status(`Exported to ${(await api('/api/export/' + enc(proj), {combined: $('#combined').checked})).done}`));
 $('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
+// ---------- second-round edit notes ----------
+const instant = () => $('#instant').checked;
+try { $('#instant').checked = localStorage.getItem('nip-instant') === '1'; } catch {}
+$('#instant').onchange = () => { try { localStorage.setItem('nip-instant', instant() ? '1' : '0'); } catch {} };
+$('#notein').onfocus = () => { if (noteT == null) noteT = video.currentTime; };  // pin the note where you were when you started it
+$('#notein').onblur = () => { if (!$('#notein').value.trim() && !listening) noteT = null; };
+async function notesAction(body, busy) {
+  if (busy) status(busy, false, true);
+  try { show(await api(`/api/notes/${enc(proj)}/${enc(clip().stem)}`, body)); return true; }
+  catch (e) { status(e.message, true); return false; }
+}
+async function addNote(text) {
+  text = text.trim();
+  if (!text) return;
+  const t = noteT ?? video.currentTime;
+  $('#notein').value = '';
+  noteT = null;
+  const ok = await notesAction({action: 'add', t, text, apply: instant()}, instant() ? 'Claude is applying your note…' : null);
+  if (!ok) return;
+  const n = clip().edit_notes.at(-1);
+  status(instant() ? (n.status === 'applied' ? `Done: ${n.result}` : `Not applied: ${n.result}`) : `Note added at ${mmss(editTime(t))}`, instant() && n.status !== 'applied');
+}
+$('#noteform').onsubmit = e => { e.preventDefault(); addNote($('#notein').value); };
+$('#notein').onkeydown = e => { if (e.key === 'Escape') { $('#notein').value = ''; noteT = null; $('#notein').blur(); } };
+$('#applynotes').onclick = () => run($('#applynotes'), 'Claude is reading your notes and making the edits…', async () => {
+  if (!(await notesAction({action: 'apply'}))) return;
+  const done = clip().edit_notes.filter(n => n.status === 'applied').length, bad = clip().edit_notes.filter(n => n.status === 'failed').length;
+  status(bad ? `${plural(done, 'note')} applied, ${bad} not applied. See the Notes tab.` : `All notes applied`, !!bad);
+});
+$('#undonotes').onclick = () => notesAction({action: 'undo'}).then(ok => ok && status('Last apply undone'));
+$('#editnotes').onclick = e => {
+  const t = e.target.closest('[data-t]'), del = e.target.closest('[data-act=del]');
+  if (t) seek(+t.dataset.t);
+  if (del) notesAction({action: 'delete', id: +del.closest('.row').dataset.id});
+};
+// speak a note: the browser's own speech recognition; the note is added when you stop talking
+const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+let listening = null;
+$('#mic').hidden = !Speech;
+$('#mic').onclick = () => {
+  if (listening) return listening.stop();
+  noteT = video.currentTime;
+  video.pause();
+  listening = new Speech();
+  listening.interimResults = true;
+  listening.onresult = e => $('#notein').value = [...e.results].map(r => r[0].transcript).join('');
+  listening.onerror = e => status(e.error === 'not-allowed' ? 'Microphone access was blocked' : `Couldn’t hear that (${e.error})`, true);
+  listening.onend = () => { listening = null; $('#mic').classList.remove('live'); addNote($('#notein').value); };
+  $('#mic').classList.add('live');
+  listening.start();
+};
+
 document.addEventListener('keydown', e => {
   if ($('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   const t = video.currentTime, i = takeAt(t);
-  if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'c') markCut();
+  else if (e.key === 'n') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
+  else if (e.key === 'Escape' && cutFrom != null) { cutFrom = null; $('#cutbtn').classList.remove('armed'); status('Cut cancelled'); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
@@ -543,7 +780,7 @@ async function poll() {
       : `${icon('tray')}<span>Inbox empty</span>`;
     $('#inbox').insertAdjacentHTML('beforeend', `<button class="icon-btn small" id="openinbox" title="Open Inbox in Finder (${esc(s.inbox)})" style="margin-left:auto">${icon('folder')}</button>`);
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
-    $('#claudehint').textContent = s.claude ? '' : 'Needs an Anthropic API key';
+    $('#claudehint').textContent = {plan: 'Uses your Claude plan', api: 'Uses your API key'}[s.claude] || 'Needs Claude Code or an API key';
     if (lastProcessing && !s.processing) loadLibrary();
     lastProcessing = s.processing;
   } catch (e) { $('#inbox').textContent = 'NIP isn’t running'; }

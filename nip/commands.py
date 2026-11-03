@@ -209,3 +209,10 @@ def apply_overrides(edit, overrides):
                     t["name"] = o["name"] or None
         takes[i]["edited"] = True
     return {**edit, "takes": takes}
+
+
+def apply_cut_edits(edit, restored, added):
+    """Hand changes to the cuts: restore voice cuts (matched by start time) and add the user's own."""
+    cuts = [c for c in edit["cuts"] if not any(abs(c["start"] - r) < 0.01 for r in restored)]
+    cuts += [{"start": a["start"], "end": a["end"], "why": "cut by you"} for a in added]
+    return {**edit, "cuts": cuts}
