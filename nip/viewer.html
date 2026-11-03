@@ -5,160 +5,264 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NIP</title>
 <style>
+  /* macOS system colors, light and dark */
   :root {
-    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e2e2dd;
-    --keep: #2f9e5b; --drop: #c9c9c3; --cut: #d9483b; --mark: #e0a100; --note: #3b7bd9; --accent: #1d1d1b; --claude: #c96442;
+    color-scheme: light dark;
+    --window: #ffffff; --sidebar: rgba(236, 236, 238, .92); --toolbar: rgba(250, 250, 250, .9);
+    --label: rgba(0, 0, 0, .85); --secondary: rgba(0, 0, 0, .5); --tertiary: rgba(0, 0, 0, .26);
+    --separator: rgba(0, 0, 0, .1); --fill: rgba(0, 0, 0, .05); --fill-strong: rgba(0, 0, 0, .09);
+    --control: #ffffff; --control-edge: rgba(0, 0, 0, .14); --field: #ffffff;
+    --accent: #007aff; --red: #ff3b30; --yellow: #ffcc00; --purple: #af52de; --orange: #ff9500; --gray: #8e8e93;
+    --track: #f2f2f4; --seg-on: #ffffff;
+    --shadow: 0 .5px 1px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161615; --panel: #20201e; --text: #ecece8; --muted: #9a9a94; --line: #34342f;
-      --keep: #3fbf72; --drop: #4a4a45; --cut: #ef6457; --mark: #f2b928; --note: #6aa0f0; --accent: #ecece8; --claude: #e08a6a;
+      --window: #1e1e1e; --sidebar: rgba(40, 40, 42, .92); --toolbar: rgba(38, 38, 40, .9);
+      --label: rgba(255, 255, 255, .86); --secondary: rgba(255, 255, 255, .55); --tertiary: rgba(255, 255, 255, .25);
+      --separator: rgba(255, 255, 255, .1); --fill: rgba(255, 255, 255, .06); --fill-strong: rgba(255, 255, 255, .11);
+      --control: #656567; --control-edge: rgba(255, 255, 255, .06); --field: rgba(255, 255, 255, .06);
+      --accent: #0a84ff; --red: #ff453a; --yellow: #ffd60a; --purple: #bf5af2; --orange: #ff9f0a; --gray: #98989d;
+      --track: #141414; --seg-on: #636366;
+      --shadow: 0 .5px 1px rgba(0, 0, 0, .4), inset 0 .5px 0 rgba(255, 255, 255, .12);
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
-  header h1 { font-size: 15px; margin: 0 6px 0 0; letter-spacing: .04em; }
-  header h1 a { color: inherit; text-decoration: none; }
-  select, button, input[type=text], input[type=search], textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
-  textarea { width: 100%; resize: vertical; min-height: 64px; }
-  button { cursor: pointer; white-space: nowrap; }
-  button:hover:not(:disabled) { border-color: var(--muted); }
-  button:disabled { opacity: .5; cursor: default; }
-  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-  button.claude { background: var(--claude); color: #fff; border-color: var(--claude); }
-  button.on { border-color: var(--accent); font-weight: 600; }
-  button.link { border: none; background: none; padding: 0 2px; color: var(--muted); text-decoration: underline; }
-  #inbox { color: var(--muted); display: flex; gap: 8px; align-items: center; }
-  #status { color: var(--muted); margin-left: auto; max-width: 50%; text-align: right; }
-  .err { color: var(--cut) !important; }
-  .muted, .why { color: var(--muted); font-size: 12px; }
-  .wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
-  h2:first-child { margin-top: 0; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--window); color: var(--label); font: 13px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; accent-color: var(--accent); overflow: hidden; }
   [hidden] { display: none !important; }
+  .num { font-variant-numeric: tabular-nums; }
+  svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.solid { fill: currentColor; stroke: none; }
+
+  /* controls */
+  button { font: inherit; color: var(--label); cursor: default; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 24px; padding: 0 11px; border: none; border-radius: 6px; background: var(--control); box-shadow: var(--shadow); white-space: nowrap; }
+  .btn:active:not(:disabled) { filter: brightness(.93); }
+  .btn.default { background: var(--accent); color: #fff; box-shadow: 0 .5px 1px rgba(0, 0, 0, .2), inset 0 .5px 0 rgba(255, 255, 255, .2); }
+  .btn:disabled { opacity: .45; }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; min-width: 28px; padding: 0 7px; border: none; border-radius: 6px; background: none; color: var(--secondary); }
+  .icon-btn:hover:not(:disabled) { background: var(--fill-strong); color: var(--label); }
+  .icon-btn:disabled { opacity: .4; }
+  .icon-btn.small { height: 22px; min-width: 22px; padding: 0 4px; }
+  input[type=text], input[type=search], textarea { font: inherit; color: var(--label); background: var(--field); border: none; border-radius: 6px; padding: 4px 8px; box-shadow: inset 0 0 0 .5px var(--control-edge), inset 0 .5px 1px rgba(0, 0, 0, .06); outline: none; }
+  input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; }
+  textarea { width: 100%; resize: vertical; min-height: 72px; line-height: 1.4; }
+  .seg { display: flex; padding: 2px; gap: 2px; background: var(--fill-strong); border-radius: 7px; }
+  .seg button { flex: 1; height: 22px; border: none; border-radius: 5px; background: none; font-size: 12px; white-space: nowrap; }
+  .seg button.on { background: var(--seg-on); box-shadow: var(--shadow); }
+
+  /* window */
+  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); height: 100vh; }
+  .sidebar { background: var(--sidebar); backdrop-filter: blur(30px); border-right: .5px solid var(--separator); display: flex; flex-direction: column; padding: 14px 10px 10px; overflow-y: auto; }
+  .sidebar h3 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 14px 8px 4px; }
+  .sidebar h3:first-child { margin-top: 2px; }
+  .item { display: flex; align-items: center; gap: 7px; width: 100%; height: 28px; padding: 0 8px; border: none; border-radius: 6px; background: none; text-align: left; }
+  .item svg { color: var(--accent); }
+  .item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item small { color: var(--secondary); font-size: 12px; }
+  .item.on { background: var(--fill-strong); }
+  .sidebar .spacer { flex: 1; }
+  .inbox { display: flex; align-items: center; gap: 7px; padding: 8px; border-top: .5px solid var(--separator); margin-top: 8px; color: var(--secondary); font-size: 12px; }
+  .inbox b { color: var(--label); font-weight: 500; }
+  .inbox .spin { width: 12px; height: 12px; border: 1.5px solid var(--tertiary); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .main { display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--toolbar); backdrop-filter: blur(30px); border-bottom: .5px solid var(--separator); min-width: 0; }
+  .toolbar .title { display: flex; flex-direction: column; min-width: 0; margin: 0 6px; }
+  .toolbar .title b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar .title small { font-size: 11px; color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolbar .grow { flex: 1; }
+  .search { position: relative; width: 240px; max-width: 40vw; }
+  .search svg { position: absolute; left: 7px; top: 6px; width: 14px; height: 14px; color: var(--secondary); }
+  .search input { width: 100%; padding-left: 26px; border-radius: 7px; background: var(--fill-strong); box-shadow: none; }
+  .tb-sep { width: .5px; height: 20px; background: var(--separator); margin: 0 4px; }
 
   /* library */
-  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .filters input { flex: 1; min-width: 200px; }
-  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-  .card { cursor: pointer; padding: 0; overflow: hidden; display: flex; flex-direction: column; color: inherit; text-decoration: none; }
-  .card:hover { border-color: var(--muted); }
-  .card .thumb { aspect-ratio: 4 / 5; background: #000 center / cover no-repeat; }
-  .card .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-  .card b { font-size: 14px; line-height: 1.3; }
-  .tags { display: flex; gap: 4px; flex-wrap: wrap; }
-  .tags span { font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; }
-  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  #library { overflow-y: auto; padding: 20px 24px 40px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
+  .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
+  .tile .thumb { aspect-ratio: 3 / 4; border-radius: 8px; background: #000 center / cover no-repeat; box-shadow: 0 0 0 .5px var(--separator); transition: box-shadow .12s; }
+  .tile:hover .thumb, .tile:focus-visible .thumb { box-shadow: 0 0 0 3px var(--accent); }
+  .tile:focus-visible { outline: none; }
+  .tile b { font-weight: 500; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tile small { color: var(--secondary); font-size: 11px; line-height: 1.35; }
+  .tile .dur { position: relative; }
+  .tile .dur i { position: absolute; right: 6px; bottom: 6px; font: 600 11px/1 -apple-system, sans-serif; font-style: normal; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 60vh; color: var(--secondary); text-align: center; }
+  .empty svg { width: 44px; height: 44px; stroke-width: 1; color: var(--tertiary); }
+  .empty b { font-size: 17px; font-weight: 600; color: var(--secondary); }
 
   /* project */
-  .projbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .projbar #desc { flex: 2; min-width: 220px; font-weight: 600; }
-  .projbar #tags { flex: 1; min-width: 160px; }
-  .cols { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
-  video { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; display: block; }
-  #videos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-  #meta { color: var(--muted); margin: 0 0 8px; }
-  #timeline { position: relative; height: 34px; margin: 12px 0 4px; background: var(--bg); border-radius: 6px; cursor: pointer; overflow: hidden; }
+  #project { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .viewer { display: flex; flex-direction: column; min-height: 0; background: #000; }
+  .viewer video { flex: 1 1 0; height: 0; min-height: 0; width: 100%; object-fit: contain; background: #000; display: block; }
+  .transport { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1c1c1e; color: rgba(255, 255, 255, .85); }
+  .transport .icon-btn { color: rgba(255, 255, 255, .7); }
+  .transport .icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .12); color: #fff; }
+  .transport .tc { font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; color: rgba(255, 255, 255, .85); margin: 0 6px; }
+  .transport small { color: rgba(255, 255, 255, .45); font-size: 11px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #videos { display: flex; gap: 2px; }
+  #videos button { height: 22px; padding: 0 8px; border: none; border-radius: 5px; background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .7); font-size: 11px; }
+  #videos button.on { background: rgba(255, 255, 255, .28); color: #fff; }
+  .timeline-area { grid-column: 1; padding: 10px 12px 12px; border-top: .5px solid var(--separator); background: var(--window); }
+  #timeline { position: relative; height: 54px; background: var(--track); border-radius: 7px; cursor: text; overflow: hidden; box-shadow: inset 0 0 0 .5px var(--separator); }
   #timeline > div { position: absolute; }
-  .take { top: 4px; bottom: 4px; border-radius: 3px; }
-  .take.keep { background: var(--keep); }
-  .take.drop { background: var(--drop); }
-  .cut { top: 0; bottom: 0; background: var(--cut); opacity: .55; }
-  .mark { top: 0; height: 5px; background: var(--mark); min-width: 2px; }
-  .note { bottom: 0; height: 6px; width: 6px; border-radius: 50%; background: var(--note); transform: translateX(-3px); }
-  .story { top: 12px; height: 10px; background: var(--claude); border-radius: 2px; }
-  #playhead { top: 0; bottom: 0; width: 2px; background: var(--text); pointer-events: none; }
-  .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-  .stack { display: flex; flex-direction: column; gap: 8px; }
-  .row { border: 1px solid var(--line); border-left: 4px solid var(--drop); border-radius: 8px; padding: 8px; }
-  .row.keep { border-left-color: var(--keep); }
-  .row.storyrow { border-left-color: var(--claude); }
-  .row .top { display: flex; gap: 6px; align-items: center; }
-  .row input.name { flex: 1; min-width: 0; }
-  .row .bottom { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
-  .row .bottom label { margin-right: auto; }
-  .list div { padding: 4px 0; cursor: pointer; border-bottom: 1px solid var(--line); }
-  .list div:hover { color: var(--note); }
-  .list b { font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 6px; }
-  #words { line-height: 1.9; max-height: 40vh; overflow-y: auto; }
-  #words span { cursor: pointer; border-radius: 3px; padding: 0 1px; }
-  #words span.gone { color: var(--muted); text-decoration: line-through; opacity: .6; }
-  #words span.now { background: var(--mark); color: #000; }
-  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
-  label { user-select: none; }
+  .clip { top: 9px; height: 26px; border-radius: 5px; padding: 0 6px; font-size: 11px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  .clip.keep { background: color-mix(in srgb, var(--accent) 82%, #000 0%); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
+  .clip.drop { background: var(--fill-strong); color: var(--secondary); box-shadow: inset 0 0 0 .5px var(--separator); }
+  .cut { top: 9px; height: 26px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 75%, transparent) 0 3px, transparent 3px 7px); pointer-events: none; }
+  .hl { bottom: 6px; height: 5px; border-radius: 3px; background: var(--yellow); min-width: 4px; }
+  .nt { bottom: 4px; width: 9px; height: 9px; background: var(--purple); border-radius: 2px; transform: translateX(-4px) rotate(45deg); }
+  .pc { top: 3px; height: 4px; border-radius: 2px; background: var(--orange); }
+  #playhead { top: 0; bottom: 0; width: 1.5px; background: var(--red); pointer-events: none; }
+  #playhead::before { content: ""; position: absolute; top: 0; left: -4px; border: 5px solid transparent; border-top-color: var(--red); }
+  .inspector { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
+  .inspector .seg { margin: 10px 12px; }
+  .pane { flex: 1; overflow-y: auto; padding: 0 12px 16px; }
+  .pane h4 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 14px 2px 6px; }
+  .pane h4:first-child { margin-top: 4px; }
+  .group { border-radius: 8px; background: var(--fill); }
+  .group > * + * { border-top: .5px solid var(--separator); }
+  .row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; }
+  .row.dropped .name, .row.dropped .sub { opacity: .55; }
+  .row input[type=checkbox] { margin: 4px 0 0; }
+  .row .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .row .name { width: 100%; background: none; box-shadow: none; padding: 1px 4px; margin: 0 -4px; font-weight: 500; }
+  .row .name:hover:not(:disabled) { box-shadow: inset 0 0 0 .5px var(--control-edge); }
+  .row .name:disabled { color: var(--secondary); font-weight: 400; }
+  .row .sub { color: var(--secondary); font-size: 11px; }
+  .row .acts { display: flex; gap: 1px; margin-top: 2px; }
+  .row .title-line { display: flex; gap: 8px; align-items: baseline; }
+  .row .title-line b { flex: 1; font-weight: 500; }
+  .marker { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; cursor: default; }
+  .marker:hover { background: var(--fill); }
+  .marker i { width: 8px; height: 8px; border-radius: 2px; flex: none; transform: translateY(-1px); }
+  .marker .num { color: var(--secondary); font-size: 12px; min-width: 42px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field label { font-size: 11px; color: var(--secondary); }
+  .check { display: flex; gap: 6px; align-items: center; margin: 4px 2px 10px; }
+  .hint { color: var(--secondary); font-size: 11px; margin: 6px 2px; }
+  .muted-empty { color: var(--secondary); font-size: 12px; padding: 10px; text-align: center; }
+  #words { line-height: 1.75; font-size: 13px; }
+  #words span { border-radius: 3px; padding: 0 1px; }
+  #words span:hover { background: var(--fill-strong); }
+  #words span.gone { color: var(--tertiary); }
+  #words span.now { background: var(--accent); color: #fff; }
+  .actions-line { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+
+  /* transient notice, like a macOS HUD */
+  #status { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 8px); max-width: min(520px, 90vw); padding: 8px 14px; border-radius: 10px; background: rgba(30, 30, 32, .88); backdrop-filter: blur(20px); color: #fff; font-size: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, .25); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10; }
+  #status.show { opacity: 1; transform: translate(-50%, 0); }
+  #status.err { background: rgba(160, 30, 26, .92); }
+
+  @media (max-width: 1080px) {
+    #project { grid-template-columns: 1fr; grid-template-rows: auto auto auto; overflow-y: auto; }
+    .viewer video { height: 52vh; flex: none; }
+    .inspector { grid-column: 1; grid-row: 3; border-left: none; border-top: .5px solid var(--separator); }
+    .pane { overflow: visible; }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .search { width: 160px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1><a href="#/">NIP</a></h1>
-  <span id="inbox"></span>
-  <span id="status" role="status" aria-live="polite"></span>
-</header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.6v10.8c0 .5.5.8.9.5l8.3-5.4c.4-.2.4-.8 0-1L5.4 2.1c-.4-.3-.9 0-.9.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></symbol>
+  <symbol id="i-share" viewBox="0 0 16 16"><path d="M8 1.8v8.4M5.2 4.5 8 1.8l2.8 2.7M5 6.8H3.8v7.4h8.4V6.8H11"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2v8.6c0 .4.3.7.7.7h11c.4 0 .7-.3.7-.7V5.6c0-.4-.3-.7-.7-.7H7.6L6.2 3.5H2.5c-.4 0-.7.3-.7.7z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.4 10.4 3.6 3.6"/></symbol>
+  <symbol id="i-tray" viewBox="0 0 16 16"><path d="M1.8 9.2h3.6l1 1.8h3.2l1-1.8h3.6M1.8 9.2 3.6 3.2h8.8l1.8 6v4.1H1.8z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 16 16"><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5" cy="5" r=".9"/></symbol>
+  <symbol id="i-photos" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="m1.8 10.6 3.4-3 3 2.6 2-1.6 4 3.2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.6 4.2h10.8M6.2 4.2V2.6h3.6v1.6M3.8 4.2l.8 9.4h6.8l.8-9.4"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.6 3.2 2.6 6.2l3 3M2.6 6.2h7.2a3.8 3.8 0 0 1 0 7.6H7"/></symbol>
+  <symbol id="i-in" viewBox="0 0 16 16"><path d="M7 2.6H4.4v10.8H7M8.6 8h5M11.4 5.6 13.6 8l-2.2 2.4"/></symbol>
+  <symbol id="i-out" viewBox="0 0 16 16"><path d="M9 2.6h2.6v10.8H9M2.4 8h5M5.2 5.6 7.4 8l-2.2 2.4"/></symbol>
+  <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1.6"/><path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/></symbol>
+</svg>
 
-<div class="wrap" id="library" hidden>
-  <div class="filters">
-    <input type="search" id="search" placeholder="Search descriptions, tags, clips, notes and everything said" aria-label="Search footage">
-    <span id="tagchips" class="tags"></span>
-  </div>
-  <div class="grid" id="cards"></div>
-</div>
+<div class="app">
+  <aside class="sidebar" aria-label="Sidebar">
+    <h3>Library</h3>
+    <button class="item" id="allfootage"><svg class="i"><use href="#i-photos"/></svg><span>All Footage</span><small id="allcount" class="num"></small></button>
+    <h3 id="tagshead" hidden>Tags</h3>
+    <div id="taglist"></div>
+    <div class="spacer"></div>
+    <div class="inbox" id="inbox"></div>
+  </aside>
 
-<div class="wrap" id="project" hidden>
-  <div class="projbar">
-    <button onclick="location.hash = '#/'">← Library</button>
-    <input type="text" id="desc" aria-label="Description" placeholder="Describe this footage">
-    <input type="text" id="tags" aria-label="Tags" placeholder="tags, comma separated">
-    <label><input type="checkbox" id="combined"> one joined video too</label>
-    <button class="primary" id="export">Export kept takes</button>
-    <button id="reveal">Show exports</button>
-  </div>
-  <div class="cols">
-    <section class="panel" aria-label="Edit">
-      <h2>Clips and takes</h2>
-      <div class="stack" id="takes"></div>
-      <h2>Edit with Claude</h2>
-      <textarea id="brief" placeholder="e.g. Give me a 30 second video where I explain why Linderballs are great"></textarea>
-      <div class="controls">
-        <button class="claude" id="ask">Make the edit</button>
-        <span class="muted" id="claudehint"></span>
-      </div>
-      <div class="stack" id="stories" style="margin-top:10px"></div>
-      <h2>Notes and highlights</h2>
-      <div class="list" id="notes"></div>
-    </section>
-    <section>
-      <div class="panel">
-        <div id="videos"></div>
-        <p id="meta"></p>
-        <video id="video" controls playsinline preload="metadata"></video>
-        <div id="timeline" aria-label="Timeline: click to jump"></div>
-        <div class="legend">
-          <span><i style="background:var(--keep)"></i>kept take</span>
-          <span><i style="background:var(--drop)"></i>dropped</span>
-          <span><i style="background:var(--cut)"></i>cut</span>
-          <span><i style="background:var(--mark)"></i>highlight</span>
-          <span><i style="background:var(--note);border-radius:50%"></i>note</span>
-          <span><i style="background:var(--claude)"></i>Claude edit (while previewing)</span>
-        </div>
-        <div class="controls">
-          <button id="preview">▶ Preview kept takes</button>
-          <button id="stop">Stop preview</button>
-          <span class="muted"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> skip 2s · <kbd>I</kbd><kbd>O</kbd> set in/out · <kbd>K</kbd> keep</span>
+  <div class="main">
+    <div class="toolbar">
+      <button class="icon-btn" id="back" title="Back to Library" aria-label="Back to Library" hidden><svg class="i"><use href="#i-back"/></svg></button>
+      <div class="title"><b id="title">All Footage</b><small id="subtitle" class="num"></small></div>
+      <div class="grow"></div>
+      <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
+      <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
+        <button class="icon-btn" id="reveal" title="Show Exports in Finder"><svg class="i"><use href="#i-folder"/></svg></button>
+        <span class="tb-sep"></span>
+        <button class="btn" id="export" title="Export the kept takes as clips"><svg class="i"><use href="#i-share"/></svg>Export</button>
+      </span>
+    </div>
+
+    <div id="library" hidden><div class="grid" id="cards"></div></div>
+
+    <div id="project" hidden>
+      <div class="viewer">
+        <video id="video" playsinline preload="metadata" controls></video>
+        <div class="transport">
+          <button class="icon-btn" id="preview" title="Play the Edit: kept takes with cuts skipped"><svg class="i solid"><use href="#i-play"/></svg>Play Edit</button>
+          <button class="icon-btn" id="stop" title="Stop"><svg class="i solid"><use href="#i-stop"/></svg></button>
+          <span class="tc num" id="timecode">0:00.0</span>
+          <div id="videos"></div>
+          <small id="meta" class="num"></small>
         </div>
       </div>
-      <div class="panel" style="margin-top:16px">
-        <h2>Transcript <span class="why">(click a word to jump; struck words aren't in the kept takes)</span></h2>
-        <div id="words"></div>
+      <div class="timeline-area">
+        <div id="timeline" role="slider" aria-label="Timeline" title="Click to move the playhead"></div>
       </div>
-    </section>
+      <aside class="inspector" aria-label="Inspector">
+        <div class="seg" role="tablist">
+          <button data-tab="takes" class="on">Takes</button>
+          <button data-tab="text">Transcript</button>
+          <button data-tab="claude">Claude</button>
+          <button data-tab="info">Info</button>
+        </div>
+        <div class="pane" id="pane-takes">
+          <div class="group" id="takes"></div>
+          <p class="hint">Space plays · ← → skip 2s · I and O set a take's in and out · K keeps or drops it</p>
+        </div>
+        <div class="pane" id="pane-text" hidden>
+          <p class="hint" style="margin-top:2px">Click a word to jump to it. Dimmed words aren't in the kept takes.</p>
+          <div id="words"></div>
+        </div>
+        <div class="pane" id="pane-claude" hidden>
+          <h4>New Edit</h4>
+          <textarea id="brief" placeholder="Describe the video you want. For example: a 30 second video where I explain why Linderballs are great."></textarea>
+          <div class="actions-line"><button class="btn default" id="ask">Create Edit</button><span class="hint" id="claudehint"></span></div>
+          <p class="hint">Claude works from the transcript: it picks and orders lines, it doesn't watch the video.</p>
+          <h4>Edits</h4>
+          <div class="group" id="stories"></div>
+        </div>
+        <div class="pane" id="pane-info" hidden>
+          <h4>Details</h4>
+          <div class="field"><label for="desc">Description</label><input type="text" id="desc" placeholder="Describe this footage"></div>
+          <div class="field"><label for="tags">Tags</label><input type="text" id="tags" placeholder="Separate with commas"></div>
+          <h4>Export</h4>
+          <label class="check"><input type="checkbox" id="combined"> Also export one joined video</label>
+          <h4>Markers</h4>
+          <div class="group" id="notes"></div>
+        </div>
+      </aside>
+    </div>
   </div>
 </div>
+<div id="status" role="status" aria-live="polite"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -166,7 +270,9 @@ const video = $('#video');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const mmss = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, data = null, proj = '', clipIdx = 0;
 let playing = null, pendingSeek = null, kept = [], wordEls = [], nowWord = null, storyBar = null, lastProcessing = 0;
 
@@ -176,10 +282,17 @@ async function api(path, body) {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 }
-const status = (msg, bad) => { $('#status').textContent = msg; $('#status').className = bad ? 'err' : ''; };
-async function run(btn, busyMsg, fn) {  // disable a button while its request runs, report errors in the header
+let statusTimer;
+function status(msg, bad, stay) {
+  const s = $('#status');
+  s.textContent = msg;
+  s.className = 'show' + (bad ? ' err' : '');
+  clearTimeout(statusTimer);
+  if (!stay) statusTimer = setTimeout(() => s.className = s.className.replace('show', ''), bad ? 6000 : 3000);
+}
+async function run(btn, busyMsg, fn) {  // disable a button while its request runs; report the outcome in the notice
   btn.disabled = true;
-  status(busyMsg);
+  status(busyMsg, false, true);
   try { await fn(); } catch (e) { status(e.message, true); }
   btn.disabled = false;
 }
@@ -191,23 +304,35 @@ async function loadLibrary() {
 }
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
-  const tags = [...new Set(projects.flatMap(p => p.tags))].sort();
-  $('#tagchips').innerHTML = tags.map(t => `<button class="chip ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('');
+  const counts = {};
+  projects.forEach(p => p.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  const tags = Object.keys(counts).sort();
+  $('#tagshead').hidden = !tags.length;
+  $('#taglist').innerHTML = tags.map(t => `<button class="item ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
+  $('#allfootage').classList.toggle('on', !tagFilter && !proj);
+  $('#allcount').textContent = projects.length || '';
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)));
+  if ($('#library').hidden) return;
+  $('#title').textContent = tagFilter || 'All Footage';
+  $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
-    <a class="panel card" href="#/p/${enc(p.name)}">
-      <div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div>
-      <div class="body">
-        <b>${esc(p.description || p.name)}</b>
-        <span class="muted">${esc(p.name.slice(0, 10))} · ${p.videos} video${p.videos > 1 ? 's' : ''} · ${mins(p.filmed)} filmed · ${mins(p.kept)} kept</span>
-        ${p.clips.length ? `<span class="muted">Clips: ${esc(p.clips.join(', '))}</span>` : ''}
-        <span class="muted">${[p.highlights && `${p.highlights} highlight${p.highlights > 1 ? 's' : ''}`, p.notes && `${p.notes} note${p.notes > 1 ? 's' : ''}`, p.stories && `${p.stories} Claude edit${p.stories > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</span>
-        <div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>
-      </div>
-    </a>`).join('') : `<div class="empty">${projects.length ? 'Nothing matches.' : 'No footage yet. Drop videos into the inbox and NIP will process them here.'}</div>`;
+    <a class="tile" href="#/p/${enc(p.name)}">
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i></div>
+      <b>${esc(p.description || p.name)}</b>
+      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.clips.length ? ` · ${plural(p.clips.length, 'clip')}` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
+    </a>`).join('') : projects.length
+    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>Nothing matches “${esc($('#search').value || tagFilter)}”.</div>`
+    : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Drop videos into the inbox. They’ll appear here once processed.</div>`;
 }
 $('#search').oninput = drawLibrary;
-$('#tagchips').onclick = e => { const t = e.target.dataset.tag; if (t) { tagFilter = tagFilter === t ? null : t; drawLibrary(); } };
+$('#taglist').onclick = e => {
+  const b = e.target.closest('[data-tag]');
+  if (!b) return;
+  tagFilter = tagFilter === b.dataset.tag ? null : b.dataset.tag;
+  location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
+};
+$('#allfootage').onclick = () => { tagFilter = null; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
 const clip = () => data.clips[clipIdx];
@@ -218,7 +343,7 @@ function pieces(t, cuts) {
   for (const c of cuts) ps = ps.flatMap(([a, b]) => [[a, Math.min(b, c.start)], [Math.max(a, c.end), b]]).filter(([a, b]) => b - a > 0.05);
   return ps;
 }
-const label = t => t.name || (t.group ? `section ${t.group}` : 'before any take');
+const label = t => t.name || (t.group ? `Section ${t.group}` : 'Before first take');
 
 async function loadProject(name) {
   proj = name;
@@ -235,57 +360,60 @@ function show(d, idx = clipIdx) {
   kept = e.takes.filter(t => t.keep).flatMap(t => pieces(t, e.cuts)).sort((a, b) => a[0] - b[0]);
   const keptLen = kept.reduce((s, [a, b]) => s + b - a, 0);
 
+  $('#title').textContent = data.description || data.name;
+  $('#subtitle').textContent = `${data.name.slice(0, 10)}${data.tags.length ? ' · ' + data.tags.join(', ') : ''}`;
   if (document.activeElement !== $('#desc')) $('#desc').value = data.description || '';
   if (document.activeElement !== $('#tags')) $('#tags').value = data.tags.join(', ');
   $('#videos').innerHTML = data.clips.length > 1 ? data.clips.map((c, i) =>
     `<button data-i="${i}" class="${i === clipIdx ? 'on' : ''}">${esc(c.stem)}</button>`).join('') : '';
-  $('#meta').textContent = `${c.source} · ${mmss(c.duration)} filmed, ${mmss(keptLen)} kept`;
+  $('#meta').textContent = `${mmss(keptLen)} kept of ${mmss(c.duration)}`;
 
   const bar = storyBar ? storyBar.filter(p => p.ci === clipIdx) : [];
   $('#timeline').innerHTML =
-    e.takes.map(t => `<div class="take ${t.keep ? 'keep' : 'drop'}" style="left:${pct(t.start)};width:${pct(t.end - t.start)}" title="${esc(label(t))}"></div>`).join('') +
-    e.cuts.map(x => `<div class="cut" style="left:${pct(x.start)};width:${pct(x.end - x.start)}" title="cut: ${esc(x.why)}"></div>`).join('') +
-    e.markers.map(m => `<div class="mark" style="left:${pct(m.t)};width:${m.end != null ? pct(m.end - m.t) : '2px'}" title="${esc(m.label)}"></div>`).join('') +
-    (e.notes || []).map(n => `<div class="note" style="left:${pct(n.t)}" title="${esc(n.text)}"></div>`).join('') +
-    bar.map(p => `<div class="story" style="left:${pct(p.a)};width:${pct(p.b - p.a)}"></div>`).join('') +
+    e.takes.map(t => `<div class="clip ${t.keep ? 'keep' : 'drop'}" style="left:${pct(t.start)};width:calc(${pct(t.end - t.start)} - 1px)" title="${esc(label(t))}">${esc(label(t))}${t.group ? ` · Take ${t.take}` : ''}</div>`).join('') +
+    e.cuts.map(x => `<div class="cut" style="left:${pct(x.start)};width:${pct(x.end - x.start)}" title="Cut: ${esc(x.why)}"></div>`).join('') +
+    e.markers.map(m => `<div class="hl" style="left:${pct(m.t)};width:${m.end != null ? pct(m.end - m.t) : '4px'}" title="${esc(m.label)}"></div>`).join('') +
+    (e.notes || []).map(n => `<div class="nt" style="left:${pct(n.t)}" title="${esc(n.text)}"></div>`).join('') +
+    bar.map(p => `<div class="pc" style="left:${pct(p.a)};width:${pct(p.b - p.a)}"></div>`).join('') +
     '<div id="playhead"></div>';
 
   $('#takes').innerHTML = e.takes.map((t, i) => `
-    <div class="row ${t.keep ? 'keep' : ''}" data-i="${i}">
-      <div class="top">
+    <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
+      <input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''} title="Keep (K)" aria-label="Keep ${esc(label(t))}">
+      <div class="main-col">
         <input type="text" class="name" value="${esc(t.name || '')}" placeholder="${esc(label(t))}" aria-label="Clip name" ${t.group ? '' : 'disabled'}>
-        ${t.group ? `<span class="why">take ${t.take}</span>` : ''}
+        <span class="sub num">${t.group ? `Take ${t.take} · ` : ''}${mmss(t.start)}–${mmss(t.end)} · ${esc(t.why)}${t.edited ? ' · edited' : ''}</span>
       </div>
-      <div class="bottom">
-        <label><input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''}> keep</label>
-        <button data-act="play">▶ ${mmss(t.start)}–${mmss(t.end)}</button>
-        <button data-act="in" title="Start this take at the playhead (I)">In</button>
-        <button data-act="out" title="End this take at the playhead (O)">Out</button>
-        ${t.edited ? '<button data-act="reset" title="Undo my changes">Undo</button>' : ''}
+      <div class="acts">
+        <button class="icon-btn small" data-act="play" title="Play this take">${icon('play', true)}</button>
+        <button class="icon-btn small" data-act="in" title="Set In at playhead (I)">${icon('in')}</button>
+        <button class="icon-btn small" data-act="out" title="Set Out at playhead (O)">${icon('out')}</button>
+        ${t.edited ? `<button class="icon-btn small" data-act="reset" title="Revert to NIP’s decision">${icon('undo')}</button>` : ''}
       </div>
-      <div class="why">${esc(t.why)}${t.edited ? ' · edited by you' : ''}</div>
     </div>`).join('');
 
-  $('#stories').innerHTML = data.stories.slice().reverse().map(s => {
+  $('#stories').innerHTML = data.stories.length ? data.stories.slice().reverse().map(s => {
     const len = s.pieces.reduce((n, p) => n + p.end - p.start, 0);
-    return `<div class="row storyrow" data-id="${s.id}">
-      <div class="top"><b style="flex:1">${esc(s.title)}</b><span class="why">${mins(len)}</span></div>
-      <div class="why">“${esc(s.brief)}”</div>
-      <div class="muted" style="margin-top:4px">${esc(s.note)}</div>
-      <div class="bottom">
-        <button data-act="play">▶ Preview</button>
-        <button data-act="export">Export</button>
-        <button class="link" data-act="delete">Delete</button>
+    return `<div class="row" data-id="${s.id}">
+      <div class="main-col">
+        <div class="title-line"><b>${esc(s.title)}</b><span class="sub num">${mins(len)}</span></div>
+        <span class="sub">“${esc(s.brief)}”</span>
+        <span class="sub" style="color:var(--label);opacity:.75">${esc(s.note)}</span>
+      </div>
+      <div class="acts">
+        <button class="icon-btn small" data-act="play" title="Play this edit">${icon('play', true)}</button>
+        <button class="icon-btn small" data-act="export" title="Export as one video">${icon('share')}</button>
+        <button class="icon-btn small" data-act="delete" title="Delete this edit">${icon('trash')}</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="muted-empty">No edits yet.</div>';
 
   const items = [
-    ...e.markers.map(m => ({t: m.t, text: `${m.end != null ? `highlight to ${mmss(m.end)}: ` : 'mark: '}${m.label}`})),
-    ...(e.notes || []).map(n => ({t: n.t, text: `note: ${n.text}`})),
-    ...e.pending.map(n => ({t: n.t, text: `not understood: "${n.text}"`})),
+    ...e.markers.map(m => ({t: m.t, color: 'var(--yellow)', text: m.end != null ? `Highlight to ${mmss(m.end)}` : m.label})),
+    ...(e.notes || []).map(n => ({t: n.t, color: 'var(--purple)', text: n.text.replace(/^that was /, '')})),
+    ...e.pending.map(n => ({t: n.t, color: 'var(--gray)', text: `Not understood: “${n.text}”`})),
   ].sort((a, b) => a.t - b.t);
-  $('#notes').innerHTML = items.length ? items.map(x => `<div data-t="${x.t}"><b>${mmss(x.t)}</b>${esc(x.text)}</div>`).join('') : '<span class="why">None</span>';
+  $('#notes').innerHTML = items.length ? items.map(x => `<div class="marker" data-t="${x.t}"><i style="background:${x.color}"></i><span class="num">${mmss(x.t)}</span><span>${esc(x.text)}</span></div>`).join('') : '<div class="muted-empty">No markers.</div>';
 
   const isKept = w => kept.some(([a, b]) => (w.start + w.end) / 2 >= a && (w.start + w.end) / 2 <= b);
   $('#words').innerHTML = c.words.map(w => `<span data-t="${w.start}" class="${isKept(w) ? '' : 'gone'}">${esc(w.w)}</span>`).join(' ');
@@ -295,7 +423,7 @@ function show(d, idx = clipIdx) {
 
 async function edit(i, fields) {
   const t = clip().edit.takes[i];
-  try { show(await api(`/api/override/${enc(proj)}/${enc(clip().stem)}`, {at: t.at, ...fields})); status('Saved'); }
+  try { show(await api(`/api/override/${enc(proj)}/${enc(clip().stem)}`, {at: t.at, ...fields})); }
   catch (e) { status(e.message, true); }
 }
 const takeAt = t => clip().edit.takes.findIndex(x => x.start <= t && t < x.end);
@@ -328,6 +456,7 @@ function follow() {
   const t = video.currentTime;
   const ph = $('#playhead');
   if (ph) ph.style.left = pct(t);
+  $('#timecode').textContent = mmss(t);
   let k = -1;
   for (let i = 0; i < clip().words.length && clip().words[i].start <= t; i++) k = i;
   if (wordEls[k] !== nowWord) {
@@ -343,6 +472,13 @@ function follow() {
   } else if (t < p.a - 0.3) video.currentTime = p.a;
 }
 
+document.querySelector('.inspector .seg').onclick = e => {
+  const tab = e.target.dataset.tab;
+  if (!tab) return;
+  document.querySelectorAll('.inspector .seg button').forEach(b => b.classList.toggle('on', b === e.target));
+  document.querySelectorAll('.inspector .pane').forEach(p => p.hidden = p.id !== 'pane-' + tab);
+  try { localStorage.setItem('nip-tab', tab); } catch {}
+};
 $('#videos').onclick = e => { const b = e.target.closest('button'); if (b) { stopPlaying(); show(data, +b.dataset.i); } };
 $('#timeline').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); seek(clip().duration * (e.clientX - r.left) / r.width); };
 $('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
@@ -350,11 +486,11 @@ $('#words').onclick = e => { if (e.target.dataset.t) seek(+e.target.dataset.t); 
 $('#preview').onclick = () => playList(kept.map(([a, b]) => ({ci: clipIdx, a, b})));
 $('#stop').onclick = () => { stopPlaying(); video.pause(); };
 $('#takes').onclick = e => {
-  const act = e.target.dataset.act, row = e.target.closest('.row');
-  if (!act || !row) return;
-  const i = +row.dataset.i, t = clip().edit.takes[i];
+  const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
+  if (!b || !row) return;
+  const act = b.dataset.act, i = +row.dataset.i, t = clip().edit.takes[i];
   if (act === 'play') playList(pieces(t, clip().edit.cuts).map(([a, b]) => ({ci: clipIdx, a, b})));
-  if (act === 'keep') edit(i, {keep: e.target.checked});
+  if (act === 'keep') edit(i, {keep: b.checked});
   if (act === 'in') edit(i, {start: video.currentTime});
   if (act === 'out') edit(i, {end: video.currentTime});
   if (act === 'reset') edit(i, {reset: true});
@@ -363,32 +499,29 @@ $('#takes').onchange = e => {
   if (e.target.classList.contains('name')) edit(+e.target.closest('.row').dataset.i, {name: e.target.value});
 };
 $('#stories').onclick = e => {
-  const act = e.target.dataset.act, row = e.target.closest('.row');
-  if (!act || !row) return;
+  const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
+  if (!b || !row) return;
   const s = data.stories.find(s => s.id === +row.dataset.id);
-  if (act === 'play') {
+  if (b.dataset.act === 'play') {
     const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
     playList(list, list);
   }
-  if (act === 'export') run(e.target, `Exporting “${s.title}”…`, async () =>
-    status(`Exported ${(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'})).done}`));
-  if (act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files stay.`))
-    run(e.target, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Deleted'); });
+  if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () =>
+    status(`Exported to ${(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'})).done}`));
+  if (b.dataset.act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files are kept.`))
+    run(b, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Edit deleted'); });
 };
 $('#ask').onclick = () => {
   const text = $('#brief').value.trim();
-  if (!text) return status('Write what you want first', true);
-  run($('#ask'), 'Claude is reading the transcript and picking lines… (about a minute)', async () => {
+  if (!text) return status('Describe the video you want first', true);
+  run($('#ask'), 'Claude is reading the transcript… this takes about a minute', async () => {
     show(await api('/api/brief/' + enc(proj), {brief: text}));
-    status(`Claude made “${data.stories.at(-1).title}”. Preview it below the brief.`);
+    status(`Created “${data.stories.at(-1).title}”`);
   });
 };
 $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
-$('#tags').onchange = () => run($('#tags'), 'Saving…', async () => {
-  show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')}));
-  status('Saved');
-});
-$('#export').onclick = () => run($('#export'), 'Exporting… about a tenth of the footage length', async () =>
+$('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
+$('#export').onclick = () => run($('#export'), 'Exporting kept takes…', async () =>
   status(`Exported to ${(await api('/api/export/' + enc(proj), {combined: $('#combined').checked})).done}`));
 $('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
@@ -405,11 +538,13 @@ document.addEventListener('keydown', e => {
 async function poll() {
   try {
     const s = await api('/api/status');
-    $('#inbox').innerHTML = `${s.processing ? `<b>Processing ${s.processing} new video${s.processing > 1 ? 's' : ''}…</b>` : 'Inbox empty'}
-      <button class="link" id="openinbox" title="${esc(s.inbox)}">Open inbox</button>`;
+    $('#inbox').innerHTML = s.processing
+      ? `<span class="spin"></span><span><b>Processing</b> ${plural(s.processing, 'video')}…</span>`
+      : `${icon('tray')}<span>Inbox empty</span>`;
+    $('#inbox').insertAdjacentHTML('beforeend', `<button class="icon-btn small" id="openinbox" title="Open Inbox in Finder (${esc(s.inbox)})" style="margin-left:auto">${icon('folder')}</button>`);
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
-    $('#claudehint').textContent = s.claude ? '' : 'Needs ANTHROPIC_API_KEY set before starting nip.';
-    if (lastProcessing && !s.processing && !$('#library').hidden) loadLibrary();
+    $('#claudehint').textContent = s.claude ? '' : 'Needs an Anthropic API key';
+    if (lastProcessing && !s.processing) loadLibrary();
     lastProcessing = s.processing;
   } catch (e) { $('#inbox').textContent = 'NIP isn’t running'; }
 }
@@ -417,10 +552,18 @@ function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/);
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
+  $('#back').hidden = !m;
+  $('#projtools').hidden = !m;
+  $('#searchwrap').hidden = !!m;
   stopPlaying();
   video.pause();
-  if (m) loadProject(decodeURIComponent(m[1])); else loadLibrary();
+  if (m) loadProject(decodeURIComponent(m[1]));
+  else { proj = ''; data = null; }
+  loadLibrary();  // the sidebar's tags and counts show on every page
 }
+let tab = 'takes';
+try { tab = localStorage.getItem('nip-tab') || tab; } catch {}
+document.querySelector(`.inspector .seg [data-tab="${tab}"]`)?.click();
 window.onhashchange = route;
 route();
 poll();
