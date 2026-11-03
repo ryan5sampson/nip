@@ -188,8 +188,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(f, "video/mp4")  # .mov too: Chrome only plays it labelled mp4
             else:
                 raise FileNotFoundError
-        except FileNotFoundError:
-            self.send_json({"error": "not found"}, 404)
+        except FileNotFoundError as e:  # a program NIP runs (ffmpeg, claude) that's missing names itself
+            self.send_json({"error": f"NIP can't find {e.filename}; is it installed?" if e.filename else "not found"},
+                           500 if e.filename else 404)
         except subprocess.CalledProcessError:
             self.send_json({"error": "ffmpeg couldn't read this video"}, 500)
         except (BrokenPipeError, ConnectionResetError):
@@ -374,8 +375,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"opened": str(target)})
             else:
                 raise FileNotFoundError
-        except FileNotFoundError:
-            self.send_json({"error": "not found"}, 404)
+        except FileNotFoundError as e:  # a program NIP runs (ffmpeg, claude) that's missing names itself
+            self.send_json({"error": f"NIP can't find {e.filename}; is it installed?" if e.filename else "not found"},
+                           500 if e.filename else 404)
         except ValueError as e:  # includes bad JSON
             self.send_json({"error": str(e)}, 400)
         except subprocess.CalledProcessError:

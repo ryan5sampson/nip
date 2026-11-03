@@ -351,6 +351,11 @@ class Viewer(unittest.TestCase):
                 with mock.patch.object(cli, "export") as export:
                     post("/api/export/p", {"unmarked": "cut"})
                 export.assert_called_once()
+                with mock.patch.object(cli, "export", side_effect=FileNotFoundError(2, "No such file", "ffmpeg")), \
+                        self.assertRaises(urllib.error.HTTPError) as cm:
+                    post("/api/export/p", {})
+                self.assertEqual((cm.exception.code, json.loads(cm.exception.read())["error"]),
+                                 (500, "NIP can't find ffmpeg; is it installed?"))  # not a bare "not found"
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
                 # stages: opened, then marked complete; only exported footage can be cleared, to the Trash
                 post("/api/cuts/p/v", {"action": "uncut", "start": left[1][0]})
