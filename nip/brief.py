@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 from nip import cli
-from nip.commands import kept_ranges
+from nip.commands import kept_ranges, timeline
 
 MODELS = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5"}  # Claude Code alias -> API model id
 BRIEF_AI = ("opus", "medium")  # picking the best lines from a whole transcript is real judgement
@@ -177,7 +177,9 @@ def ask(brief, clips, client=None):
 
 NOTES_SYSTEM = """You are NIP, the editing assistant in Footage Flow, a tool that prepares raw footage for the final edit. You apply a video creator's edit notes to their footage. You don't change the video directly: you return operations, and Footage Flow checks and applies them.
 
-The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes. Most notes are pinned to the moment in the source video where the creator was when writing it, and usually refer to what was said or shown around that moment, most often the few seconds just before it. A note marked general is about the whole video.
+The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the clips, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes.
+
+The clips are what the creator sees on their timeline: the footage left after the cuts, each marked keep or unmarked (not decided yet), with its name and its silences (stretches of a second or more with no speech). When a note talks about clips, the start or end of a clip, unmarked or kept footage, or silence, work from this list: a clip starts at its own start time, and a silence starting there is silence at the start of the clip. Words marked (cut) were already removed, like the voice commands, so they aren't part of any clip. Most notes are pinned to the moment in the source video where the creator was when writing it, and usually refer to what was said or shown around that moment, most often the few seconds just before it. A note marked general is about the whole video.
 
 Operations, with times in seconds of the source video:
 - cut (start, end): remove footage. When cutting speech, start at the first removed word's start and end at the next kept word's start, so no word is clipped.
@@ -207,6 +209,13 @@ NOTES_SCHEMA = {
 }
 
 
+def clip_line(s, e):
+    name = min((l for l in e["labels"] if l["start"] <= s["a"] + 0.05 and s["b"] <= l["end"] + 0.05),
+               key=lambda l: l["end"] - l["start"], default={}).get("text", "")
+    quiet = ",".join(f"{a:.2f}-{b:.2f}" for a, b in s["silences"]) or "none"
+    return f'clip {s["a"]:.2f}-{s["b"]:.2f} {"keep" if s["keep"] else "unmarked"} name="{name}" silences={quiet}'
+
+
 def notes_prompt(clip, notes):
     e = cli.decisions(clip)
     takes = "\n".join(f'take at={t["at"]} clip="{t.get("name") or ""}" take={t["take"]} {"kept" if t["keep"] else "dropped"} '
@@ -214,9 +223,12 @@ def notes_prompt(clip, notes):
     cuts = "\n".join(f'cut start={c["start"]:.2f} end={c["end"]:.2f} why={c["why"]}' for c in e["cuts"])
     near = [w for w in clip["words"] if len(clip["words"]) <= NOTE_ALL_WORDS or any(n.get("t") is None for n in notes)
             or any(abs(w["start"] - n["t"]) <= NOTE_WINDOW for n in notes)]  # long videos: only around the notes, unless one is general
-    words = "\n".join(f'{w["start"]:.2f}-{w["end"]:.2f} {w["w"]}' for w in near)
+    gone = [s for s in timeline(e, clip["duration"]) if s["gap"]]
+    words = "\n".join(f'{w["start"]:.2f}-{w["end"]:.2f} {w["w"]}'
+                      + (" (cut)" if any(s["a"] <= (w["start"] + w["end"]) / 2 < s["b"] for s in gone) else "") for w in near)
+    clips = "\n".join(clip_line(s, e) for s in timeline(e, clip["duration"], clip["words"]) if not s["gap"])
     ns = "\n".join(f'[{n["id"]}] {"general" if n.get("t") is None else f"at {n['t']:.2f}s"}: {n["text"]}' for n in notes)
-    return (f'<video duration="{clip["duration"]:.2f}">\n<takes>\n{takes}\n</takes>\n<cuts>\n{cuts}\n</cuts>\n'
+    return (f'<video duration="{clip["duration"]:.2f}">\n<takes>\n{takes}\n</takes>\n<cuts>\n{cuts}\n</cuts>\n<clips>\n{clips}\n</clips>\n'
             f'<transcript>\n{words}\n</transcript>\n</video>\n\n<notes>\n{ns}\n</notes>')
 
 

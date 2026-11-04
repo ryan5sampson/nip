@@ -125,7 +125,9 @@
   #words .para.keep { border-left-color: var(--green); }
   #words .para.sel { background: var(--fill); }
   #words .para.cut { border-left-color: color-mix(in srgb, var(--red) 60%, transparent); font-size: 12px; line-height: 1.5; }
-  #words .para.cut span[data-t] { color: var(--tertiary); text-decoration: line-through; }
+  #words .para.cut span[data-t]:not(.sil) { color: var(--tertiary); text-decoration: line-through; }
+  #words .sil { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 10px; line-height: 1.6; white-space: nowrap; background: var(--fill-strong); color: var(--secondary); cursor: pointer; }
+  #words .picked { background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--label); }
   #words .tag { display: block; font-size: 10px; font-weight: 600; color: var(--secondary); line-height: 1.6; }
   #words .para.keep .tag { color: var(--green); }
   #words .para.cut .tag { color: var(--red); }
@@ -295,7 +297,7 @@
       <section class="textcol" aria-label="Transcript">
         <details id="takesbox" hidden><summary>Takes <small id="takecount" class="num"></small></summary>
           <div class="group" id="takes"></div>
-          <p class="hint">I and O set the in and out of the take at the playhead · K keeps or drops it</p>
+          <p class="hint">I and O set the in and out of the take at the playhead · T keeps or drops it</p>
         </details>
         <div id="words"></div>
       </section>
@@ -329,7 +331,7 @@
           <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg><kbd>Space</kbd></button>
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
           <button class="icon-btn" id="cutbtn" title="Cut from the clip’s start up to the playhead (tap C), or hold C to cut what plays while held. Shift+C cuts the whole clip."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
-          <button class="icon-btn" id="keepbtn" title="Keep from the clip’s start up to the playhead (tap G), or hold G to keep what plays while held. Shift+G keeps the whole clip (again to unmark)."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>G</kbd></button>
+          <button class="icon-btn" id="keepbtn" title="Keep from the clip’s start up to the playhead (tap K), or hold K to keep what plays while held. Shift+K keeps the whole clip (again to unmark)."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>K</kbd></button>
           <button class="icon-btn" id="splitbtn" title="Split the clip at the playhead without cutting or keeping (S). Press S on a split to remove it."><svg class="i"><use href="#i-split"/></svg>Split<kbd>S</kbd></button>
           <button class="icon-btn" id="undobtn" title="Undo (⌘Z)" aria-label="Undo"><svg class="i"><use href="#i-undo"/></svg><kbd>⌘Z</kbd></button>
           <button class="icon-btn" id="redobtn" title="Redo (⇧⌘Z)" aria-label="Redo"><svg class="i" style="transform:scaleX(-1)"><use href="#i-undo"/></svg><kbd>⇧⌘Z</kbd></button>
@@ -357,9 +359,9 @@
     <dt><kbd>⇧</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>Jump to the previous or next clip, into the next or previous video too</dd></dl>
   <h4>Mark footage</h4>
   <dl><dt><kbd>C</kbd></dt><dd>Tap: cut from the start of this clip (the last split or edge) up to the playhead. Hold: plays, and cuts what plays until you let go.</dd>
-    <dt><kbd>G</kbd></dt><dd>Keep (green), the same way: tap up to the playhead, hold for what plays</dd>
+    <dt><kbd>K</kbd></dt><dd>Keep (green), the same way: tap up to the playhead, hold for what plays</dd>
     <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut the whole clip under the playhead</dd>
-    <dt><kbd>⇧</kbd><kbd>G</kbd></dt><dd>Keep the whole clip; again to unmark your keep</dd>
+    <dt><kbd>⇧</kbd><kbd>K</kbd></dt><dd>Keep the whole clip; again to unmark your keep</dd>
     <dt><kbd>S</kbd></dt><dd>Split the clip at the playhead into two, neither cut nor kept; on a split, removes it. Saying “NIP split” or just “NIP” while filming splits too.</dd>
 </dl>
   <h4>Undo</h4>
@@ -367,7 +369,7 @@
     <dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd></dt><dd>Redo it</dd></dl>
   <h4>Takes</h4>
   <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
-    <dt><kbd>K</kbd></dt><dd>Keep or drop that take</dd></dl>
+    <dt><kbd>T</kbd></dt><dd>Keep or drop that take</dd></dl>
   <h4>Name clips</h4>
   <dl><dt><kbd>N</kbd></dt><dd>Name from the start of this clip up to the playhead, as a new clip; <kbd>↵</kbd> saves it and marks it keep, <kbd>Esc</kbd> closes</dd>
     <dt><kbd>⇧</kbd><kbd>N</kbd></dt><dd>Name the whole clip under the playhead</dd>
@@ -379,7 +381,7 @@
     <dt>Apply</dt><dd>Notes wait until you press Apply, or tick Apply now</dd></dl>
   <h4>Mouse</h4>
   <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it.</dd>
-    <dt>Transcript</dt><dd>Click a word to jump to it</dd>
+    <dt>Transcript</dt><dd>Click a word to jump to it. Drag over words, click a silence, or double-click a paragraph to select it, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it.</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
 <dialog id="details"><form method="dialog">
@@ -418,7 +420,7 @@ const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
-let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
+let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -599,7 +601,7 @@ async function loadProject(name) {
 function show(d, idx = clipIdx) {
   data = d;
   idx = Math.min(idx, data.clips.length - 1);
-  if (idx !== clipIdx) openGap = openSeg = naming = null;  // open panels belong to the video they were on
+  if (idx !== clipIdx) openGap = openSeg = naming = picked = null;  // open panels belong to the video they were on
   clipIdx = idx;
   $('#complete').hidden = data.stage === 'exported';
   $('#complete').lastChild.textContent = data.stage === 'processed' ? 'Completed' : 'Mark Complete';
@@ -622,7 +624,7 @@ function show(d, idx = clipIdx) {
   $('#meta').textContent = `${mmss(filmed - keptLen)} cut from ${mmss(filmed)} filmed${data.clips.length > 1 ? ` · video ${clipIdx + 1} of ${data.clips.length}: ${c.stem}` : ''}`;
   $('#edittotal').textContent = `/ ${mmss(keptLen)}`;
 
-  allSegs = data.clips.flatMap((_, ci) => segments(ci));  // every video on one timeline, in order
+  allSegs = data.clips.flatMap((c, ci) => c.segments.map(s => ({...s, ci})));  // every video on one timeline, in order
   segs = allSegs.filter(s => s.ci === clipIdx);  // editing works on the video under the playhead
   $('#timeline').innerHTML = allSegs.map((s, k) => {
     const c = data.clips[s.ci], e = c.edit, first = s.ci > 0 && allSegs[k - 1].ci !== s.ci ? ` vstart" data-video="${esc(c.stem)}` : '';
@@ -641,7 +643,7 @@ function show(d, idx = clipIdx) {
   $('#takecount').textContent = e.takes.filter(t => t.group).length;
   $('#takes').innerHTML = e.takes.map((t, i) => `
     <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
-      <input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''} title="Keep (K)" aria-label="Keep ${esc(label(t))}">
+      <input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''} title="Keep (T)" aria-label="Keep ${esc(label(t))}">
       <div class="main-col">
         <input type="text" class="name" value="${esc(t.name || '')}" placeholder="${esc(label(t))}" aria-label="Clip name" ${t.group ? '' : 'disabled'}>
         <span class="sub num">${t.group ? `Take ${t.take} · ` : ''}${mmss(t.start)}–${mmss(t.end)} · ${esc(t.why)}${t.edited ? ' · edited' : ''}</span>
@@ -694,13 +696,17 @@ function show(d, idx = clipIdx) {
     const sc = data.clips[s.ci], last = k === allSegs.length - 1 || allSegs[k + 1].ci !== s.ci;
     const ws = sc.words.filter(w => { const m = (w.start + w.end) / 2; return m >= s.a && (m < s.b || last); });
     const head = data.clips.length > 1 && (k === 0 || allSegs[k - 1].ci !== s.ci) ? `<div class="vid">${esc(sc.stem)}</div>` : '';
-    const spans = ws.map(w => `<span data-ci="${s.ci}" data-t="${w.start}">${esc(w.w)}</span>`).join(' ');
-    if (s.gap) return head + (ws.length ? `<p class="para cut"><span class="tag">Cut · ${mmss(s.a)}</span>${spans}</p>` : '');
+    const spans = [...ws.map(w => ({t: w.start, html: `<span data-ci="${s.ci}" data-t="${w.start}" data-e="${w.end}">${esc(w.w)}</span>`})),
+      ...s.silences.map(([a, b]) => ({t: a, html: `<span class="sil" data-ci="${s.ci}" data-t="${a}" data-e="${b}" title="No speech, ${mmss(a)}–${mmss(b)}. Click to select it.">${(b - a).toFixed(1)}s silence</span>`}))]
+      .sort((x, y) => x.t - y.t).map(x => x.html).join(' ');
+    if (s.gap) return head + (spans ? `<p class="para cut" data-k="${k}"><span class="tag">Cut · ${mmss(s.a)}</span>${spans}</p>` : '');
     const name = clipName(s);
-    return head + `<p class="para ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}"><span class="tag">${s.keep ? 'Keep' : 'Not marked'}${name ? ' · ' + esc(name) : ''} · ${mmss(s.a)}</span>${spans || '<i class="hint">No speech</i>'}</p>`;
+    return head + `<p class="para ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}" data-k="${k}"><span class="tag">${s.keep ? 'Keep' : 'Not marked'}${name ? ' · ' + esc(name) : ''} · ${mmss(s.a)}</span>${spans || '<i class="hint">No speech</i>'}</p>`;
   }).join('') || '<p class="hint">No speech in this footage.</p>';
-  wordEls = [...$('#words').querySelectorAll(`span[data-ci="${clipIdx}"]`)];
+  wordEls = [...$('#words').querySelectorAll(`span[data-ci="${clipIdx}"]:not(.sil)`)];
   nowWord = null;
+  if (picked) $('#words').querySelectorAll(`[data-ci="${picked.ci}"]`).forEach(el =>
+    el.classList.toggle('picked', +el.dataset.t >= picked.a - 0.01 && +el.dataset.e <= picked.b + 0.01));
 }
 
 function merge(ps) {  // kept pieces in time order, overlaps joined
@@ -712,28 +718,6 @@ function merge(ps) {  // kept pieces in time order, overlaps joined
   return out;
 }
 const keptOf = ci => { const e = data.clips[ci].edit; return merge(e.takes.filter(t => t.keep).flatMap(t => pieces(t, e.cuts))); };
-function segments(ci) {  // one video's edited timeline: kept pieces, and the cut stretches between them
-  const c = data.clips[ci], out = [], end = c.duration;
-  let t = 0;
-  for (const [a, b] of keptAll[ci]) {
-    if (a - t > 0.05) out.push({gap: true, a: t, b: a});
-    let x = a;  // inside a kept piece: unmarked stretches, and keep between them
-    for (const [ua, ub] of c.unmarked.filter(([ua, ub]) => ua < b && ub > a)) {
-      if (ua - x > 0.05) out.push({gap: false, keep: true, a: x, b: ua});
-      out.push({gap: false, a: Math.max(ua, a), b: Math.min(ub, b)});
-      x = Math.min(ub, b);
-    }
-    if (b - x > 0.05) out.push({gap: false, keep: true, a: x, b});
-    t = b;
-  }
-  if (end - t > 0.05) out.push({gap: true, a: t, b: end});
-  // splits, and the edges of names and keeps, divide footage into separate clips, so neighbours never merge
-  const at = [...c.edit.splits.map(s => s.t), ...c.edit.labels.flatMap(l => [l.start, l.end]), ...c.edit.keeps.flatMap(k => [k.start, k.end])];
-  return out.flatMap(s => {
-    const pts = s.gap ? [] : [...new Set(at.filter(t => t > s.a + 0.05 && t < s.b - 0.05))].sort((x, y) => x - y);
-    return [s.a, ...pts].map((a, i) => ({...s, ci, a, b: pts[i] ?? s.b}));
-  });
-}
 const short = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const editTime = t => kept.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, t) - a), 0);
 const editBefore = () => keptAll.slice(0, clipIdx).flat().reduce((n, [a, b]) => n + b - a, 0);  // earlier videos' kept footage
@@ -771,10 +755,17 @@ function drawName(n) {  // N: naming a new clip from the start of this one up to
     <form class="why-row" id="labelform"><input type="text" id="labelin" maxlength="200" aria-label="Clip name"
       placeholder="Name this clip, e.g. curve throw in slow motion; naming it keeps it"><button class="btn">Save<kbd>↵</kbd></button></form>`;
 }
+function drawPick(n) {  // a stretch selected in the transcript
+  $('#gapinfo').innerHTML = `<div class="head"><b class="num">Selected · ${mmss(n.a)}–${mmss(n.b)} · ${short(n.b - n.a)}</b>
+      <button class="btn" data-act="playpick">${icon('play', true)}Play</button>
+      <button class="btn" data-act="pickkeep">Keep<kbd>K</kbd></button><button class="btn" data-act="pickcut">Cut<kbd>C</kbd></button>
+      <button class="btn" data-act="pickname">Name<kbd>N</kbd></button><button class="btn" data-act="fold">Close</button></div>`;
+}
 function drawGap() {
   const g = segs.find(s => s.gap && s.a === openGap), sel = segs.find(s => !s.gap && s.a === openSeg);
-  $('#gapinfo').hidden = !g && !sel && !naming;
+  $('#gapinfo').hidden = !g && !sel && !naming && !picked;
   if (naming) return drawName(naming);
+  if (picked) return drawPick(picked);
   if (sel) return drawSeg(sel);
   if (!g) return;
   gapWhy = reasons(g);
@@ -849,6 +840,7 @@ function follow() {
   $('#nipat').textContent = mmss(editBefore() + editTime(nipT ?? t));
   let w = -1;
   for (let i = 0; i < clip().words.length && clip().words[i].start <= t; i++) w = i;
+  if (w >= 0 && t > clip().words[w].end + 0.25) w = -1;  // in a silence, no word is being said
   if (wordEls[w] !== nowWord) {
     nowWord?.classList.remove('now');
     nowWord = wordEls[w];
@@ -867,7 +859,7 @@ function follow() {
   }
 }
 
-// C and G: a tap marks from the clip's start up to the playhead; held, the video plays and what plays while held is marked
+// C and K: a tap marks from the clip's start up to the playhead; held, the video plays and what plays while held is marked
 const HOLD = 250;  // ms: shorter is a tap
 function disarm() {
   if (armed) { clearTimeout(armed.timer); if (armed.played) video.pause(); }
@@ -875,6 +867,7 @@ function disarm() {
   $('#cutbtn').classList.remove('armed'); $('#keepbtn').classList.remove('armed');
 }
 function holdStart(kind) {
+  if (picked) return pickAct(kind);
   if (armed) return;
   armed = {kind, t: video.currentTime, ci: clipIdx};
   $(`#${kind}btn`).classList.add('armed');
@@ -894,15 +887,16 @@ function holdEnd(kind) {
   if (b - a < 0.1) return status(`${kind === 'cut' ? 'Cut' : 'Keep'} cancelled`);
   cutAction(kind, a, b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(b - a).toFixed(1)}s`));
 }
-addEventListener('keyup', e => { if (e.key.toLowerCase() === 'c') holdEnd('cut'); else if (e.key.toLowerCase() === 'g') holdEnd('keep'); });
+addEventListener('keyup', e => { if (e.key.toLowerCase() === 'c') holdEnd('cut'); else if (e.key.toLowerCase() === 'k') holdEnd('keep'); });
 addEventListener('blur', () => armed && (disarm(), status('Cancelled')));
-function markUpTo(kind) {  // tap C / G: from the start of the clip (the last divide) up to the playhead
+function markUpTo(kind) {  // tap C / K: from the start of the clip (the last divide) up to the playhead
+  if (picked) return pickAct(kind);
   const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t <= s.b);
   if (!s) return status('Move the playhead onto footage that isn’t cut', true);
   if (t - s.a < 0.1) return status('The playhead is at the start of this clip; move it to where it should end', true);
   cutAction(kind, s.a, t).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(t - s.a).toFixed(1)}s up to here`));
 }
-function markStretch(kind) {  // Shift+C / Shift+G: the whole clip at the playhead; Shift+G on your own keep unmarks it
+function markStretch(kind) {  // Shift+C / Shift+K: the whole clip at the playhead; Shift+K on your own keep unmarks it
   const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t < s.b);
   if (!s) return status('Move the playhead onto footage that isn’t cut', true);
   if (kind === 'keep' && s.keep) {
@@ -926,7 +920,11 @@ $('#gapinfo').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
   const g = segs.find(s => s.gap && s.a === openGap), sel = segs.find(s => !s.gap && s.a === openSeg);
-  if (b.dataset.act === 'fold') { openGap = openSeg = naming = null; show(data); }
+  if (b.dataset.act === 'fold') { openGap = openSeg = naming = picked = null; show(data); }
+  else if (b.dataset.act === 'playpick') playList([{ci: clipIdx, a: picked.a, b: picked.b}]);
+  else if (b.dataset.act === 'pickkeep') pickAct('keep');
+  else if (b.dataset.act === 'pickcut') pickAct('cut');
+  else if (b.dataset.act === 'pickname') nameUpTo();
   else if (b.dataset.act === 'playseg' && sel) playList([{ci: clipIdx, a: sel.a, b: sel.b}]);
   else if (['keep', 'cut'].includes(b.dataset.act) && sel) cutAction(b.dataset.act, sel.a, sel.b).then(ok => ok && status(b.dataset.act === 'cut' ? `Cut ${short(sel.b - sel.a)}` : 'Marked keep'));
   else if (b.dataset.act === 'unkeep' && sel) cutAction('unkeep', myKeep(sel).start).then(ok => ok && status('Unmarked'));
@@ -960,6 +958,12 @@ $('#gapinfo').onsubmit = e => {
 };
 $('#gapinfo').onkeydown = e => { if (e.key === 'Escape' && e.target.id === 'labelin') { openSeg = naming = null; show(data); } };
 function nameUpTo() {  // N: name from the start of this clip (the last divide) up to the playhead, as a new clip
+  if (picked) {  // or what's selected in the transcript
+    naming = {...picked, keep: segs.some(s => s.keep && s.a <= picked.a + 0.05 && picked.b <= s.b + 0.05)};
+    picked = null;
+    show(data);
+    return $('#labelin').focus();
+  }
   const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t <= s.b);
   if (!s) return status('Move the playhead onto a clip that isn’t cut', true);
   if (t - s.a < 0.1) return status('The playhead is at the start of this clip: move it to where the new clip ends, or Shift+N names the whole clip', true);
@@ -1003,7 +1007,46 @@ $('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : markUpTo('cut');
 $('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : markUpTo('keep');
 $('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
   && cutAction('reset').then(ok => ok && status('Back to the voice edit'));
-$('#words').onclick = e => { if (e.target.dataset.t) goTo(+e.target.dataset.ci, +e.target.dataset.t); };
+function setPick(ci, a, b) {  // select a stretch from the transcript; K, C and N then act on it
+  video.pause();
+  goTo(ci, a);
+  picked = {ci, a, b};
+  openSeg = openGap = naming = null;
+  show(data);
+}
+function pickAct(kind) {
+  const {a, b} = picked;
+  if (segs.some(s => s.gap && s.a <= a + 0.05 && b <= s.b + 0.05)) return status('That’s already cut. Open its red marker on the timeline to bring it back.', true);
+  picked = null;
+  cutAction(kind, a, b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(b - a).toFixed(1)}s`));
+}
+$('#words').onclick = e => {
+  if (justPicked) { justPicked = false; return; }  // the click that ends a drag
+  const el = e.target.closest('[data-t]');
+  if (el?.classList.contains('sil') && !el.closest('.cut')) return setPick(+el.dataset.ci, +el.dataset.t, +el.dataset.e);
+  if (picked) { picked = null; show(data); }
+  if (el) goTo(+el.dataset.ci, +el.dataset.t);
+};
+document.addEventListener('mouseup', () => {  // a drag across the transcript selects what it touched, within one video
+  const sel = getSelection();
+  if (sel.isCollapsed || !$('#words').contains(sel.anchorNode)) return;
+  const els = [...$('#words').querySelectorAll('[data-t]')].filter(el => sel.containsNode(el, true));
+  sel.removeAllRanges();
+  if (!els.length) return;
+  const mine = els.filter(el => el.dataset.ci === els[0].dataset.ci);
+  justPicked = true;
+  setTimeout(() => justPicked = false);
+  setPick(+mine[0].dataset.ci, +mine[0].dataset.t, +mine.at(-1).dataset.e);
+});
+$('#words').ondblclick = e => {  // a whole paragraph; a cut one opens so it can be brought back
+  getSelection().removeAllRanges();
+  const s = allSegs[+e.target.closest('.para')?.dataset.k];
+  if (!s) return;
+  if (!s.gap) return setPick(s.ci, s.a, s.b);
+  goTo(s.ci, s.a);
+  openGap = s.a; openSeg = naming = picked = null;
+  show(data);
+};
 $('#takes').onclick = e => {
   const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
   if (!b || !row) return;
@@ -1145,16 +1188,17 @@ document.addEventListener('keydown', e => {
   if ($('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   const t = video.currentTime, i = takeAt(t);
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-  else if (e.repeat && /^[cg]$/.test(e.key)) e.preventDefault();  // key auto-repeat while held
-  else if (e.key === 'c' || e.key === 'g') holdStart(e.key === 'c' ? 'cut' : 'keep');
-  else if (e.key === 'C' || e.key === 'G') markStretch(e.key === 'C' ? 'cut' : 'keep');
+  else if (e.repeat && /^[ck]$/.test(e.key)) e.preventDefault();  // key auto-repeat while held
+  else if (e.key === 'c' || e.key === 'k') holdStart(e.key === 'c' ? 'cut' : 'keep');
+  else if (e.key === 'C' || e.key === 'K') markStretch(e.key === 'C' ? 'cut' : 'keep');
   else if (e.key === 'n') { e.preventDefault(); nameUpTo(); }
   else if (e.key === 'N') { e.preventDefault(); nameClip(); }
   else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
+  else if (e.key === 'Escape' && picked) { picked = null; show(data); }
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.shiftKey) { e.preventDefault(); jumpClip(e.key === 'ArrowLeft' ? -1 : 1); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * 2)); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
-  else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
+  else if (e.key === 't' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
   else if (e.key === 's') split();
   else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); nipFocus(e.key === 'e' ? 'at' : 'all'); }
   else if (e.key === '?') showKeys(!keysOpen);

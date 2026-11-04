@@ -238,15 +238,59 @@ def unmarked(edit):
     return sorted(p for p in out if p[1] - p[0] >= 0.5)  # slivers between marks aren't worth asking about
 
 
-def tiers(edit, duration):
-    """The three tiers as (start, end) lists: cut (folded away), unmarked, and keep."""
+def kept_pieces(edit):
+    """Everything not cut, as (start, end) pieces in time order."""
     merged = []
     for a, b in sorted(p for t in edit["takes"] if t["keep"] for p in kept_ranges(t, edit["cuts"])):
         if merged and a <= merged[-1][1] + 0.01:
             merged[-1] = (merged[-1][0], max(merged[-1][1], b))
         else:
             merged.append((a, b))
-    loose = unmarked(edit)
+    return merged
+
+
+def silences(words, a, b):
+    """The stretches of a..b with no speech, SILENCE seconds or longer."""
+    out, t = [], a
+    for w in words:
+        if w["end"] > a and w["start"] < b:
+            if w["start"] - t >= SILENCE:
+                out.append([t, w["start"]])
+            t = max(t, w["end"])
+    return out + [[t, b]] if b - t >= SILENCE else out
+
+
+def timeline(edit, duration, words=()):
+    """The clips the user sees, in order: kept footage (keep or not marked) and the cut stretches between. Splits and
+    the edges of names and keeps divide them, so neighbours never merge. Each lists its silences."""
+    out, t, loose = [], 0.0, unmarked(edit)
+    for a, b in kept_pieces(edit):
+        if a - t > 0.05:
+            out.append({"gap": True, "keep": False, "a": t, "b": a})
+        x = a  # inside a kept piece: unmarked stretches, and keep between them
+        for ua, ub in (p for p in loose if p[0] < b and p[1] > a):
+            if ua - x > 0.05:
+                out.append({"gap": False, "keep": True, "a": x, "b": ua})
+            out.append({"gap": False, "keep": False, "a": max(ua, a), "b": min(ub, b)})
+            x = min(ub, b)
+        if b - x > 0.05:
+            out.append({"gap": False, "keep": True, "a": x, "b": b})
+        t = b
+    if duration - t > 0.05:
+        out.append({"gap": True, "keep": False, "a": t, "b": duration})
+    at = [s["t"] for s in edit["splits"]] + [t for x in edit["labels"] for t in (x["start"], x["end"])] \
+        + [t for k in edit["keeps"] for t in (k["start"], k["end"])]
+    clips = []
+    for s in out:
+        pts = [] if s["gap"] else sorted({t for t in at if s["a"] + 0.05 < t < s["b"] - 0.05})
+        clips += [{**s, "a": a, "b": b, "silences": silences(words, a, b)}
+                  for a, b in zip([s["a"], *pts], [*pts, s["b"]])]
+    return clips
+
+
+def tiers(edit, duration):
+    """The three tiers as (start, end) lists: cut (folded away), unmarked, and keep."""
+    merged, loose = kept_pieces(edit), unmarked(edit)
     keep = [p for a, b in merged for p in kept_ranges({"start": a, "end": b}, [{"start": x, "end": y} for x, y in loose])
             if p[1] - p[0] >= 0.5]
     cut = kept_ranges({"start": 0.0, "end": duration}, [{"start": a, "end": b} for a, b in merged])

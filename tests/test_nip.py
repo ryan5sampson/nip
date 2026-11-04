@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, unmarked
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, silences, timeline, unmarked
 
 
 def script(text):
@@ -153,6 +153,27 @@ class Commands(unittest.TestCase):
         retake = "In here I always have a... In here I always have a... bamboo"
         self.assertEqual(said(drop_loops(words(retake))[0]), retake)  # said twice stays
         self.assertEqual(said(drop_loops(words("no no no"))[0]), "no no no")
+
+    def test_timeline_lists_clips_and_their_silences(self):
+        import nip.brief as brief
+        import nip.cli as cli
+        w = lambda text, a, b: {"w": text, "start": a, "end": b}
+        words = [w("hello", 1, 2), w("Keep.", 9, 10), w("So", 40, 41), w("then", 41, 42)]
+        self.assertEqual(silences(words, 10, 45), [[10, 40], [42, 45]])  # the cut command before 10 doesn't count
+        self.assertEqual(silences(words, 0.5, 1.5), [])  # under a second isn't marked
+        take = {"start": 0, "end": 50, "keep": True, "at": 0, "group": 0, "take": 0, "why": ""}
+        edit = {"takes": [take], "cuts": [{"start": 8, "end": 10, "why": "nip"}], "markers": [], "pending": []}
+        clip = {"duration": 50.0, "words": words, "edit": edit, "my_keeps": [{"start": 0, "end": 8}]}
+        e = cli.decisions(clip)
+        got = [(s["gap"], s["keep"], s["a"], s["b"], s["silences"]) for s in timeline(e, 50.0, words)]
+        self.assertEqual(got, [(False, True, 0, 8, [[0, 1], [2, 8]]), (True, False, 8, 10, [[8, 9]]),
+                               (False, False, 10, 50, [[10, 40], [42, 50]])])
+        said = brief.notes_prompt(clip, [{"id": 1, "t": None, "text": "cut long silences at the start of clips"}])
+        self.assertIn('clip 10.00-50.00 unmarked name="" silences=10.00-40.00,42.00-50.00', said)
+        self.assertIn("9.00-10.00 Keep. (cut)", said)  # NIP can't mistake a cut command for the clip's first word
+        # two names side by side stay two clips
+        clip["labels"] = [{"start": 10, "end": 20, "text": "a"}, {"start": 20, "end": 30, "text": "b"}]
+        self.assertEqual([s["a"] for s in timeline(cli.decisions(clip), 50.0) if not s["gap"]], [0, 10, 20, 30])
 
     def test_command_words_are_cut(self):
         words, dur = script("/ Take one. / hello")

@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from nip import brief, cli
-from nip.commands import kept_ranges, tiers, unmarked
+from nip.commands import kept_ranges, tiers, timeline, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
@@ -67,7 +67,7 @@ def clips_of(proj):
         c = cli.load(proj / f"{stem}.nip.json")
         e = cli.decisions(c)
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
-                    "words": c["words"], "edit": e, "unmarked": unmarked(e),
+                    "words": c["words"], "edit": e, "unmarked": unmarked(e), "segments": timeline(e, c["duration"], c["words"]),
                     "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes")),
                     "undo": len(c.get("undo", [])), "redo": len(c.get("redo", []))})
     return info, out
