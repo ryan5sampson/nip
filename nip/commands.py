@@ -128,7 +128,7 @@ def build_edit(words, duration):
             text = e["text"]
             clip = re.match(r"(new clip|clip(?:ped)? (\w+))\b(.*)", text)  # "new clip x", "clip two x"
             last = re.search(r"\blast (\w+) seconds?\b", text)
-            if not text:  # a bare "NIP" is a divider to refer back to
+            if not text or text == "split":  # a bare "NIP" (or "NIP split") is a divider to refer back to
                 edit["markers"].append({"t": e["end"], "label": "divider"})
             elif last and number(last[1]):
                 a = max(cur["start"], e["start"] - number(last[1]))

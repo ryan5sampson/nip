@@ -128,6 +128,7 @@ class Commands(unittest.TestCase):
                 if w["start"] >= a and w["end"] <= b]
         self.assertEqual(kept, ["keep", "this", "good", "stuff", "great", "bit", "end"])
         self.assertEqual([m["label"] for m in e["markers"]], ["divider", "divider", "good clip", "keep"])
+        self.assertEqual([m["label"] for m in build_edit(*script("one / NIP split / two"))["markers"]], ["divider"])
         self.assertEqual((e["markers"][2]["t"], e["markers"][2]["end"]), (words[14]["end"], words[17]["start"]))
         self.assertEqual(e["markers"][3]["t"], words[-4]["end"])  # "NIP keep" starts after the previous NIP command
         self.assertEqual(e["pending"], [])
@@ -363,9 +364,18 @@ class Viewer(unittest.TestCase):
                 data = json.loads(post("/api/notes/p/v", {"action": "undo"}).read())
                 self.assertEqual(data["clips"][0]["edit_notes"][0]["status"], "pending")
                 self.assertNotIn({"start": 1.0, "end": 1.2, "why": "cut by you"}, data["clips"][0]["edit"]["cuts"])
+                # split: a point that divides the footage, neither cut nor keep; S again removes it; Reset clears it
+                data = json.loads(post("/api/cuts/p/v", {"action": "split", "start": 2.5}).read())
+                self.assertEqual(data["clips"][0]["edit"]["splits"], [{"t": 2.5, "why": "split by you"}])
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/cuts/p/v", {"action": "split", "start": 99})
+                data = json.loads(post("/api/cuts/p/v", {"action": "unsplit", "start": 2.5}).read())
+                self.assertEqual(data["clips"][0]["edit"]["splits"], [])
+                post("/api/cuts/p/v", {"action": "split", "start": 2.5})
                 post("/api/cuts/p/v", {"action": "reset"})
                 clip = cli.load(lib / "p" / "v.nip.json")
                 self.assertEqual((cli.decisions(clip)["cuts"], clip.get("overrides")), (clip["edit"]["cuts"], None))
+                self.assertEqual(cli.decisions(clip)["splits"], [])
                 # describe a clip; Reset leaves descriptions alone; the library card counts the tiers
                 post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "the hello"})
                 with self.assertRaises(urllib.error.HTTPError):

@@ -242,6 +242,7 @@
   <symbol id="i-photos" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="m1.8 10.6 3.4-3 3 2.6 2-1.6 4 3.2"/></symbol>
   <symbol id="i-text" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8M2.6 6.5h10.8M2.6 9.4h10.8M2.6 12.3h6.4"/></symbol>
   <symbol id="i-pencil" viewBox="0 0 16 16"><path d="m2.6 13.4.6-3 7.6-7.6 2.4 2.4-7.6 7.6zM9.4 4.2l2.4 2.4"/></symbol>
+  <symbol id="i-split" viewBox="0 0 16 16"><path d="M8 1.8v12.4M5.4 5.2 2.6 8l2.8 2.8M10.6 5.2 13.4 8l-2.8 2.8"/></symbol>
   <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 2.6v10.8M2.6 8h10.8"/></symbol>
   <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.6 4.2h10.8M6.2 4.2V2.6h3.6v1.6M3.8 4.2l.8 9.4h6.8l.8-9.4"/></symbol>
   <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.6 3.2 2.6 6.2l3 3M2.6 6.2h7.2a3.8 3.8 0 0 1 0 7.6H7"/></symbol>
@@ -288,6 +289,7 @@
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
           <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C). Shift+C cuts the whole stretch at the playhead."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
           <button class="icon-btn" id="keepbtn" title="Keep: press at the start, then again at the end (G). Shift+G keeps the whole stretch at the playhead."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>G</kbd></button>
+          <button class="icon-btn" id="splitbtn" title="Split the clip at the playhead without cutting or keeping (S). Press S on a split to remove it."><svg class="i"><use href="#i-split"/></svg>Split<kbd>S</kbd></button>
           <div id="videos"></div>
           <small id="meta" class="num"></small>
         </div>
@@ -367,6 +369,7 @@
     <dt><kbd>G</kbd></dt><dd>Keep (green): same, press at the start and the end</dd>
     <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut the whole stretch under the playhead</dd>
     <dt><kbd>⇧</kbd><kbd>G</kbd></dt><dd>Keep the whole stretch; again to unmark your keep</dd>
+    <dt><kbd>S</kbd></dt><dd>Split the clip at the playhead into two, neither cut nor kept; on a split, removes it. Saying “NIP split” or just “NIP” while filming splits too.</dd>
     <dt><kbd>Esc</kbd></dt><dd>Cancel a cut or keep you started</dd></dl>
   <h4>Takes</h4>
   <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
@@ -703,7 +706,11 @@ function segments() {  // the edited timeline: kept pieces, and the cut stretche
     t = b;
   }
   if (end - t > 0.05) out.push({gap: true, a: t, b: end});
-  return out;
+  const at = clip().edit.splits.map(s => s.t);  // splits divide footage into separate clips, without cutting or keeping
+  return out.flatMap(s => {
+    const pts = s.gap ? [] : at.filter(t => t > s.a + 0.05 && t < s.b - 0.05);
+    return [s.a, ...pts].map((a, i) => ({...s, a, b: pts[i] ?? s.b}));
+  });
 }
 const short = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const editTime = t => kept.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, t) - a), 0);
@@ -895,6 +902,12 @@ $('#gapinfo').onsubmit = e => {
   if (sel) cutAction('label', sel.a, sel.b, $('#labelin').value).then(ok => ok && status($('#labelin').value.trim() ? 'Described' : 'Description removed'));
 };
 $('#play').onclick = togglePlay;
+function split() {  // S: split the footage at the playhead, or remove your split there
+  const t = video.currentTime, near = clip().edit.splits.find(s => Math.abs(s.t - t) < 0.3);
+  if (near?.why === 'divider') return status('That split is a spoken “NIP” divider', true);
+  cutAction(near ? 'unsplit' : 'split', near ? near.t : t).then(ok => ok && status(near ? 'Split removed' : `Split at ${mmss(t)}`));
+}
+$('#splitbtn').onclick = split;
 $('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : mark('cut');
 $('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : mark('keep');
 $('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
@@ -1032,6 +1045,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
+  else if (e.key === 's') split();
   else if (e.key === 'e') { e.preventDefault(); document.querySelector('[data-tab=claude]').click(); $('#brief').focus(); }
   else if (e.key === '?') showKeys(!keysOpen);
 });

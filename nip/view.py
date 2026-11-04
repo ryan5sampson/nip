@@ -330,6 +330,12 @@ class Handler(BaseHTTPRequestHandler):
                         cli.add_cut(clip, start, body.get("end"))
                     elif act == "keep":
                         cli.add_cut(clip, start, body.get("end"), "my_keeps")
+                    elif act == "split":  # divide the footage at a point, neither cut nor keep
+                        if not isinstance(start, (int, float)) or not 0 < start < clip["duration"]:
+                            raise ValueError("a split needs a time inside the video")
+                        clip["my_splits"] = sorted(set(clip.get("my_splits", [])) | {round(float(start), 2)})
+                    elif act == "unsplit":
+                        clip["my_splits"] = [t for t in clip.get("my_splits", []) if not isinstance(start, (int, float)) or abs(t - start) >= 0.01]
                     elif act == "label":
                         cli.set_label(clip, start, body.get("end"), body.get("text"))
                     elif act in ("uncut", "unkeep"):
@@ -339,7 +345,7 @@ class Handler(BaseHTTPRequestHandler):
                         for k in cli.HAND:
                             clip.pop(k, None)
                     else:
-                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, label or reset")
+                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, split, unsplit, label or reset")
                     cli.save(f, clip)
                 self.send_json(edited(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse

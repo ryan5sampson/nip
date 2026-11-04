@@ -79,7 +79,7 @@ Start every command with "NIP" and pause for a second or two after it, so NIP kn
 | "NIP, keep" / "NIP, keep that" | Marks everything since the last NIP command keep (green). |
 | "NIP, let me try that again" | Cuts back to the last pause of at least 1 second. |
 | "NIP, cut everything up to here" | Cuts from the start of the current clip or take up to here. |
-| "NIP" (nothing after) | A divider: a reference point for "NIP, cut", "NIP, keep" and "tag that". |
+| "NIP" (nothing after), or "NIP split" | A divider: a reference point for "NIP, cut", "NIP, keep" and "tag that". It also splits the footage there into two clips in the editor, neither cut nor kept. In the editor, **Split** (S) does the same by hand. |
 | "NIP, tag that as …" | Like "NIP, keep", with a label. |
 | "NIP, clip the last 10 seconds" / "NIP, cut the last 5 seconds" | Marks those seconds keep, or cuts them. |
 | "NIP, that was …" | Adds a note on what you just filmed to the report. |

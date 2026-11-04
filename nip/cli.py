@@ -36,10 +36,12 @@ def decisions(clip):
     """Voice decisions with the user's hand edits on top (all kept through reparse)."""
     e = apply_overrides(clip["edit"], clip.get("overrides", {}))
     e["labels"] = clip.get("labels", [])  # descriptions the user gave stretches of footage; Reset keeps them
+    e["splits"] = sorted([{"t": m["t"], "why": "divider"} for m in e["markers"] if m.get("label") == "divider"]
+                         + [{"t": t, "why": "split by you"} for t in clip.get("my_splits", [])], key=lambda s: s["t"])
     return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []), clip.get("my_keeps", []))
 
 
-HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps")  # the user's hand edits on a clip, on top of the voice edit
+HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps", "my_splits")  # the user's hand edits on a clip, on top of the voice edit
 
 
 def clean_override(body, duration):
