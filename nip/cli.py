@@ -19,7 +19,7 @@ VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
 TRASH = Path.home() / ".Trash"
-STAGES = ("inbox", "processing", "processed", "exported")  # footage moves through these; exported can be cleared
+STAGES = ("inbox", "processing", "processed", "exported")  # footage moves through these; any can be deleted to the Trash
 SHORT_SIDE = 1080  # Reels, TikTok and Shorts all play 1080x1920; more is wasted on them
 
 
@@ -222,9 +222,7 @@ def set_stage(proj, stage):
 
 
 def clear(proj):
-    """Move an unopened or exported project's footage and edits to the Trash, to free space; its exports stay."""
-    if stage_of(proj, load(proj / "project.json")) not in ("inbox", "exported"):
-        raise ValueError("only inbox or exported footage can be deleted")
+    """Move a project's footage and edits to the Trash, to free space; its exports stay."""
     dest, n = TRASH / proj.name, 2
     while dest.exists():
         dest, n = TRASH / f"{proj.name} {n}", n + 1

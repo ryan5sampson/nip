@@ -395,7 +395,7 @@ function drawLibrary() {
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
     <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${['inbox', 'exported'].includes(p.stage) ? `<button class="del" title="Move to the Trash" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button>` : ''}</div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${`<button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button>` : ''}</div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${stageFilter ? '' : ` · ${STAGES[p.stage][0]}`}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
@@ -427,8 +427,7 @@ $('#cards').onclick = e => {
   if (!b) return;
   e.preventDefault();
   const p = projects.find(x => x.name === b.closest('[data-name]').dataset.name);
-  confirm(`Move “${p.description || p.name}” to the Trash? It leaves Footage Flow; empty the Trash to free the space, or drag it from the Trash back into ~/NIP/library to undo.`)
-    && run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status('Moved to the Trash'); });
+  run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status(`Moved “${p.description || p.name}” to the Trash; drag it back into ~/NIP/library to undo`); });
 };
 let dragged = null, bundling = [];  // drag a project onto another to bundle them into one
 $('#cards').ondragstart = e => { dragged = e.target.closest('[data-name]')?.dataset.name; };
