@@ -172,6 +172,7 @@ class Handler(BaseHTTPRequestHandler):
             elif p == ["api", "status"]:
                 waiting = [v for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO] if cli.INBOX.exists() else []
                 self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "transcribing": STATE["transcribing"],
+                                "unreadable": sum(1 for f in cli.UNREADABLE.iterdir() if not f.name.startswith(".")) if cli.UNREADABLE.exists() else 0,
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
             elif p == ["api", "projects"]:
@@ -366,6 +367,8 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get("what") == "inbox":
                     cli.INBOX.mkdir(parents=True, exist_ok=True)
                     target = cli.INBOX
+                elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():
+                    target = cli.UNREADABLE
                 elif body.get("what") == "exports":
                     target = cli.EXPORTS / self.project(str(body.get("project", ""))).name
                     target.mkdir(parents=True, exist_ok=True)

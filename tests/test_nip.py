@@ -396,18 +396,20 @@ class Export(unittest.TestCase):
         import nip.cli as cli
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            with mock.patch.multiple(cli, INBOX=d / "inbox", LIBRARY=d / "lib", EXPORTS=d / "out"):
+            with mock.patch.multiple(cli, INBOX=d / "inbox", LIBRARY=d / "lib", EXPORTS=d / "out", UNREADABLE=d / "bad"):
                 for p in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
                     p.mkdir()
                 for name in ("a", "b"):
                     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=d=15:s=1440x2560:r=30",
                                     "-f", "lavfi", "-i", "sine=d=15", "-shortest", str(cli.INBOX / f"{name}.mp4")],
                                    check=True)
+                (cli.INBOX / "airdrop.mov").write_bytes(b"bplist00")  # a placeholder, not a video: set aside, not blocking
                 words, _ = script("NIP this is demo day / Take one / bad / Take two / good")
                 with mock.patch.object(cli, "transcribe", return_value=words), \
                         mock.patch.object(cli, "settled", return_value=True):
                     cli.ingest()
                 projs = sorted(cli.LIBRARY.iterdir())  # each loose video is its own project
+                self.assertEqual([p.name for p in (d / "bad").iterdir()], ["airdrop.mov"])
                 self.assertEqual([p.name[11:] for p in projs], ["a_demo-day", "b_demo-day"])
                 with self.assertRaises(ValueError):
                     cli.bundle(projs[:1], "Demo day")

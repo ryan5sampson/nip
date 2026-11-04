@@ -15,6 +15,7 @@ from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_rang
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
+UNREADABLE = HOME / "unreadable"  # inbox files ffmpeg can't read are set aside here
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
@@ -110,6 +111,13 @@ def probe(path):
     return float(fmt["duration"]), fmt.get("tags", {}).get("creation_time", "")
 
 
+def readable(path):
+    try:
+        return probe(path)[0] > 0
+    except (subprocess.CalledProcessError, KeyError, ValueError):
+        return False
+
+
 def transcribe(path):
     try:
         import mlx_whisper
@@ -136,6 +144,13 @@ def ingest():
         elif p.suffix.lower() in VIDEO and settled(p):  # each loose video is its own project until bundled
             batches[f"{date.today()}_{slug(p.stem)}"] = [p]
     for name, vids in batches.items():
+        if bad := [v for v in vids if not readable(v)]:  # e.g. an AirDrop that never finished; the rest still process
+            UNREADABLE.mkdir(parents=True, exist_ok=True)
+            for v in bad:
+                dest = UNREADABLE / v.name
+                shutil.move(v, dest.with_stem(f"{dest.stem} {time.time_ns()}") if dest.exists() else dest)
+                print(f"inbox: {v.name} isn't a video ffmpeg can read; moved to {UNREADABLE}")
+            continue
         process(new_project(name), vids)
         if vids[0].parent != INBOX and not any(vids[0].parent.iterdir()):
             vids[0].parent.rmdir()

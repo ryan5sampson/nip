@@ -943,6 +943,11 @@ async function poll() {
       : `${icon('tray')}<span>Inbox empty</span>`;
     $('#inbox').insertAdjacentHTML('beforeend', `<button class="icon-btn small" id="openinbox" title="Open Inbox in Finder (${esc(s.inbox)})" style="margin-left:auto">${icon('folder')}</button>`);
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
+    $('#unreadable')?.remove();
+    if (s.unreadable) {
+      $('#inbox').insertAdjacentHTML('afterend', `<button class="item" id="unreadable" title="These weren't videos ffmpeg could read (often an AirDrop that didn't finish). Show them in Finder; delete them or send them again.">${icon('folder')}<span>${plural(s.unreadable, 'file')} couldn’t be read</span></button>`);
+      $('#unreadable').onclick = () => api('/api/open', {what: 'unreadable'}).catch(e => status(e.message, true));
+    }
     $('#claudehint').textContent = {plan: 'Uses your Claude plan', api: 'Uses your API key'}[s.claude] || 'Needs Claude Code or an API key';
     if (lastProcessing && !s.transcribing) loadLibrary();
     lastProcessing = s.transcribing;
