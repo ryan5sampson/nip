@@ -342,7 +342,8 @@ class Viewer(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as cm:
                     post("/api/override/p/v", {"at": take["at"], "start": take["end"] + 1})
                 self.assertEqual(cm.exception.code, 400)
-                post("/api/override/p/v", {"at": take["at"], "keep": False})
+                self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "inbox")  # opened, and a rejected edit: still Inbox
+                self.assertEqual(json.loads(post("/api/override/p/v", {"at": take["at"], "keep": False}).read())["stage"], "processing")
                 self.assertFalse(cli.decisions(cli.load(lib / "p" / "v.nip.json"))["takes"][-1]["keep"])
                 cut = cli.decisions(cli.load(lib / "p" / "v.nip.json"))["cuts"][0]
                 post("/api/cuts/p/v", {"action": "restore", "start": cut["start"]})
@@ -371,7 +372,7 @@ class Viewer(unittest.TestCase):
                     post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "x" * 201})
                 post("/api/cuts/p/v", {"action": "reset"})
                 card = json.loads(get("/api/projects").read())[0]
-                self.assertEqual((card["tiers"], card["stage"]), ({"keep": 0, "unmarked": 1, "cut": 1}, "inbox"))
+                self.assertEqual((card["tiers"], card["stage"]), ({"keep": 0, "unmarked": 1, "cut": 1}, "processing"))  # edited, so it left the Inbox
                 self.assertIn("the hello", card["search"])
                 # three tiers: mark the unmarked footage keep by hand; export can settle the rest as cut
                 post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})  # splits "hello" in two

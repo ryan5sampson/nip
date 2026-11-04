@@ -102,6 +102,14 @@ def project_data(proj):
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
+def edited(proj):
+    """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing."""
+    with LOCK:
+        if cli.stage_of(proj, cli.load(proj / "project.json")) == "inbox":
+            cli.set_stage(proj, "processing")
+    return project_data(proj)
+
+
 def settle(proj, how):
     """Mark every stretch nobody marked yet as cut or keep (how), so the edit is fully decided."""
     if how not in ("cut", "keep"):
@@ -261,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         cli.override_take(clip, body.get("at"), body)
                     cli.save(f, clip)
-                self.send_json(project_data(proj))
+                self.send_json(edited(proj))
             elif len(p) == 4 and p[:2] == ["api", "notes"]:  # second-round edit notes for Claude
                 proj = self.project(p[2])
                 if p[3] not in cli.load(proj / "project.json")["clips"]:
@@ -307,7 +315,7 @@ class Handler(BaseHTTPRequestHandler):
                         cli.save(f, clip)
                 else:
                     raise ValueError("action must be add, apply, delete or undo")
-                self.send_json(project_data(proj))
+                self.send_json(edited(proj))
             elif len(p) == 4 and p[:2] == ["api", "cuts"]:  # restore a voice cut, add or remove your own, or reset
                 proj = self.project(p[2])
                 if p[3] not in cli.load(proj / "project.json")["clips"]:
@@ -333,7 +341,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         raise ValueError("action must be restore, cut, uncut, keep, unkeep, label or reset")
                     cli.save(f, clip)
-                self.send_json(project_data(proj))
+                self.send_json(edited(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse
                 proj = self.project(p[2])
                 with LOCK:
@@ -366,7 +374,7 @@ class Handler(BaseHTTPRequestHandler):
                     story["created"] = time.time()
                     stories.append(story)
                     cli.save(proj / "project.json", info)
-                self.send_json(project_data(proj))
+                self.send_json(edited(proj))
             elif len(p) == 4 and p[:2] == ["api", "story"]:
                 proj = self.project(p[2])
                 info = cli.load(proj / "project.json")
@@ -380,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
                         info = cli.load(proj / "project.json")
                         info["stories"] = [s for s in info["stories"] if s["id"] != story["id"]]
                         cli.save(proj / "project.json", info)
-                    self.send_json(project_data(proj))
+                    self.send_json(edited(proj))
                 else:
                     raise ValueError("action must be export or delete")
             elif len(p) == 3 and p[:2] == ["api", "export"]:
