@@ -11,11 +11,29 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, norm, respell
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
+VOCABULARY = HOME / "vocabulary.txt"
+VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
+# A word on its own helps the transcription hear it, and fixes its spelling and capitals.
+# "what it hears = how it's spelled" fixes a mistake. Changes show as soon as you reload the page.
+
+Linderball
+Linder
+Linderball.com
+Bambu Lab
+NIP
+
+linear ball = Linderball
+linderball dot com = Linderball.com
+bamboo labs = Bambu Lab
+bamboo lab = Bambu Lab
+bamboo left = Bambu Lab
+bamboo = Bambu
+"""
 UNREADABLE = HOME / "unreadable"  # inbox files ffmpeg can't read are set aside here
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
@@ -133,6 +151,17 @@ def probe(path):
     return float(fmt["duration"]), fmt.get("tags", {}).get("creation_time", "")
 
 
+def vocabulary():
+    """The user's words: (how each is written, for Whisper's prompt; the spellings for respell)."""
+    written, spellings = [], {}
+    for line in (VOCABULARY.read_text() if VOCABULARY.exists() else VOCABULARY_START).splitlines():
+        heard, _, right = line.split("#")[0].rpartition("=")
+        if right := right.strip():
+            written += [right] if right not in written else []
+            spellings |= {norm(s): right for s in (heard, right) if norm(s)}
+    return written, spellings
+
+
 def readable(path):
     try:
         return probe(path)[0] > 0
@@ -145,8 +174,8 @@ def transcribe(path):
         import mlx_whisper
     except ImportError:
         sys.exit("mlx-whisper isn't installed. It needs an Apple Silicon Mac: pip install -e .")
-    r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,
-                               initial_prompt=PROMPT, condition_on_previous_text=False)
+    r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,  # the prompt biases it to the user's words
+                               initial_prompt=f"{', '.join(vocabulary()[0])}. {PROMPT}", condition_on_previous_text=False)
     words, noise = [], []
     for s in r["segments"]:
         seg = [{"w": w["word"].strip(), "start": round(w["start"], 2), "end": round(w["end"], 2), "p": round(w["probability"], 2)}

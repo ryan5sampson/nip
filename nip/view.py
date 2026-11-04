@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from nip import brief, cli
-from nip.commands import kept_ranges, tiers, timeline, unmarked
+from nip.commands import kept_ranges, respell, tiers, timeline, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
@@ -62,9 +62,10 @@ def upload(handler, name):
 
 def clips_of(proj):
     info = cli.load(proj / "project.json")
-    out = []
+    out, spellings = [], cli.vocabulary()[1]
     for stem in info["clips"]:
         c = cli.load(proj / f"{stem}.nip.json")
+        c["words"] = respell(c["words"], spellings)  # at read time: saved transcripts stay as Whisper heard them
         e = cli.decisions(c)
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
                     "words": c["words"], "edit": e, "unmarked": unmarked(e), "segments": timeline(e, c["duration"], c["words"]),
@@ -435,6 +436,10 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get("what") == "inbox":
                     cli.INBOX.mkdir(parents=True, exist_ok=True)
                     target = cli.INBOX
+                elif body.get("what") == "vocabulary":
+                    if not cli.VOCABULARY.exists():
+                        cli.VOCABULARY.write_text(cli.VOCABULARY_START)
+                    target = cli.VOCABULARY
                 elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():
                     target = cli.UNREADABLE
                 elif body.get("what") == "exports":

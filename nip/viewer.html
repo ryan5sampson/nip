@@ -271,6 +271,7 @@
     <div id="taglist"></div>
     <div class="spacer"></div>
     <button class="item" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg><span>Add Videos…</span></button>
+    <button class="item" id="vocabulary" title="Names and words the transcript should spell your way. Opens the list in TextEdit."><svg class="i"><use href="#i-text"/></svg><span>Vocabulary…</span></button>
     <div class="inbox" id="inbox"></div>
   </aside>
 
@@ -1215,6 +1216,7 @@ $('#keyshide').onclick = () => showKeys(false);
 $('#keystoggle').onclick = () => showKeys(true);
 
 // ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
+$('#vocabulary').onclick = () => api('/api/open', {what: 'vocabulary'}).catch(e => status(e.message, true));
 $('#addvideos').onclick = () => run($('#addvideos'), 'Pick videos in the Finder window…', async () => {
   const r = await api('/api/add', {});
   status(r.added.length ? `Moved ${plural(r.added.length, 'video')} into the inbox; each appears once it’s transcribed` : 'No videos added');

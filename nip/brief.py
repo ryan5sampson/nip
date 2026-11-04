@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 from nip import cli
-from nip.commands import kept_ranges, timeline
+from nip.commands import kept_ranges, respell, timeline
 
 MODELS = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5"}  # Claude Code alias -> API model id
 BRIEF_AI = ("opus", "medium")  # picking the best lines from a whole transcript is real judgement
@@ -217,6 +217,7 @@ def clip_line(s, e):
 
 
 def notes_prompt(clip, notes):
+    clip = {**clip, "words": respell(clip["words"], cli.vocabulary()[1])}
     e = cli.decisions(clip)
     takes = "\n".join(f'take at={t["at"]} clip="{t.get("name") or ""}" take={t["take"]} {"kept" if t["keep"] else "dropped"} '
                       f'{t["start"]:.2f}-{t["end"]:.2f} ({t["why"]})' for t in e["takes"])

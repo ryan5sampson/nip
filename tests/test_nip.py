@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, silences, timeline, unmarked
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, respell, silences, timeline, unmarked
 
 
 def script(text):
@@ -174,6 +174,22 @@ class Commands(unittest.TestCase):
         # two names side by side stay two clips
         clip["labels"] = [{"start": 10, "end": 20, "text": "a"}, {"start": 20, "end": 30, "text": "b"}]
         self.assertEqual([s["a"] for s in timeline(cli.decisions(clip), 50.0) if not s["gap"]], [0, 10, 20, 30])
+
+    def test_vocabulary_fixes_spellings(self):
+        import nip.cli as cli
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(cli, "VOCABULARY", Path(d) / "v.txt"):
+            self.assertIn("Bambu Lab", cli.vocabulary()[0])  # the starting list, before there's a file
+            cli.VOCABULARY.write_text("# a comment\nLinderball\nLinderball.com\nBambu Lab\nNIP\n\nbamboo lab = Bambu Lab # the printers\nbamboo = Bambu\nlinear ball = Linderball\n")
+            written, spellings = cli.vocabulary()
+        self.assertEqual(written, ["Linderball", "Linderball.com", "Bambu Lab", "NIP", "Bambu"])
+        words = [{"w": w, "start": i, "end": i + 0.5} for i, w in enumerate(
+            "the Linder ball, from linear ball at linderball.com on a bamboo lab. or Bamboo printer nip, cut".split())]
+        fixed = respell(words, spellings)
+        self.assertEqual(" ".join(w["w"] for w in fixed),
+                         "the Linderball, from Linderball at Linderball.com on a Bambu Lab. or Bambu printer NIP, cut")
+        self.assertEqual((fixed[1]["start"], fixed[1]["end"]), (1, 2.5))  # one word now spans both
+        self.assertEqual(respell(fixed, spellings), fixed)  # already right stays right
+        self.assertEqual(build_edit(fixed, 20)["cuts"], build_edit(words, 20)["cuts"])  # voice commands still work
 
     def test_command_words_are_cut(self):
         words, dur = script("/ Take one. / hello")

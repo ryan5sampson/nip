@@ -47,6 +47,24 @@ def drop_loops(words):
     return [w for k, w in enumerate(words) if k not in gone], [w for k, w in enumerate(words) if k in gone]
 
 
+def respell(words, spellings):
+    """Put words in the user's spelling. spellings maps a phrase, lowercased with spaces and punctuation gone, to how
+    it's written; a phrase said as several words becomes one word spanning them, so "Linder ball" is "Linderball"."""
+    out, i = [], 0
+    while i < len(words):
+        for n in range(min(4, len(words) - i), 0, -1):  # longest first: "bamboo lab" before "bamboo"
+            right = spellings.get("".join(norm(w["w"]) for w in words[i:i + n]))
+            if right:
+                last = words[i + n - 1]
+                out.append({**words[i], "w": right + re.search(r"\W*$", last["w"])[0], "end": last["end"]})
+                i += n
+                break
+        else:
+            out.append(words[i])
+            i += 1
+    return out
+
+
 def number(tok):
     return int(tok) if tok.isdigit() else NUMBERS.get(tok)
 

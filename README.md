@@ -48,6 +48,8 @@ Opening it starts Footage Flow in the background, restarting it if it's already 
 
 The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, `nip retranscribe` (transcribe a project again; keeps a `.bak` of each old transcript), and `nip export` (add `--combined` for one joined video too).
 
+**Your words.** **Vocabulary…** in the sidebar opens `~/NIP/vocabulary.txt`: one word or name per line, or `what it hears = how it's spelled` for a mistake (`bamboo lab = Bambu Lab`). The words bias Whisper on new footage, and the spellings apply to every transcript, old ones too, as soon as you reload; saved transcripts stay as Whisper heard them.
+
 **Silence that isn't speech.** Over silent or noisy footage, Whisper invents words: loops like "old old old…", stray "Thank you.", or random foreign words. Footage Flow drops any stretch Whisper wasn't confident about (real speech averages 0.85+ word confidence, made-up words under 0.1) and any phrase repeated 3+ times in a row (a single word 5+), keeping them aside as `noise` in the clip's `.nip.json`. Voice commands are never dropped, and saying something twice, like a retake, stays. Transcripts made before this get the loop check with `nip reparse`; `nip retranscribe` gives them the confidence check too.
 
 Exports land in `~/NIP/exports/<project>/`. Originals stay untouched in `~/NIP/library/<project>/raw/`.
