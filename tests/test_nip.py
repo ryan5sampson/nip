@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges, unmarked
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, unmarked
 
 
 def script(text):
@@ -136,6 +136,23 @@ class Commands(unittest.TestCase):
         left = unmarked(apply_cut_edits(e, [], [], [{"start": 0.0, "end": words[1]["end"]}]))
         said = [[w["w"] for w in words if a <= w["start"] and w["end"] <= b] for a, b in left]
         self.assertEqual([x for x in said if x], [["good", "stuff"]])  # the rest is the test's silent pauses
+
+    def test_made_up_words_from_silence_are_caught(self):
+        seg = lambda text, p: [{"w": w, "start": 0, "end": 0, "p": p} for w in text.split()]
+        self.assertTrue(made_up(seg("Wohnung take 30 plano runner", 0.0)))  # what Whisper said over silent B-roll
+        self.assertTrue(made_up(seg("Thank you.", 0.52)))  # a stock phrase, said unclearly
+        self.assertFalse(made_up(seg("Thank you.", 0.95)))  # said clearly, it stays
+        self.assertFalse(made_up(seg("Hey, my name is Ryan.", 0.87)))
+        self.assertFalse(made_up(seg("NIP cut", 0.2)))  # voice commands always stay
+        words = lambda text: [{"w": w, "start": i, "end": i + 0.5} for i, w in enumerate(text.split())]
+        said = lambda ws: " ".join(w["w"] for w in ws)
+        kept, loops = drop_loops(words("you can see the " + "old " * 12 + "system"))
+        self.assertEqual((said(kept), len(loops)), ("you can see the system", 12))
+        kept, _ = drop_loops(words("in the room. " + "So, you can get the rest. " * 4 + "end"))
+        self.assertEqual(said(kept), "in the room. end")
+        retake = "In here I always have a... In here I always have a... bamboo"
+        self.assertEqual(said(drop_loops(words(retake))[0]), retake)  # said twice stays
+        self.assertEqual(said(drop_loops(words("no no no"))[0]), "no no no")
 
     def test_command_words_are_cut(self):
         words, dur = script("/ Take one. / hello")
@@ -457,7 +474,7 @@ class Export(unittest.TestCase):
                                    check=True)
                 (cli.INBOX / "airdrop.mov").write_bytes(b"bplist00")  # a placeholder, not a video: set aside, not blocking
                 words, _ = script("NIP this is demo day / Take one / bad / Take two / good")
-                with mock.patch.object(cli, "transcribe", return_value=words), \
+                with mock.patch.object(cli, "transcribe", return_value=(words, [])), \
                         mock.patch.object(cli, "settled", return_value=True):
                     cli.ingest()
                 projs = sorted(cli.LIBRARY.iterdir())  # each loose video is its own project

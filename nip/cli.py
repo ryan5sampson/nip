@@ -11,7 +11,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, kept_ranges
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
@@ -147,8 +147,13 @@ def transcribe(path):
         sys.exit("mlx-whisper isn't installed. It needs an Apple Silicon Mac: pip install -e .")
     r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,
                                initial_prompt=PROMPT, condition_on_previous_text=False)
-    return [{"w": w["word"].strip(), "start": round(w["start"], 2), "end": round(w["end"], 2)}
-            for s in r["segments"] for w in s.get("words", [])]
+    words, noise = [], []
+    for s in r["segments"]:
+        seg = [{"w": w["word"].strip(), "start": round(w["start"], 2), "end": round(w["end"], 2), "p": round(w["probability"], 2)}
+               for w in s.get("words", [])]
+        (noise if made_up(seg) else words).extend(seg)
+    words, loops = drop_loops(words)
+    return words, sorted(noise + loops, key=lambda w: w["start"])  # (speech, what Whisper made up from silence or noise)
 
 
 def settled(p):
@@ -201,7 +206,8 @@ def process(proj, vids):
         clips.append((created or dest.name, dest, duration))
     for created, dest, duration in sorted(clips):  # filming order
         print(f"transcribing {dest.name} ({duration / 60:.1f} min)")
-        clip = {"source": dest.name, "duration": duration, "created": created, "words": transcribe(dest)}
+        words, noise = transcribe(dest)
+        clip = {"source": dest.name, "duration": duration, "created": created, "words": words, "noise": noise}
         clip["edit"] = build_edit(clip["words"], duration)
         save(proj / f"{dest.stem}.nip.json", clip)
         info["clips"].append(dest.stem)
@@ -281,12 +287,26 @@ def reparse(proj):
     for stem in info["clips"]:
         p = proj / f"{stem}.nip.json"
         clip = load(p)
+        clip["words"], loops = drop_loops(clip["words"])
+        clip["noise"] = sorted(clip.get("noise", []) + loops, key=lambda w: w["start"])
         clip["edit"] = build_edit(clip["words"], clip["duration"])
         save(p, clip)
         info["description"] = info["description"] or clip["edit"]["description"]
         info["tags"] += clip["edit"]["tags"]
     save(proj / "project.json", info)
     report(proj)
+
+
+def retranscribe(proj):
+    """Transcribe a project's videos again (with the made-up-words check) and redo the voice edit; hand edits stay."""
+    for stem in load(proj / "project.json")["clips"]:
+        p = proj / f"{stem}.nip.json"
+        clip = load(p)
+        shutil.copy(p, p.with_suffix(".json.bak"))  # the old transcript, in case
+        print(f"transcribing {clip['source']}")
+        clip["words"], clip["noise"] = transcribe(proj / "raw" / clip["source"])
+        save(p, clip)
+    reparse(proj)
 
 
 def mmss(t):
@@ -418,7 +438,7 @@ def main():
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
     sub.add_parser("view", help="open Footage Flow in your browser and keep processing the inbox (the default)")
-    for c in ("report", "reparse", "export"):
+    for c in ("report", "reparse", "retranscribe", "export"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")
         if c == "export":
@@ -444,7 +464,7 @@ def main():
                 print(f"{p.name:50} {len(i['clips'])} clips  {', '.join(i['tags'])}")
     else:
         proj = find(a.project)
-        {"report": report, "reparse": reparse}.get(a.cmd, lambda p: export(p, a.combined))(proj)
+        {"report": report, "reparse": reparse, "retranscribe": retranscribe}.get(a.cmd, lambda p: export(p, a.combined))(proj)
 
 
 if __name__ == "__main__":

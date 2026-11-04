@@ -46,13 +46,15 @@ Opening it starts Footage Flow in the background, restarting it if it's already 
 
 6. **Mark Complete, then Export.** When you've gone through every clip, **Mark Complete** moves the project to Processed (click it again to reopen). **Export** makes the kept takes into numbered clips, or an edit by NIP into one video, and moves the project to Exported. *Show exports* opens the folder.
 
-The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, and `nip export` (add `--combined` for one joined video too).
+The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, `nip retranscribe` (transcribe a project again; keeps a `.bak` of each old transcript), and `nip export` (add `--combined` for one joined video too).
+
+**Silence that isn't speech.** Over silent or noisy footage, Whisper invents words: loops like "old old old…", stray "Thank you.", or random foreign words. Footage Flow drops any stretch Whisper wasn't confident about (real speech averages 0.85+ word confidence, made-up words under 0.1) and any phrase repeated 3+ times in a row (a single word 5+), keeping them aside as `noise` in the clip's `.nip.json`. Voice commands are never dropped, and saying something twice, like a retake, stays. Transcripts made before this get the loop check with `nip reparse`; `nip retranscribe` gives them the confidence check too.
 
 Exports land in `~/NIP/exports/<project>/`. Originals stay untouched in `~/NIP/library/<project>/raw/`.
 
 Exports are sized for Instagram Reels, TikTok and YouTube Shorts: 1080×1920 for vertical footage (the short side is scaled to 1080, never up), the original frame rate, and HEVC at 16 Mbps with iPhone HDR kept. That's an editing copy for CapCut, about a fifth the size of iPhone 4K. In CapCut, export at 1080p with the source frame rate. Each platform re-encodes what you upload.
 
-`report`, `reparse`, and `export` act on the newest project by default. Pass part of a folder name to pick another, for example `nip export linderball`.
+`report`, `reparse`, `retranscribe` and `export` act on the newest project by default. Pass part of a folder name to pick another, for example `nip export linderball`.
 
 To use a Google Drive folder as the inbox so you can upload from your phone, set `NIP_INBOX`. Footage Flow moves files out of the inbox, so they're removed from Drive after ingest.
 

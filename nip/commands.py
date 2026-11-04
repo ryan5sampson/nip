@@ -16,6 +16,37 @@ def norm(w):
     return re.sub(r"[^a-z0-9]", "", w.lower())
 
 
+STOCK = {"thank you", "thanks for watching", "thank you for watching", "thank you so much for watching",
+         "you", "bye", "please subscribe", "subscribe"}  # what Whisper says over silence
+
+
+def made_up(segment):
+    """True if one Whisper segment looks invented from silence or noise: real speech averages 0.85+ word confidence,
+    made-up words under 0.1, and stock phrases like "Thank you." come out around 0.5. Voice commands always stay."""
+    if not segment or any(norm(w["w"]) in WAKE for w in segment):
+        return False
+    p = sum(w.get("p", 1.0) for w in segment) / len(segment)
+    return p < 0.45 or (" ".join(norm(w["w"]) for w in segment) in STOCK and p < 0.8)
+
+
+def drop_loops(words):
+    """Split words into (kept, loops): a phrase of up to 6 words said 3+ times in a row (a single word 5+ times),
+    the loop Whisper falls into over silence. Saying something twice, like a retake, stays."""
+    toks = [norm(w["w"]) for w in words]
+    gone, i = set(), 0
+    while i < len(toks):
+        run = 0
+        for n in range(1, 7):
+            reps = 1
+            while toks[i + reps * n:i + (reps + 1) * n] == toks[i:i + n]:
+                reps += 1
+            if any(toks[i:i + n]) and reps >= (5 if n == 1 else 3):
+                run = max(run, reps * n)
+        gone.update(range(i, i + run))
+        i += run or 1
+    return [w for k, w in enumerate(words) if k not in gone], [w for k, w in enumerate(words) if k in gone]
+
+
 def number(tok):
     return int(tok) if tok.isdigit() else NUMBERS.get(tok)
 
