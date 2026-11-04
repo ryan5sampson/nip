@@ -377,7 +377,11 @@ class Viewer(unittest.TestCase):
                 self.assertEqual((cli.decisions(clip)["cuts"], clip.get("overrides")), (clip["edit"]["cuts"], None))
                 self.assertEqual(cli.decisions(clip)["splits"], [])
                 # describe a clip; Reset leaves descriptions alone; the library card counts the tiers
-                post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "the hello"})
+                keeps = lambda d: [k for k in d["clips"][0]["edit"]["keeps"] if k["why"] == "kept by you"]
+                self.assertEqual(keeps(json.loads(post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": ""}).read())), [])
+                named = json.loads(post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "the hello"}).read())
+                self.assertEqual(keeps(named), [{"start": 1.3, "end": 4.4, "why": "kept by you"}])  # naming a clip keeps it, once
+                self.assertEqual(len(keeps(json.loads(post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "the hello"}).read()))), 1)
                 with self.assertRaises(urllib.error.HTTPError):
                     post("/api/cuts/p/v", {"action": "label", "start": 1.3, "end": 4.4, "text": "x" * 201})
                 post("/api/cuts/p/v", {"action": "reset"})

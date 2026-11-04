@@ -338,6 +338,8 @@ class Handler(BaseHTTPRequestHandler):
                         clip["my_splits"] = [t for t in clip.get("my_splits", []) if not isinstance(start, (int, float)) or abs(t - start) >= 0.01]
                     elif act == "label":
                         cli.set_label(clip, start, body.get("end"), body.get("text"))
+                        if body["text"].strip() and cli.kept_ranges({"start": start, "end": body["end"]}, cli.decisions(clip)["keeps"]):
+                            cli.add_cut(clip, start, body["end"], "my_keeps")  # a clip worth naming is one to keep
                     elif act in ("uncut", "unkeep"):
                         k = "my_cuts" if act == "uncut" else "my_keeps"
                         clip[k] = [c for c in clip.get(k, []) if not isinstance(start, (int, float)) or abs(c["start"] - start) >= 0.01]

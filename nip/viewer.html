@@ -297,7 +297,7 @@
       <div class="timeline-area">
         <div id="timeline" aria-label="Edited timeline: kept footage, with cut sections folded into small bars"></div>
         <form class="notebar" id="noteform" autocomplete="off">
-          <span class="at num" id="noteat"></span><kbd title="Press N to type a note">N</kbd>
+          <span class="at num" id="noteat"></span><kbd title="Press Shift+N to type a note">⇧N</kbd>
           <input type="text" id="notein" placeholder="Note an edit here, e.g. “cut the stumble”, then Enter" aria-label="Edit note at the playhead">
           <button type="button" class="icon-btn" id="mic" title="Speak the note" hidden><svg class="i"><use href="#i-mic"/></svg></button>
           <button type="submit" class="btn">Add<kbd>↵</kbd></button>
@@ -375,10 +375,11 @@
   <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
     <dt><kbd>K</kbd></dt><dd>Keep or drop that take</dd></dl>
   <h4>Type</h4>
-  <dl><dt><kbd>N</kbd></dt><dd>Note an edit at the playhead for NIP; <kbd>↵</kbd> adds it, <kbd>Esc</kbd> leaves</dd>
+  <dl><dt><kbd>N</kbd></dt><dd>Name the clip under the playhead; <kbd>↵</kbd> saves the name and marks it keep, <kbd>Esc</kbd> closes</dd>
+    <dt><kbd>⇧</kbd><kbd>N</kbd></dt><dd>Note an edit at the playhead for NIP; <kbd>↵</kbd> adds it, <kbd>Esc</kbd> leaves</dd>
     <dt><kbd>E</kbd></dt><dd>Describe a new edit for NIP to make; <kbd>⌘</kbd><kbd>↵</kbd> creates it</dd></dl>
   <h4>Mouse</h4>
-  <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to describe, keep or cut it; click a red cut to open it.</dd>
+  <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it.</dd>
     <dt>Text tab</dt><dd>Click a word to jump to it</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
@@ -735,7 +736,7 @@ function drawSeg(s) {  // a clicked clip: describe it, cut it, keep it
       ${!s.keep ? '<button class="btn" data-act="keep">Keep</button>' : myKeep(s) ? '<button class="btn" data-act="unkeep">Unmark</button>' : ''}
       <button class="btn" data-act="cut">Cut</button><button class="btn" data-act="fold">Close</button></div>
     <form class="why-row" id="labelform"><input type="text" id="labelin" maxlength="200" aria-label="Clip description"
-      placeholder="Describe this clip, e.g. curve throw in slow motion" value="${esc(labelOf(s)?.text || '')}"><button class="btn">Save</button></form>`;
+      placeholder="Name this clip, e.g. curve throw in slow motion; naming it keeps it" value="${esc(labelOf(s)?.text || '')}"><button class="btn">Save<kbd>↵</kbd></button></form>`;
 }
 function drawGap() {
   const g = segs.find(s => s.gap && s.a === openGap), sel = segs.find(s => !s.gap && s.a === openSeg);
@@ -898,9 +899,19 @@ async function restoreAll(rows) {  // one request at a time: each answer is the 
 }
 $('#gapinfo').onsubmit = e => {
   e.preventDefault();
-  const sel = segs.find(s => !s.gap && s.a === openSeg);
-  if (sel) cutAction('label', sel.a, sel.b, $('#labelin').value).then(ok => ok && status($('#labelin').value.trim() ? 'Described' : 'Description removed'));
+  const sel = segs.find(s => !s.gap && s.a === openSeg), text = $('#labelin').value.trim();
+  if (sel) cutAction('label', sel.a, sel.b, text).then(ok => ok && status(text ? `Named${sel.keep ? '' : ' and kept'}` : 'Name removed'));
 };
+$('#gapinfo').onkeydown = e => { if (e.key === 'Escape' && e.target.id === 'labelin') { openSeg = null; show(data); } };
+function nameClip() {  // N: name the clip under the playhead; Enter saves it (and keeps it)
+  const s = segs.find(s => !s.gap && s.a <= video.currentTime && video.currentTime < s.b);
+  if (!s) return status('Move the playhead onto a clip that isn’t cut', true);
+  video.pause();
+  openSeg = s.a; openGap = null;
+  show(data);
+  $('#labelin').focus();
+  $('#labelin').select();
+}
 $('#play').onclick = togglePlay;
 function split() {  // S: split the footage at the playhead, or remove your split there
   const t = video.currentTime, near = clip().edit.splits.find(s => Math.abs(s.t - t) < 0.3);
@@ -1040,7 +1051,8 @@ document.addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'c' || e.key === 'g') mark(e.key === 'c' ? 'cut' : 'keep');
   else if (e.key === 'C' || e.key === 'G') markStretch(e.key === 'C' ? 'cut' : 'keep');
-  else if (e.key === 'n') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
+  else if (e.key === 'n') { e.preventDefault(); nameClip(); }
+  else if (e.key === 'N') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
   else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
