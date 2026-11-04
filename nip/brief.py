@@ -177,7 +177,7 @@ def ask(brief, clips, client=None):
 
 NOTES_SYSTEM = """You are NIP, the editing assistant in Footage Flow, a tool that prepares raw footage for the final edit. You apply a video creator's edit notes to their footage. You don't change the video directly: you return operations, and Footage Flow checks and applies them.
 
-The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes. Each note is pinned to the moment in the source video where the creator was when writing it. It usually refers to what was said or shown around that moment, most often the few seconds just before it.
+The footage already has a first-pass edit from the creator's voice commands: takes (kept or dropped) and cuts. You get those, the transcript with each word's start and end time (for long videos, only the stretch around each note), and the notes. Most notes are pinned to the moment in the source video where the creator was when writing it, and usually refer to what was said or shown around that moment, most often the few seconds just before it. A note marked general is about the whole video.
 
 Operations, with times in seconds of the source video:
 - cut (start, end): remove footage. When cutting speech, start at the first removed word's start and end at the next kept word's start, so no word is clipped.
@@ -212,10 +212,10 @@ def notes_prompt(clip, notes):
     takes = "\n".join(f'take at={t["at"]} clip="{t.get("name") or ""}" take={t["take"]} {"kept" if t["keep"] else "dropped"} '
                       f'{t["start"]:.2f}-{t["end"]:.2f} ({t["why"]})' for t in e["takes"])
     cuts = "\n".join(f'cut start={c["start"]:.2f} end={c["end"]:.2f} why={c["why"]}' for c in e["cuts"])
-    near = [w for w in clip["words"] if len(clip["words"]) <= NOTE_ALL_WORDS
-            or any(abs(w["start"] - n["t"]) <= NOTE_WINDOW for n in notes)]  # long videos: only around the notes
+    near = [w for w in clip["words"] if len(clip["words"]) <= NOTE_ALL_WORDS or any(n.get("t") is None for n in notes)
+            or any(abs(w["start"] - n["t"]) <= NOTE_WINDOW for n in notes)]  # long videos: only around the notes, unless one is general
     words = "\n".join(f'{w["start"]:.2f}-{w["end"]:.2f} {w["w"]}' for w in near)
-    ns = "\n".join(f'[{n["id"]}] at {n["t"]:.2f}s: {n["text"]}' for n in notes)
+    ns = "\n".join(f'[{n["id"]}] {"general" if n.get("t") is None else f"at {n['t']:.2f}s"}: {n["text"]}' for n in notes)
     return (f'<video duration="{clip["duration"]:.2f}">\n<takes>\n{takes}\n</takes>\n<cuts>\n{cuts}\n</cuts>\n'
             f'<transcript>\n{words}\n</transcript>\n</video>\n\n<notes>\n{ns}\n</notes>')
 

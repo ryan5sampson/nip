@@ -364,6 +364,12 @@ class Viewer(unittest.TestCase):
                 data = json.loads(post("/api/notes/p/v", {"action": "undo"}).read())
                 self.assertEqual(data["clips"][0]["edit_notes"][0]["status"], "pending")
                 self.assertNotIn({"start": 1.0, "end": 1.2, "why": "cut by you"}, data["clips"][0]["edit"]["cuts"])
+                # a note with no time is about the whole video; NIP sees it marked general, with every word
+                data = json.loads(post("/api/notes/p/v", {"action": "add", "t": None, "text": "tighten it"}).read())
+                general = data["clips"][0]["edit_notes"][-1]
+                self.assertEqual((general["t"], general["status"]), (None, "pending"))
+                self.assertIn(f'[{general["id"]}] general: tighten it', view.brief.notes_prompt(cli.load(lib / "p" / "v.nip.json"), [general]))
+                post("/api/notes/p/v", {"action": "delete", "id": general["id"]})
                 # undo and redo step through this video's hand edits
                 mine = lambda d: ([c["start"] for c in d["clips"][0]["edit"]["cuts"] if c["why"] == "cut by you"],
                                   [k["start"] for k in d["clips"][0]["edit"]["keeps"] if k["why"] == "kept by you"])

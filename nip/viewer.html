@@ -95,15 +95,47 @@
   .empty b { font-size: 17px; font-weight: 600; color: var(--secondary); }
 
   /* project */
-  #project { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
-  .viewer { display: flex; flex-direction: column; min-height: 0; background: #000; }
-  .viewer video { flex: 1 1 0; height: 0; min-height: 0; width: 100%; object-fit: contain; background: #000; display: block; }
+  /* the editor: transcript | vertical video | NIP, over an editing deck (controls, timeline, the open clip) */
+  body.editing .sidebar { display: none; }
+  body.editing .app { grid-template-columns: minmax(0, 1fr); }
+  #project { display: grid; grid-template-columns: minmax(220px, 1fr) min(calc((100vh - 210px) * 9 / 16), 44vw) minmax(290px, 380px); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .viewer { grid-column: 2; grid-row: 1; min-height: 0; background: #000; }
+  .viewer video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  .textcol { grid-column: 1; grid-row: 1; min-width: 0; overflow-y: auto; padding: 12px 16px 24px; background: var(--window); }
+  .nip { grid-column: 3; grid-row: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
+  #nipform { padding: 12px 12px 10px; border-bottom: .5px solid var(--separator); display: flex; flex-direction: column; gap: 8px; }
+  .niphead { display: flex; align-items: baseline; gap: 8px; }
+  .niphead b { font-size: 15px; font-weight: 700; }
+  .niphead .hint { margin: 0; }
+  #nipmode button { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+  #nipmode kbd { margin-left: 3px; }
+  #nipin { min-height: 64px; }
+  #nipform .actions-line { margin: 0; align-items: center; }
+  #nipform .check { margin: 0; }
+  .niplist { flex: 1; overflow-y: auto; padding: 10px 12px 80px; }
+  .niplist h4 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 16px 2px 6px; }
+  #notebar { margin: 0 0 8px; }
+  .deck { grid-column: 1 / -1; grid-row: 2; min-width: 0; border-top: .5px solid var(--separator); background: var(--window); }
+  .deck #timeline { margin: 8px 12px; }
+  .deck #gapinfo { margin: 0 12px 10px; }
+  /* transcript: one paragraph per clip, coloured like the timeline */
+  #words .vid { font-size: 11px; font-weight: 700; color: var(--secondary); margin: 14px 0 6px; }
+  #words .vid:first-child { margin-top: 0; }
+  #words .para { margin: 0 0 8px; padding: 4px 10px 6px; border-left: 3px solid var(--tertiary); border-radius: 3px; cursor: text; }
+  #words .para.keep { border-left-color: var(--green); }
+  #words .para.sel { background: var(--fill); }
+  #words .para.cut { border-left-color: color-mix(in srgb, var(--red) 60%, transparent); font-size: 12px; line-height: 1.5; }
+  #words .para.cut span[data-t] { color: var(--tertiary); text-decoration: line-through; }
+  #words .tag { display: block; font-size: 10px; font-weight: 600; color: var(--secondary); line-height: 1.6; }
+  #words .para.keep .tag { color: var(--green); }
+  #words .para.cut .tag { color: var(--red); }
+  #takesbox { margin-bottom: 12px; }
+  #takesbox summary { font-size: 11px; font-weight: 600; color: var(--secondary); cursor: pointer; margin-bottom: 6px; }
   .transport { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1c1c1e; color: rgba(255, 255, 255, .85); }
   .transport .icon-btn { color: rgba(255, 255, 255, .7); }
   .transport .icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .12); color: #fff; }
   .transport .tc { font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; color: rgba(255, 255, 255, .85); margin: 0 6px; }
   .transport small { color: rgba(255, 255, 255, .45); font-size: 11px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .timeline-area { grid-column: 1; min-width: 0; padding: 10px 12px 12px; border-top: .5px solid var(--separator); background: var(--window); }
   #timeline { position: relative; display: flex; gap: 2px; height: 46px; padding: 9px 4px; background: var(--track); border-radius: 7px; box-shadow: inset 0 0 0 .5px var(--separator); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
   #timeline .vstart { margin-left: 10px; }  /* where the next video of a bundle starts */
   .tk, .gap { position: relative; border-radius: 5px; font-size: 11px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
@@ -137,9 +169,6 @@
   .nt { top: 3px; width: 7px; height: 7px; border-radius: 2px; background: var(--purple); transform: translateX(-3px) rotate(45deg); }
   #playhead { position: absolute; top: 0; bottom: 0; left: 0; width: 1.5px; background: var(--red); pointer-events: none; }
   #playhead::before { content: ""; position: absolute; top: 0; left: -4px; border: 5px solid transparent; border-top-color: var(--red); }
-  .notebar { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-  .notebar .at { color: var(--secondary); font-size: 11px; min-width: 70px; }
-  .notebar input { flex: 1; min-width: 0; }
   #mic.live { color: var(--red); background: rgba(255, 59, 48, .14); }
   .en { top: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .25); transform: translateX(-3px); }
   .gap .en { top: 2px; }
@@ -149,32 +178,25 @@
   @media (prefers-color-scheme: dark) { .badge.applied { color: #30d158; } .badge.failed { color: var(--orange); } }
   .seek { cursor: pointer; }
   .seek:hover { color: var(--accent); }
-  #gapinfo { margin-top: 8px; padding: 4px 10px; border-radius: 8px; background: var(--fill); }
+  #gapinfo { padding: 4px 10px; border-radius: 8px; background: var(--fill); }
   #gapinfo .head, #gapinfo .why-row { display: flex; gap: 8px; align-items: center; padding: 5px 0; }
   #gapinfo .head b { flex: 1; font-weight: 600; }
   #gapinfo .why-row { border-top: .5px solid var(--separator); }
   #gapinfo .why-row span { flex: 1; min-width: 0; }
   .transport .tc-total { color: rgba(255, 255, 255, .45); font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; margin-left: -4px; }
   kbd { display: inline-block; margin-left: 5px; padding: 2px 4px; border-radius: 4px; font: 600 10px/1 -apple-system, sans-serif; color: inherit; opacity: .8; background: color-mix(in srgb, currentColor 14%, transparent); box-shadow: inset 0 0 0 .5px color-mix(in srgb, currentColor 35%, transparent); }
-  .notebar > kbd { margin: 0; }
-  #keys { position: fixed; right: 16px; bottom: 16px; z-index: 50; width: 300px; max-height: 70vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--window); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); font-size: 12px; }
+  #keys { position: fixed; left: 12px; top: 64px; max-height: calc(100vh - 280px) !important;  /* over the transcript: NIP owns the right, the timeline the bottom */ z-index: 50; width: 300px; max-height: 70vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--window); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); font-size: 12px; }
   #keys h4 { margin: 10px 0 4px; font-size: 11px; font-weight: 600; color: var(--secondary); }
   #keys dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin: 0; }
   #keys dt { text-align: right; white-space: nowrap; }
   #keys dt kbd { margin: 0 0 0 2px; }
   #keys dd { margin: 0; color: var(--secondary); line-height: 1.35; }
-  #keystoggle { position: fixed; right: 16px; bottom: 16px; z-index: 50; box-shadow: 0 2px 10px rgba(0, 0, 0, .2), 0 0 0 .5px var(--separator); }
   #cutbtn.armed { color: var(--red); background: rgba(255, 59, 48, .15); }
   #keepbtn.armed { color: var(--green); background: rgba(52, 199, 89, .15); }
   dialog { border: none; border-radius: 12px; padding: 18px 20px 14px; width: 340px; background: var(--window); color: var(--label); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); }
   dialog::backdrop { background: rgba(0, 0, 0, .25); }
   dialog p { color: var(--secondary); margin: 6px 0 10px; line-height: 1.4; }
   dialog .actions-line { justify-content: flex-end; }
-  .inspector { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
-  .inspector .seg { margin: 10px 12px; }
-  .pane { flex: 1; overflow-y: auto; padding: 0 12px 16px; }
-  .pane h4 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 14px 2px 6px; }
-  .pane h4:first-child { margin-top: 4px; }
   .group { border-radius: 8px; background: var(--fill); }
   .group > * + * { border-top: .5px solid var(--separator); }
   .row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; }
@@ -188,10 +210,6 @@
   .row .acts { display: flex; gap: 1px; margin-top: 2px; }
   .row .title-line { display: flex; gap: 8px; align-items: baseline; }
   .row .title-line b { flex: 1; font-weight: 500; }
-  .marker { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; cursor: default; }
-  .marker:hover { background: var(--fill); }
-  .marker i { width: 8px; height: 8px; border-radius: 2px; flex: none; transform: translateY(-1px); }
-  .marker .num { color: var(--secondary); font-size: 12px; min-width: 42px; }
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   .field label { font-size: 11px; color: var(--secondary); }
   .check { display: flex; gap: 6px; align-items: center; margin: 4px 2px 10px; }
@@ -209,13 +227,6 @@
   #status.show { opacity: 1; transform: translate(-50%, 0); }
   #status.err { background: rgba(160, 30, 26, .92); }
 
-  @media (max-width: 1080px) {
-    #project { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; overflow-y: auto; }  /* minmax: a long timeline scrolls inside, not the page */
-    .viewer { min-height: auto; }  /* stacked: the video and its controls keep their height and the page scrolls */
-    .viewer video { height: 52vh; flex: none; }
-    .inspector { grid-column: 1; grid-row: 3; border-left: none; border-top: .5px solid var(--separator); }
-    .pane { overflow: visible; }
-  }
   @media (max-width: 720px) {
     .app { grid-template-columns: 1fr; }
     .sidebar { display: none; }
@@ -268,6 +279,7 @@
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
+        <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
         <button class="icon-btn" id="reveal" title="Show Exports in Finder"><svg class="i"><use href="#i-folder"/></svg></button>
         <span class="tb-sep"></span>
         <button class="btn" id="startproc" title="Move it to Processing" style="margin-right:6px" hidden><svg class="i"><use href="#i-film"/></svg>Start Processing</button>
@@ -280,8 +292,39 @@
     <div id="library" hidden><div class="grid" id="cards"></div></div>
 
     <div id="project" hidden>
-      <div class="viewer">
-        <video id="video" playsinline preload="metadata"></video>
+      <section class="textcol" aria-label="Transcript">
+        <details id="takesbox" hidden><summary>Takes <small id="takecount" class="num"></small></summary>
+          <div class="group" id="takes"></div>
+          <p class="hint">I and O set the in and out of the take at the playhead · K keeps or drops it</p>
+        </details>
+        <div id="words"></div>
+      </section>
+      <div class="viewer"><video id="video" playsinline preload="metadata"></video></div>
+      <aside class="nip" aria-label="NIP">
+        <form id="nipform" autocomplete="off">
+          <div class="niphead"><b>NIP</b><span class="hint" id="claudehint"></span></div>
+          <div class="seg" id="nipmode">
+            <button type="button" data-mode="at" class="on" title="A note about this moment (E)">At <span id="nipat" class="num">0:00</span> <kbd>E</kbd></button>
+            <button type="button" data-mode="all" title="A note about the whole video (Shift+E)">Whole video <kbd>⇧E</kbd></button>
+            <button type="button" data-mode="edit" title="Describe a new edit for NIP to build from the transcript">New edit</button>
+          </div>
+          <textarea id="nipin" rows="3" aria-label="Message to NIP"></textarea>
+          <div class="actions-line">
+            <button type="button" class="icon-btn" id="mic" title="Speak it" hidden><svg class="i"><use href="#i-mic"/></svg></button>
+            <label class="check" id="instantwrap" title="Each note becomes its own request to NIP. Applying them together is faster overall and uses less of your plan."><input type="checkbox" id="instant"> Apply now</label>
+            <span class="grow"></span>
+            <button class="btn default" id="nipsend">Add Note<kbd>↵</kbd></button>
+          </div>
+        </form>
+        <div class="niplist">
+          <div class="actions-line" id="notebar"><button class="btn default" id="applynotes">Apply Notes</button><button class="btn" id="undonotes" hidden>Undo Last Apply</button></div>
+          <div class="group" id="editnotes"></div>
+          <h4>Edits</h4>
+          <div class="group" id="stories"></div>
+          <p class="hint">NIP works from the transcript and your clip names: it picks and orders lines and clips, it doesn't watch the video. NIP runs on Claude.</p>
+        </div>
+      </aside>
+      <div class="deck">
         <div class="transport">
           <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg><kbd>Space</kbd></button>
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
@@ -291,16 +334,9 @@
           <button class="icon-btn" id="undobtn" title="Undo (⌘Z)" aria-label="Undo"><svg class="i"><use href="#i-undo"/></svg><kbd>⌘Z</kbd></button>
           <button class="icon-btn" id="redobtn" title="Redo (⇧⌘Z)" aria-label="Redo"><svg class="i" style="transform:scaleX(-1)"><use href="#i-undo"/></svg><kbd>⇧⌘Z</kbd></button>
           <small id="meta" class="num"></small>
+          <button class="icon-btn" id="keystoggle" hidden title="Show keyboard shortcuts (?)">Shortcuts<kbd>?</kbd></button>
         </div>
-      </div>
-      <div class="timeline-area">
         <div id="timeline" aria-label="Edited timeline: kept footage, with cut sections folded into small bars"></div>
-        <form class="notebar" id="noteform" autocomplete="off">
-          <span class="at num" id="noteat"></span><kbd title="Press M to type a note">M</kbd>
-          <input type="text" id="notein" placeholder="Note an edit here, e.g. “cut the stumble”, then Enter" aria-label="Edit note at the playhead">
-          <button type="button" class="icon-btn" id="mic" title="Speak the note" hidden><svg class="i"><use href="#i-mic"/></svg></button>
-          <button type="submit" class="btn">Add<kbd>↵</kbd></button>
-        </form>
         <div id="gapinfo" hidden></div>
       </div>
       <dialog id="settle"><form method="dialog">
@@ -309,55 +345,10 @@
         <p>Cut it or keep it first? You can change it afterwards.</p>
         <div class="actions-line"><button class="btn" value="">Cancel</button><button class="btn" value="cut">Cut Unmarked</button><button class="btn default" value="keep" autofocus>Keep Unmarked</button></div>
       </form></dialog>
-      <aside class="inspector" aria-label="Inspector">
-        <div class="seg" role="tablist">
-          <button data-tab="takes" class="on">Takes</button>
-          <button data-tab="notes">Notes</button>
-          <button data-tab="text">Text</button>
-          <button data-tab="claude" title="Write a new NIP edit (E)">NIP <kbd>E</kbd></button>
-          <button data-tab="info">Info</button>
-        </div>
-        <div class="pane" id="pane-takes">
-          <div class="group" id="takes"></div>
-          <p class="hint">I and O set the in and out of the take at the playhead · K keeps or drops it. Press ? for every shortcut.</p>
-        </div>
-        <div class="pane" id="pane-notes" hidden>
-          <div class="actions-line" style="margin-top:2px"><button class="btn default" id="applynotes">Apply Notes</button>
-            <label class="check" style="margin:0" title="Each note becomes its own request to NIP. Applying them together is faster overall and uses less of your plan."><input type="checkbox" id="instant"> Apply instantly</label></div>
-          <p class="hint">NIP reads each note with the transcript and your current edit, and makes the cuts, restores and take changes it describes. Every change is checked before it’s applied.</p>
-          <div class="group" id="editnotes"></div>
-          <div class="actions-line"><button class="btn" id="undonotes" hidden>Undo Last Apply</button></div>
-        </div>
-        <div class="pane" id="pane-text" hidden>
-          <p class="hint" style="margin-top:2px">Click a word to jump to it. Dimmed words aren't in the kept takes.</p>
-          <div id="words"></div>
-        </div>
-        <div class="pane" id="pane-claude" hidden>
-          <h4>New Edit</h4>
-          <textarea id="brief" placeholder="Describe the video you want. For example: a 30 second video where I explain why Linderballs are great."></textarea>
-          <div class="actions-line"><button class="btn default" id="ask">Create Edit<kbd>⌘↵</kbd></button><span class="hint" id="claudehint"></span></div>
-          <p class="hint">NIP works from the transcript and your clip descriptions: it picks and orders lines and clips, it doesn't watch the video. NIP runs on Claude.</p>
-          <h4>Edits</h4>
-          <div class="group" id="stories"></div>
-        </div>
-        <div class="pane" id="pane-info" hidden>
-          <h4>Details</h4>
-          <div class="field"><label for="desc">Description</label><input type="text" id="desc" placeholder="Describe this footage"></div>
-          <div class="field"><label for="tags">Tags</label><input type="text" id="tags" placeholder="Separate with commas"></div>
-          <h4>Export</h4>
-          <label class="check"><input type="checkbox" id="combined"> Also export one joined video</label>
-          <h4>Changes</h4>
-          <button class="btn" id="resetall">Reset My Changes to This Video</button>
-          <p class="hint">Goes back to exactly what your voice commands decided.</p>
-          <h4>Markers</h4>
-          <div class="group" id="notes"></div>
-        </div>
-      </aside>
     </div>
   </div>
 </div>
 <div id="status" role="status" aria-live="polite"></div>
-<button class="btn" id="keystoggle" hidden title="Show keyboard shortcuts (?)">Shortcuts<kbd>?</kbd></button>
 <aside id="keys" hidden aria-label="Keyboard shortcuts">
   <div class="actions-line" style="margin:0"><b style="flex:1">Shortcuts</b><button class="icon-btn small" id="keyshide" title="Hide (?)" aria-label="Hide shortcuts">✕</button></div>
   <h4>Watch</h4>
@@ -377,16 +368,29 @@
   <h4>Takes</h4>
   <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
     <dt><kbd>K</kbd></dt><dd>Keep or drop that take</dd></dl>
-  <h4>Type</h4>
+  <h4>Name clips</h4>
   <dl><dt><kbd>N</kbd></dt><dd>Name from the start of this clip up to the playhead, as a new clip; <kbd>↵</kbd> saves it and marks it keep, <kbd>Esc</kbd> closes</dd>
     <dt><kbd>⇧</kbd><kbd>N</kbd></dt><dd>Name the whole clip under the playhead</dd>
-    <dt><kbd>M</kbd></dt><dd>Note an edit at the playhead for NIP; <kbd>↵</kbd> adds it, <kbd>Esc</kbd> leaves</dd>
-    <dt><kbd>E</kbd></dt><dd>Describe a new edit for NIP to make; <kbd>⌘</kbd><kbd>↵</kbd> creates it</dd></dl>
+  </dl>
+  <h4>NIP</h4>
+  <dl><dt><kbd>E</kbd></dt><dd>Tell NIP what to change at this moment, e.g. “cut the stumble”; <kbd>↵</kbd> adds it, <kbd>Esc</kbd> leaves</dd>
+    <dt><kbd>⇧</kbd><kbd>E</kbd></dt><dd>A note on the whole video, e.g. “tighten every pause”</dd>
+    <dt>New edit</dt><dd>In NIP’s box, describe a video and NIP builds it from the transcript</dd>
+    <dt>Apply</dt><dd>Notes wait until you press Apply, or tick Apply now</dd></dl>
   <h4>Mouse</h4>
   <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it.</dd>
-    <dt>Text tab</dt><dd>Click a word to jump to it</dd>
+    <dt>Transcript</dt><dd>Click a word to jump to it</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
+<dialog id="details"><form method="dialog">
+  <b>Details</b>
+  <div class="field" style="margin-top:12px"><label for="desc">Name</label><input type="text" id="desc" placeholder="Describe this footage"></div>
+  <div class="field"><label for="tags">Tags</label><input type="text" id="tags" placeholder="Separate with commas"></div>
+  <label class="check"><input type="checkbox" id="combined"> Also export one joined video</label>
+  <button type="button" class="btn" id="resetall">Reset My Changes to This Video</button>
+  <p class="hint">Goes back to exactly what your voice commands decided.</p>
+  <div class="actions-line"><button class="btn default" value="">Done</button></div>
+</form></dialog>
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
   <input type="text" id="renamein" maxlength="200" required aria-label="Name" placeholder="What is this footage?" style="width:100%;margin:10px 0 4px">
@@ -414,7 +418,7 @@ const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
-let noteT = null, playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
+let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -628,12 +632,13 @@ function show(d, idx = clipIdx) {
       ...(e.notes || []).filter(n => n.t >= s.a && n.t < s.b).map(n => `<i class="nt" style="${at(n.t)}"></i>`),
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
     if (s.gap) return `<div class="gap ${open ? 'open' : ''}${first}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${open ? short(len) : ''}${marks}</div>`;
-    const t = e.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
-    const name = labelOf(s)?.text || (t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '');
+    const name = clipName(s);
     return `<div class="tk ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}${first}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${data.clips.length > 1 ? esc(c.stem) + ' ' : ''}${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
   }).join('') + '<div id="playhead"></div>';
   drawGap();
 
+  $('#takesbox').hidden = !e.takes.some(t => t.group);  // most footage has no takes
+  $('#takecount').textContent = e.takes.filter(t => t.group).length;
   $('#takes').innerHTML = e.takes.map((t, i) => `
     <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
       <input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''} title="Keep (K)" aria-label="Keep ${esc(label(t))}">
@@ -665,31 +670,36 @@ function show(d, idx = clipIdx) {
     </div>`;
   }).join('') : '<div class="muted-empty">No edits yet.</div>';
 
-  const pending = c.edit_notes.filter(n => n.status !== 'applied').length;
+  // NIP's list: every video's notes (whole-video notes first), then the edits it made
+  const notes = data.clips.flatMap((c, ci) => c.edit_notes.map(n => ({...n, ci}))).sort((x, y) => x.ci - y.ci || (x.t ?? -1) - (y.t ?? -1));
+  const pending = notes.filter(n => n.status !== 'applied').length;
   $('#applynotes').textContent = pending ? `Apply ${plural(pending, 'Note')}` : 'Apply Notes';
   $('#applynotes').disabled = !pending;
   $('#undonotes').hidden = !c.can_undo;
-  $('#editnotes').innerHTML = c.edit_notes.length ? c.edit_notes.map(n => `
-    <div class="row" data-id="${n.id}">
+  $('#notebar').hidden = !notes.length;
+  $('#editnotes').hidden = !notes.length;
+  $('#editnotes').innerHTML = notes.map(n => `
+    <div class="row" data-id="${n.id}" data-ci="${n.ci}">
       <div class="main-col">
-        <div class="title-line"><b class="num seek" data-t="${n.t}" title="Go to this moment">${mmss(editTime(n.t))}</b>
-          <span class="badge ${n.status}">${{pending: 'Pending', applied: 'Applied', failed: 'Not applied'}[n.status]}</span></div>
+        <div class="title-line">${n.t == null ? '<b>Whole video</b>' : `<b class="num seek" data-t="${n.t}" title="Go to this moment">${mmss(keptAll.slice(0, n.ci).flat().reduce((x, [a, b]) => x + b - a, 0) + keptAll[n.ci].reduce((x, [a, b]) => x + Math.max(0, Math.min(b, n.t) - a), 0))}</b>`}
+          <span class="badge ${n.status}">${{pending: 'Waiting', applied: 'Applied', failed: 'Not applied'}[n.status]}</span></div>
         <span>${esc(n.text)}</span>
         ${n.result ? `<span class="sub">${esc(n.result)}</span>` : ''}
       </div>
       <div class="acts"><button class="icon-btn small" data-act="del" title="Delete note">${icon('trash')}</button></div>
-    </div>`).join('') : '<div class="muted-empty">No notes yet. Pause anywhere and type what to change.</div>';
+    </div>`).join('');
 
-  const items = [
-    ...e.markers.map(m => ({t: m.t, color: 'var(--yellow)', text: m.end != null ? `Keep to ${mmss(m.end)}${/seconds?$|^keep$/.test(m.label) ? '' : ': ' + m.label}` : m.label === 'divider' ? 'Divider' : m.label})),
-    ...(e.notes || []).map(n => ({t: n.t, color: 'var(--purple)', text: n.text.replace(/^that was /, '')})),
-    ...e.pending.map(n => ({t: n.t, color: 'var(--gray)', text: `Not understood: “${n.text}”`})),
-  ].sort((a, b) => a.t - b.t);
-  $('#notes').innerHTML = items.length ? items.map(x => `<div class="marker" data-t="${x.t}"><i style="background:${x.color}"></i><span class="num">${mmss(x.t)}</span><span>${esc(x.text)}</span></div>`).join('') : '<div class="muted-empty">No markers.</div>';
-
-  const isKept = w => kept.some(([a, b]) => (w.start + w.end) / 2 >= a && (w.start + w.end) / 2 <= b);
-  $('#words').innerHTML = c.words.map(w => `<span data-t="${w.start}" class="${isKept(w) ? '' : 'gone'}">${esc(w.w)}</span>`).join(' ');
-  wordEls = [...$('#words').children];
+  // the transcript: one paragraph per clip on the timeline, coloured the same way
+  $('#words').innerHTML = allSegs.map((s, k) => {
+    const sc = data.clips[s.ci], last = k === allSegs.length - 1 || allSegs[k + 1].ci !== s.ci;
+    const ws = sc.words.filter(w => { const m = (w.start + w.end) / 2; return m >= s.a && (m < s.b || last); });
+    const head = data.clips.length > 1 && (k === 0 || allSegs[k - 1].ci !== s.ci) ? `<div class="vid">${esc(sc.stem)}</div>` : '';
+    const spans = ws.map(w => `<span data-ci="${s.ci}" data-t="${w.start}">${esc(w.w)}</span>`).join(' ');
+    if (s.gap) return head + (ws.length ? `<p class="para cut"><span class="tag">Cut · ${mmss(s.a)}</span>${spans}</p>` : '');
+    const name = clipName(s);
+    return head + `<p class="para ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}"><span class="tag">${s.keep ? 'Keep' : 'Not marked'}${name ? ' · ' + esc(name) : ''} · ${mmss(s.a)}</span>${spans || '<i class="hint">No speech</i>'}</p>`;
+  }).join('') || '<p class="hint">No speech in this footage.</p>';
+  wordEls = [...$('#words').querySelectorAll(`span[data-ci="${clipIdx}"]`)];
   nowWord = null;
 }
 
@@ -740,6 +750,10 @@ function reasons(g) {  // why each part of a cut stretch was cut, with a way to 
   });
   return out;
 }
+const clipName = s => {  // your name for the clip, or its take when the voice commands used takes; otherwise none
+  const t = data.clips[s.ci].edit.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
+  return labelOf(s)?.text || (t?.group ? `${label(t)} · Take ${t.take}` : '');
+};
 const labelOf = s => data.clips[s.ci ?? clipIdx].edit.labels.filter(l => l.start <= s.a + 0.05 && s.b <= l.end + 0.05)
   .sort((x, y) => (x.end - x.start) - (y.end - y.start))[0];  // the closest-fitting name around this clip
 const myKeep = s => data.clips[s.ci ?? clipIdx].edit.keeps.find(k => k.why === 'kept by you' && k.start <= s.a + 0.01 && s.a < k.end);
@@ -790,7 +804,7 @@ function playList(list) {
 function goPiece() {
   const p = playing.list[playing.i];
   if (p.ci !== clipIdx) { pendingSeek = p.a; show(data, p.ci); }
-  else { video.currentTime = p.a; video.play(); }
+  else { video.currentTime = p.a; video.play().catch(() => {}); }  // a pause before playback starts is fine
 }
 function stopPlaying() { playing = null; }
 video.addEventListener('loadedmetadata', () => {
@@ -832,13 +846,14 @@ function follow() {
   }
   lastT = t;
   $('#timecode').textContent = mmss(editBefore() + editTime(t));
-  $('#noteat').textContent = `Note at ${mmss(editTime(noteT ?? t))}`;
+  $('#nipat').textContent = mmss(editBefore() + editTime(nipT ?? t));
   let w = -1;
   for (let i = 0; i < clip().words.length && clip().words[i].start <= t; i++) w = i;
   if (wordEls[w] !== nowWord) {
     nowWord?.classList.remove('now');
     nowWord = wordEls[w];
     nowWord?.classList.add('now');
+    if (!video.paused) nowWord?.scrollIntoView({block: 'nearest'});
   }
   if (video.paused || pendingSeek != null) return;
   if (playing) {
@@ -898,13 +913,6 @@ function markStretch(kind) {  // Shift+C / Shift+G: the whole clip at the playhe
   cutAction(kind, s.a, s.b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(s.b - s.a).toFixed(1)}s`));
 }
 
-document.querySelector('.inspector .seg').onclick = e => {
-  const tab = e.target.dataset.tab;
-  if (!tab) return;
-  document.querySelectorAll('.inspector .seg button').forEach(b => b.classList.toggle('on', b === e.target));
-  document.querySelectorAll('.inspector .pane').forEach(p => p.hidden = p.id !== 'pane-' + tab);
-  try { localStorage.setItem('nip-tab', tab); } catch {}
-};
 $('#timeline').onclick = e => {
   const el = e.target.closest('[data-k]');
   if (!el) return;
@@ -995,8 +1003,7 @@ $('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : markUpTo('cut');
 $('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : markUpTo('keep');
 $('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
   && cutAction('reset').then(ok => ok && status('Back to the voice edit'));
-$('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
-$('#words').onclick = e => { if (e.target.dataset.t) seek(+e.target.dataset.t); };
+$('#words').onclick = e => { if (e.target.dataset.t) goTo(+e.target.dataset.ci, +e.target.dataset.t); };
 $('#takes').onclick = e => {
   const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
   if (!b || !row) return;
@@ -1025,14 +1032,6 @@ $('#stories').onclick = e => {
   });
   if (b.dataset.act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files are kept.`))
     run(b, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Edit deleted'); });
-};
-$('#ask').onclick = () => {
-  const text = $('#brief').value.trim();
-  if (!text) return status('Describe the video you want first', true);
-  run($('#ask'), 'NIP is reading the transcript…', async () => {
-    show(await api('/api/brief/' + enc(proj), {brief: text}));
-    status(`Created “${data.stories.at(-1).title}”`);
-  });
 };
 $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
@@ -1063,42 +1062,67 @@ function settleThen(fn) {  // ask about unmarked footage first, if there is any
   $('#settle').showModal();
 };
 $('#settle').onclose = () => $('#settle').returnValue && afterSettle($('#settle').returnValue);
+$('#detailsbtn').onclick = () => $('#details').showModal();
 $('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
-// ---------- second-round edit notes ----------
+// ---------- NIP: notes at a moment, notes on the whole video, and new edits, from one box ----------
 const instant = () => $('#instant').checked;
 try { $('#instant').checked = localStorage.getItem('nip-instant') === '1'; } catch {}
 $('#instant').onchange = () => { try { localStorage.setItem('nip-instant', instant() ? '1' : '0'); } catch {} };
-$('#notein').onfocus = () => { if (noteT == null) noteT = video.currentTime; };  // pin the note where you were when you started it
-$('#notein').onblur = () => { if (!$('#notein').value.trim() && !listening) noteT = null; };
-async function notesAction(body, busy) {
+const NIPMODE = {at: ['Note for this moment, e.g. “cut the stumble”', 'Add Note'], all: ['Note for the whole video, e.g. “tighten every pause”', 'Add Note'],
+  edit: ['Describe a video for NIP to build, e.g. a 30 second video where I explain why Linderballs are great', 'Create Edit']};
+function nipFocus(mode) {  // E: a note pinned to the playhead; Shift+E: the whole video
+  setNipMode(mode);
+  if (mode === 'at') { nipT = video.currentTime; video.pause(); }
+  $('#nipin').focus();
+}
+function setNipMode(mode) {
+  nipMode = mode;
+  $('#nipmode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  $('#nipin').placeholder = NIPMODE[mode][0];
+  $('#nipsend').firstChild.textContent = NIPMODE[mode][1];
+  $('#instantwrap').hidden = mode === 'edit';
+}
+$('#nipmode').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) { setNipMode(b.dataset.mode); $('#nipin').focus(); } };
+$('#nipin').onfocus = () => { if (nipMode === 'at' && nipT == null) nipT = video.currentTime; };  // pin the note where you were when you started it
+$('#nipin').onblur = () => { if (!$('#nipin').value.trim() && !listening) nipT = null; };
+$('#nipin').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#nipform').requestSubmit(); }
+  else if (e.key === 'Escape') { $('#nipin').value = ''; nipT = null; $('#nipin').blur(); }
+};
+$('#nipform').onsubmit = e => { e.preventDefault(); sendNip($('#nipin').value); };
+async function notesAction(body, busy, ci = clipIdx) {
   if (busy) status(busy, false, true);
-  try { show(await api(`/api/notes/${enc(proj)}/${enc(clip().stem)}`, body)); return true; }
+  try { show(await api(`/api/notes/${enc(proj)}/${enc(data.clips[ci].stem)}`, body)); return true; }
   catch (e) { status(e.message, true); return false; }
 }
-async function addNote(text) {
+async function sendNip(text) {
   text = text.trim();
   if (!text) return;
-  const t = noteT ?? video.currentTime;
-  $('#notein').value = '';
-  noteT = null;
+  if (nipMode === 'edit') return run($('#nipsend'), 'NIP is reading the transcript…', async () => {
+    show(await api('/api/brief/' + enc(proj), {brief: text}));
+    $('#nipin').value = '';
+    status(`Created “${data.stories.at(-1).title}”`);
+  });
+  const t = nipMode === 'at' ? nipT ?? video.currentTime : null;  // general notes have no time
+  $('#nipin').value = '';
+  nipT = null;
   const ok = await notesAction({action: 'add', t, text, apply: instant()}, instant() ? 'NIP is applying your note…' : null);
   if (!ok) return;
   const n = clip().edit_notes.at(-1);
-  status(instant() ? (n.status === 'applied' ? `Done: ${n.result}` : `Not applied: ${n.result}`) : `Note added at ${mmss(editTime(t))}`, instant() && n.status !== 'applied');
+  status(instant() ? (n.status === 'applied' ? `Done: ${n.result}` : `Not applied: ${n.result}`) : t == null ? 'Note added for the whole video' : `Note added at ${mmss(editBefore() + editTime(t))}`, instant() && n.status !== 'applied');
 }
-$('#noteform').onsubmit = e => { e.preventDefault(); addNote($('#notein').value); };
-$('#notein').onkeydown = e => { if (e.key === 'Escape') { $('#notein').value = ''; noteT = null; $('#notein').blur(); } };
 $('#applynotes').onclick = () => run($('#applynotes'), 'NIP is reading your notes and making the edits…', async () => {
-  if (!(await notesAction({action: 'apply'}))) return;
-  const done = clip().edit_notes.filter(n => n.status === 'applied').length, bad = clip().edit_notes.filter(n => n.status === 'failed').length;
-  status(bad ? `${plural(done, 'note')} applied, ${bad} not applied. See the Notes tab.` : `All notes applied`, !!bad);
+  for (const [ci, c] of data.clips.entries())  // one request per video with notes waiting
+    if (c.edit_notes.some(n => n.status !== 'applied') && !(await notesAction({action: 'apply'}, null, ci))) return;
+  const all = data.clips.flatMap(c => c.edit_notes), bad = all.filter(n => n.status === 'failed').length;
+  status(bad ? `${plural(all.filter(n => n.status === 'applied').length, 'note')} applied, ${bad} not applied` : 'All notes applied', !!bad);
 });
 $('#undonotes').onclick = () => notesAction({action: 'undo'}).then(ok => ok && status('Last apply undone'));
 $('#editnotes').onclick = e => {
-  const t = e.target.closest('[data-t]'), del = e.target.closest('[data-act=del]');
-  if (t) seek(+t.dataset.t);
-  if (del) notesAction({action: 'delete', id: +del.closest('.row').dataset.id});
+  const row = e.target.closest('.row'), t = e.target.closest('[data-t]'), del = e.target.closest('[data-act=del]');
+  if (t) goTo(+row.dataset.ci, +t.dataset.t);
+  if (del) notesAction({action: 'delete', id: +row.dataset.id}, null, +row.dataset.ci);
 };
 // speak a note: the browser's own speech recognition; the note is added when you stop talking
 const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1106,13 +1130,13 @@ let listening = null;
 $('#mic').hidden = !Speech;
 $('#mic').onclick = () => {
   if (listening) return listening.stop();
-  noteT = video.currentTime;
+  if (nipMode === 'at') nipT = video.currentTime;
   video.pause();
   listening = new Speech();
   listening.interimResults = true;
-  listening.onresult = e => $('#notein').value = [...e.results].map(r => r[0].transcript).join('');
+  listening.onresult = e => $('#nipin').value = [...e.results].map(r => r[0].transcript).join('');
   listening.onerror = e => status(e.error === 'not-allowed' ? 'Microphone access was blocked' : `Couldn’t hear that (${e.error})`, true);
-  listening.onend = () => { listening = null; $('#mic').classList.remove('live'); addNote($('#notein').value); };
+  listening.onend = () => { listening = null; $('#mic').classList.remove('live'); sendNip($('#nipin').value); };
   $('#mic').classList.add('live');
   listening.start();
 };
@@ -1126,20 +1150,15 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'C' || e.key === 'G') markStretch(e.key === 'C' ? 'cut' : 'keep');
   else if (e.key === 'n') { e.preventDefault(); nameUpTo(); }
   else if (e.key === 'N') { e.preventDefault(); nameClip(); }
-  else if (e.key === 'm') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
   else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.shiftKey) { e.preventDefault(); jumpClip(e.key === 'ArrowLeft' ? -1 : 1); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * 2)); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
   else if (e.key === 's') split();
-  else if (e.key === 'e') { e.preventDefault(); document.querySelector('[data-tab=claude]').click(); $('#brief').focus(); }
+  else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); nipFocus(e.key === 'e' ? 'at' : 'all'); }
   else if (e.key === '?') showKeys(!keysOpen);
 });
-$('#brief').onkeydown = e => {
-  if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); $('#ask').click(); }
-  else if (e.key === 'Escape') $('#brief').blur();
-};
 let keysOpen = true;
 try { keysOpen = localStorage.getItem('keys') !== 'hidden'; } catch {}
 function showKeys(open) {
@@ -1203,6 +1222,7 @@ function route() {
   $('#back').hidden = !m;
   $('#projtools').hidden = !m;
   $('#searchwrap').hidden = !!m;
+  document.body.classList.toggle('editing', !!m);  // the editor uses the whole window
   stopPlaying();
   video.pause();
   if (m) loadProject(decodeURIComponent(m[1]));
@@ -1210,9 +1230,6 @@ function route() {
   showKeys(keysOpen);  // the cheatsheet belongs to the editor
   loadLibrary();  // the sidebar's tags and counts show on every page
 }
-let tab = 'takes';
-try { tab = localStorage.getItem('nip-tab') || tab; } catch {}
-document.querySelector(`.inspector .seg [data-tab="${tab}"]`)?.click();
 window.onhashchange = route;
 route();
 poll();

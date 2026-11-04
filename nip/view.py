@@ -285,10 +285,10 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("write a note of up to 500 characters")
                     with LOCK:
                         clip = cli.load(f)
-                        if not isinstance(t, (int, float)) or not 0 <= t <= clip["duration"]:
-                            raise ValueError("a note needs a time inside the video")
+                        if t is not None and (not isinstance(t, (int, float)) or not 0 <= t <= clip["duration"]):
+                            raise ValueError("a note needs a time inside the video, or none for the whole video")
                         notes = clip.setdefault("edit_notes", [])
-                        note = {"id": max((n["id"] for n in notes), default=0) + 1, "t": round(float(t), 2),
+                        note = {"id": max((n["id"] for n in notes), default=0) + 1, "t": None if t is None else round(float(t), 2),
                                 "text": text.strip(), "status": "pending"}
                         notes.append(note)
                         cli.save(f, clip)
