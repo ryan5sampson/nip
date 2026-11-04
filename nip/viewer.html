@@ -53,7 +53,7 @@
   .seg button.on { background: var(--seg-on); box-shadow: var(--shadow); }
 
   /* window */
-  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); height: 100vh; }
+  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; }  /* rows stay window height, so the library and sidebar scroll */
   .sidebar { background: var(--sidebar); backdrop-filter: blur(30px); border-right: .5px solid var(--separator); display: flex; flex-direction: column; padding: 14px 10px 10px; overflow-y: auto; }
   .sidebar h3 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 14px 8px 4px; }
   .sidebar h3:first-child { margin-top: 2px; }
@@ -117,9 +117,14 @@
   .tiers i::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .5px var(--tertiary); }
   .tile .dur video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 8px; background: #000; pointer-events: none; }
   .tile .scrub { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); border-radius: 0 0 0 8px; pointer-events: none; }
-  .tile .del { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
+  .tile .del, .tile .tx { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
+  .tile .tx { right: 38px; }
   .tile .del:hover { background: var(--red); }
-  .tile:hover .del, .tile .del:focus-visible { display: grid; }
+  .tile .tx:hover { background: var(--accent); }
+  .tile:hover :is(.del, .tx), .tile :is(.del, .tx):focus-visible { display: grid; }
+  #transcript { width: min(560px, 90vw); }
+  #transcripttext { max-height: 60vh; overflow-y: auto; margin: 8px 0 12px; line-height: 1.5; }
+  #transcripttext h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 600; color: var(--secondary); }
   .tile.drop .thumb { box-shadow: 0 0 0 3px var(--green); }
   .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
   .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
@@ -221,6 +226,7 @@
   <symbol id="i-tray" viewBox="0 0 16 16"><path d="M1.8 9.2h3.6l1 1.8h3.2l1-1.8h3.6M1.8 9.2 3.6 3.2h8.8l1.8 6v4.1H1.8z"/></symbol>
   <symbol id="i-tag" viewBox="0 0 16 16"><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5" cy="5" r=".9"/></symbol>
   <symbol id="i-photos" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="m1.8 10.6 3.4-3 3 2.6 2-1.6 4 3.2"/></symbol>
+  <symbol id="i-text" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8M2.6 6.5h10.8M2.6 9.4h10.8M2.6 12.3h6.4"/></symbol>
   <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 2.6v10.8M2.6 8h10.8"/></symbol>
   <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.6 4.2h10.8M6.2 4.2V2.6h3.6v1.6M3.8 4.2l.8 9.4h6.8l.8-9.4"/></symbol>
   <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.6 3.2 2.6 6.2l3 3M2.6 6.2h7.2a3.8 3.8 0 0 1 0 7.6H7"/></symbol>
@@ -334,6 +340,11 @@
   </div>
 </div>
 <div id="status" role="status" aria-live="polite"></div>
+<dialog id="transcript"><form method="dialog">
+  <b id="transcripthead"></b>
+  <div id="transcripttext"></div>
+  <div class="actions-line"><button class="btn default" value="">Close</button></div>
+</form></dialog>
 <dialog id="bundle"><form method="dialog">
   <b>Bundle Footage</b>
   <p id="bundletext"></p>
@@ -398,7 +409,7 @@ function drawLibrary() {
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
     <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${stageFilter ? '' : ` · ${STAGES[p.stage][0]}`}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
@@ -410,7 +421,7 @@ $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it
 $('#cards').onmousemove = e => {
   const box = e.target.closest('.dur'), p = projects.find(x => x.name === box?.closest('[data-name]').dataset.name);
-  if (!p || !p.media.length || e.target.closest('.del')) return;
+  if (!p || !p.media.length || e.target.closest('.del, .tx')) return;
   const r = box.getBoundingClientRect();
   let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.filmed, i = 0;
   while (i < p.media.length - 1 && t >= p.media[i][1]) t -= p.media[i++][1];
@@ -425,6 +436,17 @@ $('#cards').onmouseout = e => {
   const box = e.target.closest('.dur');
   if (box && !box.contains(e.relatedTarget)) box.querySelectorAll('video, .scrub').forEach(x => { x.removeAttribute('src'); x.remove(); });
 };
+$('#cards').addEventListener('click', async e => {  // a card's transcript, to tell what it's about without sound
+  const b = e.target.closest('.tx');
+  if (!b) return;
+  e.preventDefault();
+  try {
+    const d = await api('/api/project/' + enc(b.closest('[data-name]').dataset.name));
+    $('#transcripthead').textContent = d.description || d.name;
+    $('#transcripttext').innerHTML = d.clips.map(c => `${d.clips.length > 1 ? `<h4>${esc(c.source)} · ${mins(c.duration)}</h4>` : ''}<div>${esc(c.words.map(w => w.w).join(' ')) || '<i>No speech</i>'}</div>`).join('');
+    $('#transcript').showModal();
+  } catch (err) { status(err.message, true); }
+});
 $('#cards').onclick = e => {
   const b = e.target.closest('.del');
   if (!b) return;
