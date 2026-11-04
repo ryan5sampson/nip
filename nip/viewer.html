@@ -157,6 +157,15 @@
   #gapinfo .why-row { border-top: .5px solid var(--separator); }
   #gapinfo .why-row span { flex: 1; min-width: 0; }
   .transport .tc-total { color: rgba(255, 255, 255, .45); font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; margin-left: -4px; }
+  kbd { display: inline-block; margin-left: 5px; padding: 2px 4px; border-radius: 4px; font: 600 10px/1 -apple-system, sans-serif; color: inherit; opacity: .8; background: color-mix(in srgb, currentColor 14%, transparent); box-shadow: inset 0 0 0 .5px color-mix(in srgb, currentColor 35%, transparent); }
+  .notebar > kbd { margin: 0; }
+  #keys { position: fixed; right: 16px; bottom: 16px; z-index: 50; width: 300px; max-height: 70vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--window); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); font-size: 12px; }
+  #keys h4 { margin: 10px 0 4px; font-size: 11px; font-weight: 600; color: var(--secondary); }
+  #keys dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin: 0; }
+  #keys dt { text-align: right; white-space: nowrap; }
+  #keys dt kbd { margin: 0 0 0 2px; }
+  #keys dd { margin: 0; color: var(--secondary); line-height: 1.35; }
+  #keystoggle { position: fixed; right: 16px; bottom: 16px; z-index: 50; box-shadow: 0 2px 10px rgba(0, 0, 0, .2), 0 0 0 .5px var(--separator); }
   #cutbtn.armed { color: var(--red); background: rgba(255, 59, 48, .15); }
   #keepbtn.armed { color: var(--green); background: rgba(52, 199, 89, .15); }
   dialog { border: none; border-radius: 12px; padding: 18px 20px 14px; width: 340px; background: var(--window); color: var(--label); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); }
@@ -204,6 +213,7 @@
 
   @media (max-width: 1080px) {
     #project { grid-template-columns: 1fr; grid-template-rows: auto auto auto; overflow-y: auto; }
+    .viewer { min-height: auto; }  /* stacked: the video and its controls keep their height and the page scrolls */
     .viewer video { height: 52vh; flex: none; }
     .inspector { grid-column: 1; grid-row: 3; border-left: none; border-top: .5px solid var(--separator); }
     .pane { overflow: visible; }
@@ -274,10 +284,10 @@
       <div class="viewer">
         <video id="video" playsinline preload="metadata"></video>
         <div class="transport">
-          <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg></button>
+          <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg><kbd>Space</kbd></button>
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
-          <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C). Shift+C cuts the whole stretch at the playhead."><svg class="i"><use href="#i-cut"/></svg>Cut</button>
-          <button class="icon-btn" id="keepbtn" title="Keep: press at the start, then again at the end (G). Shift+G keeps the whole stretch at the playhead."><svg class="i"><use href="#i-check"/></svg>Keep</button>
+          <button class="icon-btn" id="cutbtn" title="Cut: press at the start, then again at the end (C). Shift+C cuts the whole stretch at the playhead."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
+          <button class="icon-btn" id="keepbtn" title="Keep: press at the start, then again at the end (G). Shift+G keeps the whole stretch at the playhead."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>G</kbd></button>
           <div id="videos"></div>
           <small id="meta" class="num"></small>
         </div>
@@ -285,10 +295,10 @@
       <div class="timeline-area">
         <div id="timeline" aria-label="Edited timeline: kept footage, with cut sections folded into small bars"></div>
         <form class="notebar" id="noteform" autocomplete="off">
-          <span class="at num" id="noteat"></span>
-          <input type="text" id="notein" placeholder="Note an edit here, e.g. “cut the stumble”, then Enter (N)" aria-label="Edit note at the playhead">
+          <span class="at num" id="noteat"></span><kbd title="Press N to type a note">N</kbd>
+          <input type="text" id="notein" placeholder="Note an edit here, e.g. “cut the stumble”, then Enter" aria-label="Edit note at the playhead">
           <button type="button" class="icon-btn" id="mic" title="Speak the note" hidden><svg class="i"><use href="#i-mic"/></svg></button>
-          <button type="submit" class="btn">Add</button>
+          <button type="submit" class="btn">Add<kbd>↵</kbd></button>
         </form>
         <div id="gapinfo" hidden></div>
       </div>
@@ -303,12 +313,12 @@
           <button data-tab="takes" class="on">Takes</button>
           <button data-tab="notes">Notes</button>
           <button data-tab="text">Text</button>
-          <button data-tab="claude">NIP</button>
+          <button data-tab="claude" title="Write a new NIP edit (E)">NIP <kbd>E</kbd></button>
           <button data-tab="info">Info</button>
         </div>
         <div class="pane" id="pane-takes">
           <div class="group" id="takes"></div>
-          <p class="hint">Space plays the edit · ← → skip 2s · I and O set a take’s in and out · K keeps or drops it · C cuts and G keeps a range; with Shift, the whole stretch</p>
+          <p class="hint">I and O set the in and out of the take at the playhead · K keeps or drops it. Press ? for every shortcut.</p>
         </div>
         <div class="pane" id="pane-notes" hidden>
           <div class="actions-line" style="margin-top:2px"><button class="btn default" id="applynotes">Apply Notes</button>
@@ -324,7 +334,7 @@
         <div class="pane" id="pane-claude" hidden>
           <h4>New Edit</h4>
           <textarea id="brief" placeholder="Describe the video you want. For example: a 30 second video where I explain why Linderballs are great."></textarea>
-          <div class="actions-line"><button class="btn default" id="ask">Create Edit</button><span class="hint" id="claudehint"></span></div>
+          <div class="actions-line"><button class="btn default" id="ask">Create Edit<kbd>⌘↵</kbd></button><span class="hint" id="claudehint"></span></div>
           <p class="hint">NIP works from the transcript and your clip descriptions: it picks and orders lines and clips, it doesn't watch the video. NIP runs on Claude.</p>
           <h4>Edits</h4>
           <div class="group" id="stories"></div>
@@ -346,6 +356,29 @@
   </div>
 </div>
 <div id="status" role="status" aria-live="polite"></div>
+<button class="btn" id="keystoggle" hidden title="Show keyboard shortcuts (?)">Shortcuts<kbd>?</kbd></button>
+<aside id="keys" hidden aria-label="Keyboard shortcuts">
+  <div class="actions-line" style="margin:0"><b style="flex:1">Shortcuts</b><button class="icon-btn small" id="keyshide" title="Hide (?)" aria-label="Hide shortcuts">✕</button></div>
+  <h4>Watch</h4>
+  <dl><dt><kbd>Space</kbd></dt><dd>Play or pause the edit (cuts are skipped)</dd>
+    <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Back or forward 2 seconds; with <kbd>⇧</kbd>, 10</dd></dl>
+  <h4>Mark footage</h4>
+  <dl><dt><kbd>C</kbd></dt><dd>Cut: press at the start, play or skip to the end, press again</dd>
+    <dt><kbd>G</kbd></dt><dd>Keep (green): same, press at the start and the end</dd>
+    <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut the whole stretch under the playhead</dd>
+    <dt><kbd>⇧</kbd><kbd>G</kbd></dt><dd>Keep the whole stretch; again to unmark your keep</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Cancel a cut or keep you started</dd></dl>
+  <h4>Takes</h4>
+  <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
+    <dt><kbd>K</kbd></dt><dd>Keep or drop that take</dd></dl>
+  <h4>Type</h4>
+  <dl><dt><kbd>N</kbd></dt><dd>Note an edit at the playhead for NIP; <kbd>↵</kbd> adds it, <kbd>Esc</kbd> leaves</dd>
+    <dt><kbd>E</kbd></dt><dd>Describe a new edit for NIP to make; <kbd>⌘</kbd><kbd>↵</kbd> creates it</dd></dl>
+  <h4>Mouse</h4>
+  <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to describe, keep or cut it; click a red cut to open it.</dd>
+    <dt>Text tab</dt><dd>Click a word to jump to it</dd>
+    <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
+</aside>
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
   <input type="text" id="renamein" maxlength="200" required aria-label="Name" placeholder="What is this footage?" style="width:100%;margin:10px 0 4px">
@@ -999,7 +1032,23 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
+  else if (e.key === 'e') { e.preventDefault(); document.querySelector('[data-tab=claude]').click(); $('#brief').focus(); }
+  else if (e.key === '?') showKeys(!keysOpen);
 });
+$('#brief').onkeydown = e => {
+  if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); $('#ask').click(); }
+  else if (e.key === 'Escape') $('#brief').blur();
+};
+let keysOpen = true;
+try { keysOpen = localStorage.getItem('keys') !== 'hidden'; } catch {}
+function showKeys(open) {
+  keysOpen = open;
+  try { localStorage.setItem('keys', open ? 'shown' : 'hidden'); } catch {}
+  $('#keys').hidden = $('#project').hidden || !open;
+  $('#keystoggle').hidden = $('#project').hidden || open;
+}
+$('#keyshide').onclick = () => showKeys(false);
+$('#keystoggle').onclick = () => showKeys(true);
 
 // ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
 $('#addvideos').onclick = () => run($('#addvideos'), 'Pick videos in the Finder window…', async () => {
@@ -1057,6 +1106,7 @@ function route() {
   video.pause();
   if (m) loadProject(decodeURIComponent(m[1]));
   else { proj = ''; data = null; }
+  showKeys(keysOpen);  // the cheatsheet belongs to the editor
   loadLibrary();  // the sidebar's tags and counts show on every page
 }
 let tab = 'takes';
