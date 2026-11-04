@@ -319,6 +319,19 @@ class Viewer(unittest.TestCase):
                     return urllib.request.urlopen(urllib.request.Request(
                         url + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}))
 
+                # a video dropped on the page lands in the inbox; its twin in Downloads goes to the Trash
+                put = lambda name, data: urllib.request.urlopen(urllib.request.Request(url + "/api/upload/" + name, data=data, method="PUT"))
+                d2 = Path(d)
+                with mock.patch.multiple(cli, INBOX=d2 / "inbox", TRASH=d2 / "bin"), mock.patch.object(view, "DOWNLOADS", d2 / "dl"):
+                    (d2 / "dl").mkdir()
+                    (d2 / "dl" / "c.mov").write_bytes(b"xyz")
+                    put("c.mov", b"xyz")
+                    put("c.mov", b"xy")
+                    self.assertEqual(sorted(f.name for f in (d2 / "inbox").iterdir()), ["c 2.mov", "c.mov"])  # nothing overwritten, no .part left
+                    self.assertEqual([f.name for f in (d2 / "bin").iterdir()], ["c.mov"])
+                    for bad in ("notes.txt", "..%2Fx.mov"):
+                        with self.assertRaises(urllib.error.HTTPError):
+                            put(bad, b"x")
                 r = get("/media/p/v.mov", Range="bytes=10-19")
                 self.assertEqual((r.status, r.read()), (206, bytes(range(10, 20))))
                 for bad in ("/media/p/..%2Fproject.json", "/media/../p/raw/v.mov", "/api/project/nope"):

@@ -19,6 +19,45 @@ from nip.commands import kept_ranges, tiers, unmarked
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
 STATE = {"transcribing": 0}  # videos the background ingest is working on
+DOWNLOADS = Path.home() / "Downloads"
+PICK = """set picked to choose file of type {"public.movie"} with prompt "Add videos to Footage Flow" with multiple selections allowed
+set out to ""
+repeat with f in picked
+  set out to out & POSIX path of f & linefeed
+end repeat
+out"""
+
+
+def pick_videos():
+    """The macOS file picker; the videos picked move into the inbox."""
+    r = subprocess.run(["osascript", "-e", PICK], capture_output=True, text=True)  # Cancel exits 1 with nothing picked
+    vids = [Path(l) for l in r.stdout.splitlines() if Path(l).suffix.lower() in cli.VIDEO]
+    return [cli.move_free(v, cli.INBOX).name for v in vids if v.is_file()]
+
+
+def upload(handler, name):
+    """A video dropped on the page, streamed into the inbox. A browser can't move the original, so the same file in
+    Downloads (same name and size) goes to the Trash."""
+    if Path(name).name != name or Path(name).suffix.lower() not in cli.VIDEO:
+        raise ValueError("only .mov, .mp4 and .m4v videos can be added")
+    size = int(handler.headers.get("Content-Length", 0))
+    cli.INBOX.mkdir(parents=True, exist_ok=True)
+    part = cli.INBOX / f".{name}.{time.time_ns()}.part"  # hidden, and not a video suffix, so the inbox waits until it's whole
+    try:
+        with part.open("wb") as f:
+            left = size
+            while left > 0 and (chunk := handler.rfile.read(min(1 << 20, left))):
+                f.write(chunk)
+                left -= len(chunk)
+        if part.stat().st_size != size:
+            raise ValueError(f"{name} didn't finish uploading; try again")
+        dest = cli.move_free(part, cli.INBOX, name)
+    finally:
+        part.unlink(missing_ok=True)
+    original = DOWNLOADS / name
+    if original.is_file() and original.stat().st_size == size:
+        cli.move_free(original, cli.TRASH)
+    return dest.name
 
 
 def clips_of(proj):
@@ -203,6 +242,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             p = self.parts()
+            if self.command == "PUT":  # PUT, not POST: other websites can't send it to this Mac without asking first
+                if len(p) != 3 or p[:2] != ["api", "upload"]:
+                    raise FileNotFoundError
+                return self.send_json({"added": upload(self, p[2])})
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             if not isinstance(body, dict):
                 raise ValueError("expected a JSON object")
@@ -363,6 +406,8 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     dest = cli.bundle([self.project(str(n)) for n in dict.fromkeys(names)], body["name"])
                 self.send_json({"name": dest.name})
+            elif p == ["api", "add"]:
+                self.send_json({"added": pick_videos()})
             elif p == ["api", "open"]:  # show a folder in Finder
                 if body.get("what") == "inbox":
                     cli.INBOX.mkdir(parents=True, exist_ok=True)
@@ -388,6 +433,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # answer the page instead of dropping the connection
             traceback.print_exc()
             self.send_json({"error": f"Footage Flow hit an error: {e}"}, 500)
+
+    do_PUT = do_POST
 
 
 def watch_inbox():

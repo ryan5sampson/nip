@@ -238,10 +238,17 @@ def set_stage(proj, stage):
 
 def clear(proj):
     """Move a project's footage and edits to the Trash, to free space; its exports stay."""
-    dest, n = TRASH / proj.name, 2
+    return move_free(proj, TRASH)
+
+
+def move_free(src, folder, name=None):
+    """Move src into folder as name (default: its own name), numbering it rather than overwriting anything there."""
+    name = Path(name or src.name)
+    dest, n = folder / name, 2
     while dest.exists():
-        dest, n = TRASH / f"{proj.name} {n}", n + 1
-    shutil.move(proj, dest)
+        dest, n = folder / f"{name.stem} {n}{name.suffix}", n + 1
+    folder.mkdir(parents=True, exist_ok=True)
+    shutil.move(src, dest)
     return dest
 
 

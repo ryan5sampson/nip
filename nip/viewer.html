@@ -66,6 +66,7 @@
   .inbox { display: flex; align-items: center; gap: 7px; padding: 8px; border-top: .5px solid var(--separator); margin-top: 8px; color: var(--secondary); font-size: 12px; }
   .inbox b { color: var(--label); font-weight: 500; }
   .inbox .spin { width: 12px; height: 12px; border: 1.5px solid var(--tertiary); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+  body.dropping::after { content: "Drop videos to add them to the inbox"; position: fixed; inset: 10px; z-index: 100; display: grid; place-items: center; border: 3px dashed var(--accent); border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--label); font-size: 20px; font-weight: 600; pointer-events: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .main { display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; }
   .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--toolbar); backdrop-filter: blur(30px); border-bottom: .5px solid var(--separator); min-width: 0; }
@@ -220,6 +221,7 @@
   <symbol id="i-tray" viewBox="0 0 16 16"><path d="M1.8 9.2h3.6l1 1.8h3.2l1-1.8h3.6M1.8 9.2 3.6 3.2h8.8l1.8 6v4.1H1.8z"/></symbol>
   <symbol id="i-tag" viewBox="0 0 16 16"><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5" cy="5" r=".9"/></symbol>
   <symbol id="i-photos" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="m1.8 10.6 3.4-3 3 2.6 2-1.6 4 3.2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 2.6v10.8M2.6 8h10.8"/></symbol>
   <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.6 4.2h10.8M6.2 4.2V2.6h3.6v1.6M3.8 4.2l.8 9.4h6.8l.8-9.4"/></symbol>
   <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.6 3.2 2.6 6.2l3 3M2.6 6.2h7.2a3.8 3.8 0 0 1 0 7.6H7"/></symbol>
   <symbol id="i-in" viewBox="0 0 16 16"><path d="M7 2.6H4.4v10.8H7M8.6 8h5M11.4 5.6 13.6 8l-2.2 2.4"/></symbol>
@@ -235,6 +237,7 @@
     <h3 id="tagshead" hidden>Tags</h3>
     <div id="taglist"></div>
     <div class="spacer"></div>
+    <button class="item" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg><span>Add Videos…</span></button>
     <div class="inbox" id="inbox"></div>
   </aside>
 
@@ -401,7 +404,7 @@ function drawLibrary() {
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
     </a>`).join('') : projects.length
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value || tagFilter ? `Nothing matches “${esc($('#search').value || tagFilter)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
-    : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Drop videos into the inbox. They’ll appear here once processed.</div>`;
+    : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
 $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it
@@ -932,6 +935,32 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 2))); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 'k' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
+});
+
+// ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
+$('#addvideos').onclick = () => run($('#addvideos'), 'Pick videos in the Finder window…', async () => {
+  const r = await api('/api/add', {});
+  status(r.added.length ? `Moved ${plural(r.added.length, 'video')} into the inbox; each appears once it’s transcribed` : 'No videos added');
+  poll();
+});
+const hasFiles = e => e.dataTransfer?.types.includes('Files');
+addEventListener('dragover', e => { if (hasFiles(e)) { e.preventDefault(); document.body.classList.add('dropping'); } });
+addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
+addEventListener('drop', async e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  document.body.classList.remove('dropping');
+  const vids = [...e.dataTransfer.files].filter(f => /\.(mov|mp4|m4v)$/i.test(f.name));
+  if (!vids.length) return status('Only .mov, .mp4 and .m4v videos can be added', true);
+  try {
+    for (const [i, f] of vids.entries()) {
+      status(`Adding ${i + 1} of ${vids.length}: ${f.name}…`, false, true);
+      const r = await fetch('/api/upload/' + enc(f.name), {method: 'PUT', body: f});
+      if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    }
+    status(`Added ${plural(vids.length, 'video')} to the inbox; each appears once it’s transcribed`);
+  } catch (err) { status(err.message, true); }
+  poll();
 });
 
 // ---------- inbox status and routing ----------
