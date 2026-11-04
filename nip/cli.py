@@ -222,9 +222,9 @@ def set_stage(proj, stage):
 
 
 def clear(proj):
-    """Move an exported project's footage and edits to the Trash, to free space; its exports stay."""
-    if stage_of(proj, load(proj / "project.json")) != "exported":
-        raise ValueError("only exported footage can be cleared")
+    """Move an unopened or exported project's footage and edits to the Trash, to free space; its exports stay."""
+    if stage_of(proj, load(proj / "project.json")) not in ("inbox", "exported"):
+        raise ValueError("only inbox or exported footage can be deleted")
     dest, n = TRASH / proj.name, 2
     while dest.exists():
         dest, n = TRASH / f"{proj.name} {n}", n + 1

@@ -51,7 +51,7 @@ def summary(proj):
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "stage": cli.stage_of(proj, info),
+            "stage": cli.stage_of(proj, info), "media": [[c["source"], c["duration"]] for c in clips],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 

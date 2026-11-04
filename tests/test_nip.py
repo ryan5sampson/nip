@@ -375,7 +375,7 @@ class Viewer(unittest.TestCase):
                 self.assertEqual((cm.exception.code, json.loads(cm.exception.read())["error"]),
                                  (500, "Footage Flow can't find ffmpeg; is it installed?"))  # not a bare "not found"
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
-                # stages: opened, then marked complete; only exported footage can be cleared, to the Trash
+                # stages: opened, then marked complete; only inbox or exported footage can be deleted, to the Trash
                 post("/api/cuts/p/v", {"action": "uncut", "start": left[1][0]})
                 self.assertEqual(json.loads(post("/api/stage/p", {"stage": "processing"}).read())["stage"], "processing")
                 data = json.loads(post("/api/stage/p", {"stage": "processed", "unmarked": "keep"}).read())
@@ -384,7 +384,8 @@ class Viewer(unittest.TestCase):
                     post("/api/stage/p", {"stage": "exported"})
                 with self.assertRaises(urllib.error.HTTPError):
                     post("/api/clear/p", {})
-                cli.set_stage(lib / "p", "exported")
+                self.assertEqual(json.loads(get("/api/projects").read())[0]["media"], [["v.mov", 4.4]])  # the card scrubs these
+                cli.set_stage(lib / "p", "inbox")
                 with mock.patch.object(cli, "TRASH", Path(d) / "trash"):
                     (Path(d) / "trash").mkdir()
                     post("/api/clear/p", {})
