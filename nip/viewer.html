@@ -468,14 +468,16 @@ $('#cards').ondrop = e => {
   const target = projects.find(p => p.name === e.target.closest('[data-name]')?.dataset.name), from = projects.find(p => p.name === dragged);
   if (!target || !from || target === from) return;
   bundling = [target.name, from.name];
+  if (target.named) return doBundle(target.description);  // dropped onto a bundle you already named: keep that name
   $('#bundletext').textContent = `“${from.description || from.name}” and “${target.description || target.name}” become one project, ${mins(from.filmed + target.filmed)} of footage.`;
   $('#bundlename').value = target.description || '';
   $('#bundle').returnValue = '';
   $('#bundle').showModal();
 };
 $('#cards').ondragend = () => { dragged = null; };
-$('#bundle').onclose = () => $('#bundle').returnValue && run($('#cards'), 'Bundling…', async () => {
-  const r = await api('/api/bundle', {projects: bundling, name: $('#bundlename').value});
+$('#bundle').onclose = () => $('#bundle').returnValue && doBundle($('#bundlename').value);
+const doBundle = name => run($('#cards'), 'Bundling…', async () => {
+  const r = await api('/api/bundle', {projects: bundling, name});
   await loadLibrary();
   status(`Bundled as ${r.name}`);
 });

@@ -396,6 +396,8 @@ class Viewer(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError):
                     post("/api/stage/p", {"stage": "exported"})
                 self.assertEqual(json.loads(get("/api/projects").read())[0]["media"], [["v.mov", 4.4]])  # the card scrubs these
+                cli.save(lib / "p" / "project.json", {**cli.load(lib / "p" / "project.json"), "my_description": "Pockets"})
+                self.assertTrue(json.loads(get("/api/projects").read())[0]["named"])  # bundling onto it keeps this name, no prompt
                 with mock.patch.object(cli, "TRASH", Path(d) / "trash"):
                     (Path(d) / "trash").mkdir()
                     post("/api/clear/p", {})

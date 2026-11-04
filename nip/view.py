@@ -85,7 +85,7 @@ def summary(proj):
     names = sorted({t["name"] for c in clips for t in c["edit"]["takes"] if t.get("name")})
     labels = [l["text"] for c in clips for l in c["edit"]["labels"]]
     ts = [tiers(c["edit"], c["duration"]) for c in clips]
-    return {"name": proj.name, "description": desc, "tags": tags, "videos": len(clips),
+    return {"name": proj.name, "description": desc, "named": bool(info.get("my_description")), "tags": tags, "videos": len(clips),
             "clips": names, "filmed": sum(c["duration"] for c in clips), "kept": sum(map(kept_seconds, clips)),
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
