@@ -349,7 +349,7 @@
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
   <input type="text" id="renamein" maxlength="200" required aria-label="Name" placeholder="What is this footage?" style="width:100%;margin:10px 0 4px">
-  <div class="actions-line"><button class="btn" value="" formnovalidate>Cancel</button><button class="btn default" value="ok">Save</button></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Save</button></div>
 </form></dialog>
 <dialog id="transcript"><form method="dialog">
   <b id="transcripthead"></b>
@@ -360,7 +360,7 @@
   <b>Bundle Footage</b>
   <p id="bundletext"></p>
   <input type="text" id="bundlename" maxlength="80" required aria-label="Bundle name" placeholder="Name this bundle" style="width:100%">
-  <div class="actions-line"><button class="btn" value="" formnovalidate>Cancel</button><button class="btn default" value="ok">Bundle</button></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Bundle</button></div>
 </form></dialog>
 
 <script>
@@ -372,7 +372,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], tagFilter = null, stageFilter = null, data = null, proj = '', clipIdx = 0;
+let projects = [], tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
 let noteT = null, playing = null, pendingSeek = null, kept = [], segs = [], openGap = null, openSeg = null, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -514,8 +514,8 @@ $('#taglist').onclick = e => {
   stageFilter = null;
   location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
 };
-$('#stages').ondragover = e => {
-  const b = e.target.closest('[data-stage="processing"]');
+$('#stages').ondragover = e => {  // drag a card onto any stage to move it there
+  const b = e.target.closest('[data-stage]');
   $('#stages').querySelectorAll('.drop').forEach(x => x !== b && x.classList.remove('drop'));
   if (dragged && b) { e.preventDefault(); b.classList.add('drop'); }
 };
@@ -523,9 +523,9 @@ $('#stages').ondragleave = e => { if (!e.relatedTarget?.closest?.('.drop')) $('#
 $('#stages').ondrop = e => {
   e.preventDefault();
   $('#stages').querySelectorAll('.drop').forEach(x => x.classList.remove('drop'));
-  const name = dragged;
-  if (!e.target.closest('[data-stage="processing"]') || !name) return;
-  run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage: 'processing'}); await loadLibrary(); status('Moved to Processing'); });
+  const name = dragged, stage = e.target.closest('[data-stage]')?.dataset.stage;
+  if (!stage || !name) return;
+  run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage}); await loadLibrary(); status(`Moved to ${STAGES[stage][0]}`); });
 };
 $('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#allfootage').onclick = () => { tagFilter = null; stageFilter = null; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };

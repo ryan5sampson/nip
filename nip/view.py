@@ -388,10 +388,10 @@ class Handler(BaseHTTPRequestHandler):
                 settle(proj, body.get("unmarked"))
                 cli.export(proj, bool(body.get("combined")))
                 self.send_json({"done": str(cli.EXPORTS / proj.name)})
-            elif len(p) == 3 and p[:2] == ["api", "stage"]:  # opened (processing), or marked complete (processed)
+            elif len(p) == 3 and p[:2] == ["api", "stage"]:  # the user moves footage to any stage
                 proj = self.project(p[2])
-                if body.get("stage") not in ("processing", "processed"):
-                    raise ValueError("stage must be processing or processed; exporting sets exported")
+                if body.get("stage") not in cli.STAGES:
+                    raise ValueError(f"stage must be one of {', '.join(cli.STAGES)}")
                 settle(proj, body.get("unmarked"))
                 with LOCK:
                     cli.set_stage(proj, body["stage"])
