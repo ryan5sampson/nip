@@ -1,5 +1,6 @@
 """NIP command line: ingest, watch, reparse, report, list, export."""
 import argparse
+import copy
 import json
 import os
 import re
@@ -42,6 +43,25 @@ def decisions(clip):
 
 
 HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps", "my_splits")  # the user's hand edits on a clip, on top of the voice edit
+UNDOABLE = HAND + ("labels",)
+
+
+def remember(clip):
+    """Before a hand edit: save the clip's edits for Undo (the last 100), and forget what Redo had."""
+    clip["undo"] = (clip.get("undo", []) + [{k: copy.deepcopy(clip[k]) for k in UNDOABLE if k in clip}])[-100:]
+    clip["redo"] = []
+
+
+def step(clip, back):
+    """Undo (back) or redo the last hand edit on this clip."""
+    src, dst = ("undo", "redo") if back else ("redo", "undo")
+    if not clip.get(src):
+        raise ValueError(f"nothing to {src}")
+    state = clip[src].pop()
+    clip[dst] = clip.get(dst, []) + [{k: copy.deepcopy(clip[k]) for k in UNDOABLE if k in clip}]
+    for k in UNDOABLE:
+        clip.pop(k, None)
+    clip.update(state)
 
 
 def clean_override(body, duration):

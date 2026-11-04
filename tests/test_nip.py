@@ -364,6 +364,21 @@ class Viewer(unittest.TestCase):
                 data = json.loads(post("/api/notes/p/v", {"action": "undo"}).read())
                 self.assertEqual(data["clips"][0]["edit_notes"][0]["status"], "pending")
                 self.assertNotIn({"start": 1.0, "end": 1.2, "why": "cut by you"}, data["clips"][0]["edit"]["cuts"])
+                # undo and redo step through this video's hand edits
+                mine = lambda d: ([c["start"] for c in d["clips"][0]["edit"]["cuts"] if c["why"] == "cut by you"],
+                                  [k["start"] for k in d["clips"][0]["edit"]["keeps"] if k["why"] == "kept by you"])
+                base = mine(json.loads(get("/api/project/p").read()))
+                post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})
+                after = mine(json.loads(post("/api/cuts/p/v", {"action": "keep", "start": 3.5, "end": 3.9}).read()))
+                self.assertEqual(mine(json.loads(post("/api/cuts/p/v", {"action": "undo"}).read())), (after[0], base[1]))
+                self.assertEqual(mine(json.loads(post("/api/cuts/p/v", {"action": "undo"}).read())), base)
+                d2 = json.loads(post("/api/cuts/p/v", {"action": "redo"}).read())
+                self.assertEqual((mine(d2), d2["clips"][0]["redo"]), ((after[0], base[1]), 1))
+                self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "uncut", "start": 3.0}).read())["clips"][0]["redo"], 0)  # a new edit ends redo
+                for act in ("undo", "undo", "redo", "redo"):
+                    post("/api/cuts/p/v", {"action": act})
+                with self.assertRaises(urllib.error.HTTPError):  # nothing left to redo
+                    post("/api/cuts/p/v", {"action": "redo"})
                 # split: a point that divides the footage, neither cut nor keep; S again removes it; Reset clears it
                 data = json.loads(post("/api/cuts/p/v", {"action": "split", "start": 2.5}).read())
                 self.assertEqual(data["clips"][0]["edit"]["splits"], [{"t": 2.5, "why": "split by you"}])

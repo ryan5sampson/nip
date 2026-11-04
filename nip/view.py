@@ -68,7 +68,8 @@ def clips_of(proj):
         e = cli.decisions(c)
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
                     "words": c["words"], "edit": e, "unmarked": unmarked(e),
-                    "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes"))})
+                    "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes")),
+                    "undo": len(c.get("undo", [])), "redo": len(c.get("redo", []))})
     return info, out
 
 
@@ -136,6 +137,7 @@ def apply_notes(f, ids):
     with LOCK:
         clip = cli.load(f)
         clip["undo_notes"] = {"ids": ids, **{k: copy.deepcopy(clip.get(k)) for k in cli.HAND}}
+        cli.remember(clip)
         errors = brief.apply_ops(clip, plan["ops"])
         said = {r.get("id"): r for r in plan["notes"] if isinstance(r, dict)}
         for n in clip.get("edit_notes", []):
@@ -264,6 +266,7 @@ class Handler(BaseHTTPRequestHandler):
                 f = proj / f"{p[3]}.nip.json"
                 with LOCK:
                     clip = cli.load(f)
+                    cli.remember(clip)
                     if body.get("reset"):
                         clip.get("overrides", {}).pop(str(round(float(body.get("at", -1)), 2)), None)
                     else:
@@ -324,7 +327,11 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     clip = cli.load(f)
                     act, start = body.get("action"), body.get("start")
-                    if act == "restore":
+                    if act not in ("undo", "redo"):
+                        cli.remember(clip)
+                    if act in ("undo", "redo"):  # step back or forward through this video's hand edits
+                        cli.step(clip, act == "undo")
+                    elif act == "restore":
                         cli.restore_cut(clip, start)
                     elif act == "cut":
                         cli.add_cut(clip, start, body.get("end"))
@@ -347,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
                         for k in cli.HAND:
                             clip.pop(k, None)
                     else:
-                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, split, unsplit, label or reset")
+                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, split, unsplit, label, reset, undo or redo")
                     cli.save(f, clip)
                 self.send_json(edited(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse

@@ -131,7 +131,7 @@
   #stages .item.drop svg { color: #fff; }
   .tile.drop .thumb { box-shadow: 0 0 0 3px var(--green); }
   .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
-  .gap { flex: none; width: 40px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
+  .gap { flex: none; width: 10px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
   .gap:hover { color: var(--label); box-shadow: inset 0 0 0 1px var(--secondary); }
   .gap.open { flex: var(--s) 1 0; width: auto; min-width: 40px; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 26%, transparent) 0 3px, transparent 3px 7px); box-shadow: inset 0 0 0 1.5px var(--red); cursor: text; }
   .tk i, .gap i { position: absolute; pointer-events: none; }
@@ -287,9 +287,11 @@
         <div class="transport">
           <button class="icon-btn" id="play" title="Play or pause the edit (Space)"><svg class="i solid"><use href="#i-play"/></svg><kbd>Space</kbd></button>
           <span class="tc num" id="timecode">0:00.0</span><span class="tc-total num" id="edittotal"></span>
-          <button class="icon-btn" id="cutbtn" title="Cut the clip at the playhead (tap C), or hold C to cut what plays while held. Shift+C cuts from the clip’s start up to the playhead."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
-          <button class="icon-btn" id="keepbtn" title="Keep the clip at the playhead (tap G; again to unmark), or hold G to keep what plays while held. Shift+G keeps from the clip’s start up to the playhead."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>G</kbd></button>
+          <button class="icon-btn" id="cutbtn" title="Cut from the clip’s start up to the playhead (tap C), or hold C to cut what plays while held. Shift+C cuts the whole clip."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
+          <button class="icon-btn" id="keepbtn" title="Keep from the clip’s start up to the playhead (tap G), or hold G to keep what plays while held. Shift+G keeps the whole clip (again to unmark)."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>G</kbd></button>
           <button class="icon-btn" id="splitbtn" title="Split the clip at the playhead without cutting or keeping (S). Press S on a split to remove it."><svg class="i"><use href="#i-split"/></svg>Split<kbd>S</kbd></button>
+          <button class="icon-btn" id="undobtn" title="Undo (⌘Z)" aria-label="Undo"><svg class="i"><use href="#i-undo"/></svg><kbd>⌘Z</kbd></button>
+          <button class="icon-btn" id="redobtn" title="Redo (⇧⌘Z)" aria-label="Redo"><svg class="i" style="transform:scaleX(-1)"><use href="#i-undo"/></svg><kbd>⇧⌘Z</kbd></button>
           <div id="videos"></div>
           <small id="meta" class="num"></small>
         </div>
@@ -366,12 +368,15 @@
     <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Back or forward 2 seconds</dd>
     <dt><kbd>⇧</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>Jump to the previous or next clip: splits, cuts and keep/unmarked edges</dd></dl>
   <h4>Mark footage</h4>
-  <dl><dt><kbd>C</kbd></dt><dd>Tap: cut the whole clip under the playhead. Hold: plays, and cuts what plays until you let go.</dd>
-    <dt><kbd>G</kbd></dt><dd>Keep (green), the same way: tap for the clip (again to unmark), hold for what plays</dd>
-    <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut from the start of this clip (the last split or edge) up to the playhead</dd>
-    <dt><kbd>⇧</kbd><kbd>G</kbd></dt><dd>Keep from the start of this clip up to the playhead</dd>
+  <dl><dt><kbd>C</kbd></dt><dd>Tap: cut from the start of this clip (the last split or edge) up to the playhead. Hold: plays, and cuts what plays until you let go.</dd>
+    <dt><kbd>G</kbd></dt><dd>Keep (green), the same way: tap up to the playhead, hold for what plays</dd>
+    <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut the whole clip under the playhead</dd>
+    <dt><kbd>⇧</kbd><kbd>G</kbd></dt><dd>Keep the whole clip; again to unmark your keep</dd>
     <dt><kbd>S</kbd></dt><dd>Split the clip at the playhead into two, neither cut nor kept; on a split, removes it. Saying “NIP split” or just “NIP” while filming splits too.</dd>
 </dl>
+  <h4>Undo</h4>
+  <dl><dt><kbd>⌘</kbd><kbd>Z</kbd></dt><dd>Undo your last change to this video: cuts, keeps, splits, names, takes, applied notes</dd>
+    <dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd></dt><dd>Redo it</dd></dl>
   <h4>Takes</h4>
   <dl><dt><kbd>I</kbd><kbd>O</kbd></dt><dd>Set the in or out of the take at the playhead</dd>
     <dt><kbd>K</kbd></dt><dd>Keep or drop that take</dd></dl>
@@ -597,6 +602,8 @@ function show(d, idx = clipIdx) {
   $('#complete').title = data.stage === 'processed' ? 'Completed. Click to move it back to Processing.' : 'Done going through every clip: move it to Processed';
   $('#clear').hidden = data.stage !== 'exported';
   $('#startproc').hidden = data.stage !== 'inbox';
+  $('#undobtn').disabled = !clip().undo;
+  $('#redobtn').disabled = !clip().redo;
   const c = clip(), e = c.edit;
   const src = `/media/${enc(proj)}/${enc(c.source)}`;
   if (video.dataset.src !== src) { video.src = src; video.dataset.src = src; }
@@ -619,7 +626,7 @@ function show(d, idx = clipIdx) {
       ...e.markers.filter(m => m.end == null && m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:4px"></i>`),
       ...(e.notes || []).filter(n => n.t >= s.a && n.t < s.b).map(n => `<i class="nt" style="${at(n.t)}"></i>`),
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
-    if (s.gap) return `<div class="gap ${open ? 'open' : ''}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${short(len)}${marks}</div>`;
+    if (s.gap) return `<div class="gap ${open ? 'open' : ''}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${open ? short(len) : ''}${marks}</div>`;
     const t = e.takes.find(t => t.keep && t.start <= s.a + 0.01 && s.a < t.end);
     const name = labelOf(s)?.text || (t ? label(t) + (t.group ? ` · Take ${t.take}` : '') : '');
     return `<div class="tk ${s.keep ? 'keep' : ''} ${s.a === openSeg ? 'sel' : ''}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
@@ -827,7 +834,7 @@ function follow() {
   }
 }
 
-// C and G: a tap marks the whole clip; held, the video plays and what plays while held is marked
+// C and G: a tap marks from the clip's start up to the playhead; held, the video plays and what plays while held is marked
 const HOLD = 250;  // ms: shorter is a tap
 function disarm() {
   if (armed) { clearTimeout(armed.timer); if (armed.played) video.pause(); }
@@ -849,24 +856,24 @@ function holdEnd(kind) {
   if (armed?.kind !== kind) return;
   const {held, t: a} = armed, b = video.currentTime;
   disarm();
-  if (!held) return markStretch(kind);
+  if (!held) return markUpTo(kind);
   if (b - a < 0.1) return status(`${kind === 'cut' ? 'Cut' : 'Keep'} cancelled`);
   cutAction(kind, a, b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(b - a).toFixed(1)}s`));
 }
 addEventListener('keyup', e => { if (e.key.toLowerCase() === 'c') holdEnd('cut'); else if (e.key.toLowerCase() === 'g') holdEnd('keep'); });
 addEventListener('blur', () => armed && (disarm(), status('Cancelled')));
-function markUpTo(kind) {  // Shift+C / Shift+G: from the start of the clip (the last divide) up to the playhead
+function markUpTo(kind) {  // tap C / G: from the start of the clip (the last divide) up to the playhead
   const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t <= s.b);
   if (!s) return status('Move the playhead onto footage that isn’t cut', true);
   if (t - s.a < 0.1) return status('The playhead is at the start of this clip; move it to where it should end', true);
   cutAction(kind, s.a, t).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(t - s.a).toFixed(1)}s up to here`));
 }
-function markStretch(kind) {  // tap C / G: the whole clip at the playhead; G on your own keep unmarks it
+function markStretch(kind) {  // Shift+C / Shift+G: the whole clip at the playhead; Shift+G on your own keep unmarks it
   const t = video.currentTime, s = segs.find(s => !s.gap && s.a <= t && t < s.b);
   if (!s) return status('Move the playhead onto footage that isn’t cut', true);
   if (kind === 'keep' && s.keep) {
     const k = clip().edit.keeps.find(k => k.why === 'kept by you' && k.start <= t && t < k.end);
-    if (!k) return status('Marked keep by voice. C cuts it instead.', true);
+    if (!k) return status('Marked keep by voice. Shift+C cuts it instead.', true);
     return cutAction('unkeep', k.start).then(ok => ok && status('Unmarked'));
   }
   cutAction(kind, s.a, s.b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(s.b - s.a).toFixed(1)}s`));
@@ -946,8 +953,16 @@ function split() {  // S: split the footage at the playhead, or remove your spli
   cutAction(near ? 'unsplit' : 'split', near ? near.t : t).then(ok => ok && status(near ? 'Split removed' : `Split at ${mmss(t)}`));
 }
 $('#splitbtn').onclick = split;
-$('#cutbtn').onclick = e => e.shiftKey ? markUpTo('cut') : markStretch('cut');
-$('#keepbtn').onclick = e => e.shiftKey ? markUpTo('keep') : markStretch('keep');
+const undoRedo = act => clip()[act] ? cutAction(act).then(ok => ok && status(act === 'undo' ? 'Undone' : 'Redone')) : status(`Nothing to ${act}`);
+$('#undobtn').onclick = () => undoRedo('undo');
+$('#redobtn').onclick = () => undoRedo('redo');
+document.addEventListener('keydown', e => {  // ⌘Z / ⇧⌘Z; text boxes keep their own undo
+  if ($('#project').hidden || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  e.preventDefault();
+  undoRedo(e.shiftKey ? 'redo' : 'undo');
+});
+$('#cutbtn').onclick = e => e.shiftKey ? markStretch('cut') : markUpTo('cut');
+$('#keepbtn').onclick = e => e.shiftKey ? markStretch('keep') : markUpTo('keep');
 $('#resetall').onclick = () => confirm('Reset this video to exactly what your voice commands decided? Your keeps, In and Out points, restored and added cuts are removed.')
   && cutAction('reset').then(ok => ok && status('Back to the voice edit'));
 $('#notes').onclick = e => { const d = e.target.closest('[data-t]'); if (d) seek(+d.dataset.t); };
@@ -1078,7 +1093,7 @@ document.addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
   else if (e.repeat && /^[cg]$/.test(e.key)) e.preventDefault();  // key auto-repeat while held
   else if (e.key === 'c' || e.key === 'g') holdStart(e.key === 'c' ? 'cut' : 'keep');
-  else if (e.key === 'C' || e.key === 'G') markUpTo(e.key === 'C' ? 'cut' : 'keep');
+  else if (e.key === 'C' || e.key === 'G') markStretch(e.key === 'C' ? 'cut' : 'keep');
   else if (e.key === 'n') { e.preventDefault(); nameClip(); }
   else if (e.key === 'N') { e.preventDefault(); noteT = video.currentTime; $('#notein').focus(); }
   else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
