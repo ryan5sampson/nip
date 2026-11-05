@@ -175,6 +175,42 @@ class Commands(unittest.TestCase):
         clip["labels"] = [{"start": 10, "end": 20, "text": "a"}, {"start": 20, "end": 30, "text": "b"}]
         self.assertEqual([s["a"] for s in timeline(cli.decisions(clip), 50.0) if not s["gap"]], [0, 10, 20, 30])
 
+    def test_keep_brings_back_cut_footage_and_merge_joins_clips(self):
+        import nip.cli as cli
+        words, _ = script("one two three")
+        take = {"start": 2, "end": 50, "keep": True, "at": 2, "group": 1, "take": 1, "why": ""}
+        dropped = {"start": 0, "end": 2, "keep": False, "at": 0, "group": 0, "take": 0, "why": "before"}
+        edit = {"takes": [dropped, take], "cuts": [{"start": 10, "end": 20, "why": "nip cut"}],
+                "markers": [{"t": 15, "label": "divider"}], "pending": []}
+        clip = {"duration": 50.0, "words": [], "edit": edit}
+        kept = lambda: [(s["a"], s["b"]) for s in timeline(cli.decisions(clip), 50.0) if not s["gap"]]
+        self.assertEqual(kept(), [(2, 10), (20, 50)])
+        cli.add_cut(clip, 12, 14, "my_keeps")  # part of a voice cut comes back
+        self.assertEqual(kept(), [(2, 10), (12, 14), (20, 50)])
+        self.assertEqual([(c["start"], c["end"], c["orig"]) for c in cli.decisions(clip)["cuts"]], [(10, 12, 10), (14, 20, 10)])
+        cli.add_cut(clip, 12, 13)  # the newest mark wins: cut it again
+        self.assertEqual(kept(), [(2, 10), (13, 14), (20, 50)])
+        cli.add_cut(clip, 0.5, 1, "my_keeps")  # footage in a dropped take too
+        self.assertEqual(kept()[0], (0.5, 1))
+        self.assertEqual([t["keep"] for t in cli.decisions(clip)["takes"]].count(True), 2)
+        # an old keep under a cut stays cut: only new marks bring footage back
+        old = {"duration": 50.0, "words": [], "edit": edit, "my_keeps": [{"start": 25, "end": 35}], "my_cuts": [{"start": 28, "end": 30}]}
+        self.assertIn((28, 30, "cut by you"), [(c["start"], c["end"], c["why"]) for c in cli.decisions(old)["cuts"]])
+        # merge: the cut between comes back, the spoken divider inside goes, keep and name carry over
+        clip = {"duration": 50.0, "words": [], "edit": edit, "labels": [{"start": 2, "end": 10, "text": "intro"}]}
+        cli.add_cut(clip, 2, 10, "my_keeps")
+        cli.merge(clip, 2, 50, "intro")
+        e = cli.decisions(clip)
+        got = [(s["a"], s["b"], s["keep"]) for s in timeline(e, 50.0) if not s["gap"]]
+        self.assertEqual((got, e["splits"], e["labels"]), ([(2, 50, True)], [], [{"start": 2.0, "end": 50.0, "text": "intro"}]))
+        # keeps side by side are one clip; a name still divides
+        clip = {"duration": 50.0, "words": [], "edit": {**edit, "cuts": [], "markers": []}}
+        cli.add_cut(clip, 2, 10, "my_keeps")
+        cli.add_cut(clip, 10, 20, "my_keeps")
+        self.assertEqual(kept()[0], (2, 20))
+        clip["labels"] = [{"start": 2, "end": 10, "text": "a"}]
+        self.assertEqual(kept()[:2], [(2, 10), (10, 20)])
+
     def test_vocabulary_fixes_spellings(self):
         import nip.cli as cli
         with tempfile.TemporaryDirectory() as d, mock.patch.object(cli, "VOCABULARY", Path(d) / "v.txt"):

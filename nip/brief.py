@@ -220,7 +220,7 @@ def notes_prompt(clip, notes):
     clip = {**clip, "words": respell(clip["words"], cli.vocabulary()[1])}
     e = cli.decisions(clip)
     takes = "\n".join(f'take at={t["at"]} clip="{t.get("name") or ""}" take={t["take"]} {"kept" if t["keep"] else "dropped"} '
-                      f'{t["start"]:.2f}-{t["end"]:.2f} ({t["why"]})' for t in e["takes"])
+                      f'{t["start"]:.2f}-{t["end"]:.2f} ({t["why"]})' for t in e["takes"] if not t.get("mine"))
     cuts = "\n".join(f'cut start={c["start"]:.2f} end={c["end"]:.2f} why={c["why"]}' for c in e["cuts"])
     near = [w for w in clip["words"] if len(clip["words"]) <= NOTE_ALL_WORDS or any(n.get("t") is None for n in notes)
             or any(abs(w["start"] - n["t"]) <= NOTE_WINDOW for n in notes)]  # long videos: only around the notes, unless one is general

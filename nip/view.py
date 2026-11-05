@@ -338,6 +338,8 @@ class Handler(BaseHTTPRequestHandler):
                         cli.add_cut(clip, start, body.get("end"))
                     elif act == "keep":
                         cli.add_cut(clip, start, body.get("end"), "my_keeps")
+                    elif act == "merge":  # one clip from start to end, whatever was between
+                        cli.merge(clip, start, body.get("end"), body.get("text") or "")
                     elif act == "split":  # divide the footage at a point, neither cut nor keep
                         if not isinstance(start, (int, float)) or not 0 < start < clip["duration"]:
                             raise ValueError("a split needs a time inside the video")
@@ -355,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
                         for k in cli.HAND:
                             clip.pop(k, None)
                     else:
-                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, split, unsplit, label, reset, undo or redo")
+                        raise ValueError("action must be restore, cut, uncut, keep, unkeep, split, unsplit, merge, label, reset, undo or redo")
                     cli.save(f, clip)
                 self.send_json(edited(proj))
             elif len(p) == 3 and p[:2] == ["api", "project"]:  # hand-set description and tags, kept through reparse

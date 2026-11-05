@@ -139,6 +139,11 @@
   .transport .tc { font: 500 12px/1 ui-monospace, "SF Mono", Menlo, monospace; color: rgba(255, 255, 255, .85); margin: 0 6px; }
   .transport small { color: rgba(255, 255, 255, .45); font-size: 11px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #timeline { position: relative; display: flex; gap: 2px; height: 46px; padding: 9px 4px; background: var(--track); border-radius: 7px; box-shadow: inset 0 0 0 .5px var(--separator); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  .tk .grip { top: 0; bottom: 0; width: 8px; pointer-events: auto; cursor: ew-resize; }
+  .tk .grip.l { left: 0; }
+  .tk .grip.r { right: 0; }
+  .tk:hover .grip { background: rgba(255, 255, 255, .4); }
+  #dragline { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--yellow); pointer-events: none; }
   #timeline .vstart { margin-left: 10px; }  /* where the next video of a bundle starts */
   .tk, .gap { position: relative; border-radius: 5px; font-size: 11px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
   .tk { flex: var(--s) 1 0; min-width: max(4px, calc(var(--s) * 3px)); padding: 0 6px; background: var(--control); color: var(--label); box-shadow: inset 0 0 0 .5px var(--control-edge); }
@@ -194,6 +199,7 @@
   #keys dt kbd { margin: 0 0 0 2px; }
   #keys dd { margin: 0; color: var(--secondary); line-height: 1.35; }
   #cutbtn.armed { color: var(--red); background: rgba(255, 59, 48, .15); }
+  #mergebtn.armed { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
   #keepbtn.armed { color: var(--green); background: rgba(52, 199, 89, .15); }
   dialog { border: none; border-radius: 12px; padding: 18px 20px 14px; width: 340px; background: var(--window); color: var(--label); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); }
   dialog::backdrop { background: rgba(0, 0, 0, .25); }
@@ -334,6 +340,7 @@
           <button class="icon-btn" id="cutbtn" title="Cut from the clip’s start up to the playhead (tap C), or hold C to cut what plays while held. Shift+C cuts the whole clip."><svg class="i"><use href="#i-cut"/></svg>Cut<kbd>C</kbd></button>
           <button class="icon-btn" id="keepbtn" title="Keep from the clip’s start up to the playhead (tap K), or hold K to keep what plays while held. Shift+K keeps the whole clip (again to unmark)."><svg class="i"><use href="#i-check"/></svg>Keep<kbd>K</kbd></button>
           <button class="icon-btn" id="splitbtn" title="Split the clip at the playhead without cutting or keeping (S). Press S on a split to remove it."><svg class="i"><use href="#i-split"/></svg>Split<kbd>S</kbd></button>
+          <button class="icon-btn" id="mergebtn" title="Merge this clip with the one beside it: press M, then ← or →. Anything cut between them comes back."><svg class="i" style="transform:rotate(90deg)"><use href="#i-split"/></svg>Merge<kbd>M</kbd></button>
           <button class="icon-btn" id="undobtn" title="Undo (⌘Z)" aria-label="Undo"><svg class="i"><use href="#i-undo"/></svg><kbd>⌘Z</kbd></button>
           <button class="icon-btn" id="redobtn" title="Redo (⇧⌘Z)" aria-label="Redo"><svg class="i" style="transform:scaleX(-1)"><use href="#i-undo"/></svg><kbd>⇧⌘Z</kbd></button>
           <small id="meta" class="num"></small>
@@ -363,6 +370,7 @@
     <dt><kbd>K</kbd></dt><dd>Keep (green), the same way: tap up to the playhead, hold for what plays</dd>
     <dt><kbd>⇧</kbd><kbd>C</kbd></dt><dd>Cut the whole clip under the playhead</dd>
     <dt><kbd>⇧</kbd><kbd>K</kbd></dt><dd>Keep the whole clip; again to unmark your keep</dd>
+    <dt><kbd>M</kbd> <kbd>←</kbd><kbd>→</kbd></dt><dd>Merge this clip with the one on that side, undoing a NIP between them. Anything cut between comes back.</dd>
     <dt><kbd>S</kbd></dt><dd>Split the clip at the playhead into two, neither cut nor kept; on a split, removes it. Saying “NIP split” or just “NIP” while filming splits too.</dd>
 </dl>
   <h4>Undo</h4>
@@ -381,8 +389,8 @@
     <dt>New edit</dt><dd>In NIP’s box, describe a video and NIP builds it from the transcript</dd>
     <dt>Apply</dt><dd>Notes wait until you press Apply, or tick Apply now</dd></dl>
   <h4>Mouse</h4>
-  <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it.</dd>
-    <dt>Transcript</dt><dd>Click a word to jump to it. Drag over words, click a silence, or double-click a paragraph to select it, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it.</dd>
+  <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it. Drag a clip’s ends to trim it, or out into the cut beside it to extend it.</dd>
+    <dt>Transcript</dt><dd>Click a word to jump to it. Drag over words, click a silence, or double-click a paragraph to select it, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it. <kbd>K</kbd> brings cut text back.</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
 <dialog id="details"><form method="dialog">
@@ -421,7 +429,7 @@ const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let projects = [], tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
-let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
+let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
   const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
@@ -636,13 +644,13 @@ function show(d, idx = clipIdx) {
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
     if (s.gap) return `<div class="gap ${open ? 'open' : ''}${first}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${open ? short(len) : ''}${marks}</div>`;
     const name = clipName(s);
-    return `<div class="tk ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}${first}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${data.clips.length > 1 ? esc(c.stem) + ' ' : ''}${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}</div>`;
-  }).join('') + '<div id="playhead"></div>';
+    return `<div class="tk ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}${first}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${data.clips.length > 1 ? esc(c.stem) + ' ' : ''}${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}<i class="grip l"></i><i class="grip r"></i></div>`;
+  }).join('') + '<div id="playhead"></div><div id="dragline" hidden></div>';
   drawGap();
 
   $('#takesbox').hidden = !e.takes.some(t => t.group);  // most footage has no takes
   $('#takecount').textContent = e.takes.filter(t => t.group).length;
-  $('#takes').innerHTML = e.takes.map((t, i) => `
+  $('#takes').innerHTML = e.takes.map((t, i) => t.mine ? '' : `
     <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
       <input type="checkbox" data-act="keep" ${t.keep ? 'checked' : ''} title="Keep (T)" aria-label="Keep ${esc(label(t))}">
       <div class="main-col">
@@ -785,7 +793,7 @@ async function edit(i, fields) {
   try { show(await api(`/api/override/${enc(proj)}/${enc(clip().stem)}`, {at: t.at, ...fields})); }
   catch (e) { status(e.message, true); }
 }
-const takeAt = t => clip().edit.takes.findIndex(x => x.start <= t && t < x.end);
+const takeAt = t => clip().edit.takes.findIndex(x => !x.mine && x.start <= t && t < x.end);
 
 // ---------- playback: a list of pieces {ci, a, b}, possibly across videos, in order ----------
 function playList(list) {
@@ -908,7 +916,45 @@ function markStretch(kind) {  // Shift+C / Shift+K: the whole clip at the playhe
   cutAction(kind, s.a, s.b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(s.b - s.a).toFixed(1)}s`));
 }
 
+$('#timeline').onpointerdown = e => {
+  if (!e.target.classList.contains('grip')) return;
+  e.preventDefault();
+  const el = e.target.closest('[data-k]'), k = +el.dataset.k, s = allSegs[k], right = e.target.classList.contains('r');
+  const next = allSegs[k + (right ? 1 : -1)], room = next?.gap && next.ci === s.ci ? next : null;  // a clip can grow into the cut beside it
+  grip = {s, right, x: e.clientX, edge: right ? s.b : s.a, perSec: Math.min(el.offsetWidth / (s.b - s.a), 20),
+    min: right ? s.a + 0.1 : room ? room.a : s.a, max: right ? (room ? room.b : s.b) : s.b - 0.1};
+  grip.t = grip.edge;
+  $('#timeline').setPointerCapture(e.pointerId);
+  stopPlaying();
+  video.pause();
+  if (s.ci !== clipIdx) show(data, s.ci);
+};
+$('#timeline').onpointermove = e => {
+  if (!grip) return;
+  const g = grip, r = $('#timeline').getBoundingClientRect(), line = $('#dragline');
+  g.t = Math.min(g.max, Math.max(g.min, g.edge + (e.clientX - g.x) / g.perSec));
+  if (g.max - g.t < 0.15) g.t = g.max;  // snap to the whole cut, or the end of the clip
+  if (g.t - g.min < 0.15) g.t = g.min;
+  if (video.readyState && pendingSeek == null) video.currentTime = g.t;  // see the frame you're on
+  line.hidden = false;
+  line.style.left = `${e.clientX - r.left + $('#timeline').scrollLeft}px`;
+  const d = g.t - g.edge, trim = g.right ? d < 0 : d > 0;
+  status(`${trim ? 'Trim' : 'Extend'} ${Math.abs(d).toFixed(1)}s to ${mmss(g.t)}`, false, true);
+};
+$('#timeline').onpointerup = () => {
+  if (!grip) return;
+  const {s, right, edge, t} = grip;
+  grip = null;
+  gripped = true;
+  setTimeout(() => gripped = false, 50);
+  $('#dragline').hidden = true;
+  if (Math.abs(t - edge) < 0.05) return status('');
+  const trim = right ? t < edge : t > edge, secs = Math.abs(t - edge).toFixed(1);
+  (trim ? cutAction('cut', right ? t : s.a, right ? s.b : t) : cutAction('merge', right ? s.a : t, right ? t : s.b, labelOf(s)?.text || ''))
+    .then(ok => ok && status(`${trim ? 'Trimmed' : 'Extended'} ${secs}s`));
+};
 $('#timeline').onclick = e => {
+  if (gripped) return;  // the click that ends a drag
   const el = e.target.closest('[data-k]');
   if (!el) return;
   const s = allSegs[+el.dataset.k], r = el.getBoundingClientRect();  // before show() replaces the element
@@ -933,21 +979,28 @@ $('#gapinfo').onclick = e => {
   else if (b.dataset.act === 'all') restoreAll(gapWhy);
   else if (b.dataset.j != null) restoreOne(gapWhy[+b.dataset.j]);
 };
+async function joinBack(a, b) {  // restored footage a..b with nothing between it and the clip before becomes part of that clip
+  const left = segs.find(s => !s.gap && s.a < a && a <= s.b + 0.05);
+  const end = Math.min(b, segs.find(s => s.gap && s.a >= a - 0.05)?.a ?? b);  // only as far as it's really back
+  if (left && end - left.b > 0.05) await cutAction('merge', left.a, end, labelOf(left)?.text || '');
+}
 async function restoreOne(r) {
-  const before = editTime(Infinity);
+  const before = editTime(Infinity), {start, end} = r.take != null ? clip().edit.takes[r.take] : r.cut, g = segs.find(s => s.gap && s.a === openGap);
   if (r.take != null) await edit(r.take, {keep: true});
-  else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.start);
+  else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.orig ?? r.cut.start);
   const still = segs.find(s => s.gap && s.a === openGap);
-  if (editTime(Infinity) - before >= 0.05 || !still) return;
+  if (editTime(Infinity) - before >= 0.05 || !still) return g && joinBack(Math.max(start, g.a), Math.min(end, g.b));
   const range = x => x.take != null ? clip().edit.takes[x.take] : x.cut, mine = range(r);  // overlapping reasons: this one alone frees nothing
   const others = reasons(still).filter(x => range(x).start < mine.end && range(x).end > mine.start);
   status(`Still cut by: ${others.map(x => x.text.split(' · ')[0]).join(', ')}. Restore those too, or use Restore All.`);
 }
 async function restoreAll(rows) {  // one request at a time: each answer is the new state the next builds on
+  const g = segs.find(s => s.gap && s.a === openGap);
   for (const r of rows) {
     if (r.take != null) await edit(r.take, {keep: true});
-    else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.start);
+    else await cutAction(r.cut.why === 'cut by you' ? 'uncut' : 'restore', r.cut.orig ?? r.cut.start);
   }
+  if (g) await joinBack(g.a, g.b);
   status('Restored');
 }
 $('#gapinfo').onsubmit = e => {
@@ -996,6 +1049,20 @@ function split() {  // S: split the footage at the playhead, or remove your spli
   cutAction(near ? 'unsplit' : 'split', near ? near.t : t).then(ok => ok && status(near ? 'Split removed' : `Split at ${mmss(t)}`));
 }
 $('#splitbtn').onclick = split;
+function armMerge(on) {
+  mergeArmed = on;
+  $('#mergebtn').classList.toggle('armed', on);
+  if (on) status('Merge with which clip? Press ← or → (Esc cancels)', false, true);
+}
+function mergeWith(dir) {  // the clip under the playhead and its neighbour become one, undoing a NIP between them
+  const t = video.currentTime, cs = segs.filter(s => !s.gap), cur = cs.find(s => s.a <= t && t < s.b), other = cs[cs.indexOf(cur) + dir];
+  if (!cur) return status('Move the playhead onto a clip that isn’t cut', true);
+  if (!other) return status(`There’s no clip to the ${dir < 0 ? 'left' : 'right'} in this video`, true);
+  const [l, r] = dir < 0 ? [other, cur] : [cur, other], back = r.a - l.b;
+  cutAction('merge', l.a, r.b, labelOf(cur)?.text || labelOf(other)?.text || '')
+    .then(ok => ok && status(back > 0.05 ? `Merged, and brought back ${back.toFixed(1)}s that was cut between them` : 'Merged'));
+}
+$('#mergebtn').onclick = () => armMerge(!mergeArmed);
 const undoRedo = act => clip()[act] ? cutAction(act).then(ok => ok && status(act === 'undo' ? 'Undone' : 'Redone')) : status(`Nothing to ${act}`);
 $('#undobtn').onclick = () => undoRedo('undo');
 $('#redobtn').onclick = () => undoRedo('redo');
@@ -1017,14 +1084,13 @@ function setPick(ci, a, b) {  // select a stretch from the transcript; K, C and 
 }
 function pickAct(kind) {
   const {a, b} = picked;
-  if (segs.some(s => s.gap && s.a <= a + 0.05 && b <= s.b + 0.05)) return status('That’s already cut. Open its red marker on the timeline to bring it back.', true);
   picked = null;
   cutAction(kind, a, b).then(ok => ok && status(`${kind === 'cut' ? 'Cut' : 'Kept'} ${(b - a).toFixed(1)}s`));
 }
 $('#words').onclick = e => {
   if (justPicked) { justPicked = false; return; }  // the click that ends a drag
   const el = e.target.closest('[data-t]');
-  if (el?.classList.contains('sil') && !el.closest('.cut')) return setPick(+el.dataset.ci, +el.dataset.t, +el.dataset.e);
+  if (el?.classList.contains('sil')) return setPick(+el.dataset.ci, +el.dataset.t, +el.dataset.e);
   if (picked) { picked = null; show(data); }
   if (el) goTo(+el.dataset.ci, +el.dataset.t);
 };
@@ -1039,14 +1105,10 @@ document.addEventListener('mouseup', () => {  // a drag across the transcript se
   setTimeout(() => justPicked = false);
   setPick(+mine[0].dataset.ci, +mine[0].dataset.t, +mine.at(-1).dataset.e);
 });
-$('#words').ondblclick = e => {  // a whole paragraph; a cut one opens so it can be brought back
+$('#words').ondblclick = e => {  // a whole paragraph
   getSelection().removeAllRanges();
   const s = allSegs[+e.target.closest('.para')?.dataset.k];
-  if (!s) return;
-  if (!s.gap) return setPick(s.ci, s.a, s.b);
-  goTo(s.ci, s.a);
-  openGap = s.a; openSeg = naming = picked = null;
-  show(data);
+  if (s) setPick(s.ci, s.a, s.b);
 };
 $('#takes').onclick = e => {
   const b = e.target.closest('[data-act]'), row = e.target.closest('.row');
@@ -1188,7 +1250,14 @@ $('#mic').onclick = () => {
 document.addEventListener('keydown', e => {
   if ($('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   const t = video.currentTime, i = takeAt(t);
-  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  if (mergeArmed && e.key !== 'm' && e.key !== 'Shift') {
+    armMerge(false);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); return mergeWith(e.key === 'ArrowLeft' ? -1 : 1); }
+    status('');
+    if (e.key === 'Escape') return;
+  }
+  if (e.key === 'm') armMerge(true);
+  else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
   else if (e.repeat && /^[ck]$/.test(e.key)) e.preventDefault();  // key auto-repeat while held
   else if (e.key === 'c' || e.key === 'k') holdStart(e.key === 'c' ? 'cut' : 'keep');
   else if (e.key === 'C' || e.key === 'K') markStretch(e.key === 'C' ? 'cut' : 'keep');

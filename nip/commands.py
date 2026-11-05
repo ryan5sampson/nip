@@ -280,7 +280,7 @@ def silences(words, a, b):
 
 def timeline(edit, duration, words=()):
     """The clips the user sees, in order: kept footage (keep or not marked) and the cut stretches between. Splits and
-    the edges of names and keeps divide them, so neighbours never merge. Each lists its silences."""
+    the edges of names divide them, so named neighbours never merge. Each lists its silences."""
     out, t, loose = [], 0.0, unmarked(edit)
     for a, b in kept_pieces(edit):
         if a - t > 0.05:
@@ -296,8 +296,7 @@ def timeline(edit, duration, words=()):
         t = b
     if duration - t > 0.05:
         out.append({"gap": True, "keep": False, "a": t, "b": duration})
-    at = [s["t"] for s in edit["splits"]] + [t for x in edit["labels"] for t in (x["start"], x["end"])] \
-        + [t for k in edit["keeps"] for t in (k["start"], k["end"])]
+    at = [s["t"] for s in edit["splits"]] + [t for x in edit["labels"] for t in (x["start"], x["end"])]
     clips = []
     for s in out:
         pts = [] if s["gap"] else sorted({t for t in at if s["a"] + 0.05 < t < s["b"] - 0.05})
@@ -340,13 +339,28 @@ def apply_overrides(edit, overrides):
     return {**edit, "takes": takes}
 
 
-def apply_cut_edits(edit, restored, added, kept=()):
+def apply_cut_edits(edit, restored, added, kept=(), brought=()):
     """Hand changes to the cuts: restore voice cuts (matched by start time) and add the user's own.
 
+    brought is footage the user brought back by range: it beats any cut or dropped take, so part of a cut can come back.
     Also lists the keeps: voice highlights ("NIP keep", "last 10 seconds", "tag that") and the user's own.
     """
     cuts = [c for c in edit["cuts"] if not any(abs(c["start"] - r) < 0.01 for r in restored)]
     cuts += [{"start": a["start"], "end": a["end"], "why": "cut by you"} for a in added]
     keeps = [{"start": m["t"], "end": m["end"], "why": m["label"]} for m in edit["markers"] if "end" in m]
     keeps += [{"start": k["start"], "end": k["end"], "why": "kept by you"} for k in kept]
-    return {**edit, "cuts": cuts, "keeps": keeps}
+    takes, back = edit["takes"], []
+    for r in sorted(brought, key=lambda r: r["start"]):  # overlapping ranges joined
+        if back and r["start"] <= back[-1]["end"]:
+            back[-1]["end"] = max(back[-1]["end"], r["end"])
+        else:
+            back.append(dict(r))
+    if back:
+        def uncut(c):  # orig: a shortened cut is still restored by the start it was made with
+            left = kept_ranges(c, back)
+            return [c] if left == [(c["start"], c["end"])] else [{**c, "start": a, "end": b, "orig": c.get("orig", c["start"])} for a, b in left]
+        cuts = [p for c in cuts for p in uncut(c)]
+        on = [t for t in takes if t["keep"]]
+        takes = sorted(takes + [{"start": a, "end": b, "at": a, "keep": True, "why": "brought back by you", "group": 0, "take": 0,
+                                 "name": None, "mine": True} for r in back for a, b in kept_ranges(r, on)], key=lambda t: t["start"])
+    return {**edit, "takes": takes, "cuts": cuts, "keeps": keeps}

@@ -11,7 +11,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, norm, respell
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, norm, respell, timeline
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
@@ -55,12 +55,14 @@ def decisions(clip):
     """Voice decisions with the user's hand edits on top (all kept through reparse)."""
     e = apply_overrides(clip["edit"], clip.get("overrides", {}))
     e["labels"] = clip.get("labels", [])  # descriptions the user gave stretches of footage; Reset keeps them
-    e["splits"] = sorted([{"t": m["t"], "why": "divider"} for m in e["markers"] if m.get("label") == "divider"]
+    merged = clip.get("my_merges", [])
+    e["splits"] = sorted([{"t": m["t"], "why": "divider"} for m in e["markers"] if m.get("label") == "divider"
+                          and not any(abs(m["t"] - t) < 0.01 for t in merged)]
                          + [{"t": t, "why": "split by you"} for t in clip.get("my_splits", [])], key=lambda s: s["t"])
-    return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []), clip.get("my_keeps", []))
+    return apply_cut_edits(e, clip.get("restored_cuts", []), clip.get("my_cuts", []), clip.get("my_keeps", []), clip.get("my_restores", []))
 
 
-HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps", "my_splits")  # the user's hand edits on a clip, on top of the voice edit
+HAND = ("overrides", "restored_cuts", "my_cuts", "my_keeps", "my_splits", "my_restores", "my_merges")  # the user's hand edits on a clip, on top of the voice edit
 UNDOABLE = HAND + ("labels",)
 
 
@@ -121,7 +123,24 @@ def add_cut(clip, start, end, layer="my_cuts"):  # layer "my_keeps" marks it kee
     ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
     if not (ok and 0 <= start < end <= clip["duration"]):
         raise ValueError("a range must end after it starts, inside the video")
-    clip.setdefault(layer, []).append({"start": round(float(start), 2), "end": round(float(end), 2)})
+    r = {"start": round(float(start), 2), "end": round(float(end), 2)}
+    clip.setdefault(layer, []).append(r)
+    if layer == "my_keeps":  # keeping footage brings it back if it was cut
+        clip.setdefault("my_restores", []).append(dict(r))
+    elif layer == "my_cuts" and clip.get("my_restores"):  # and the newest mark wins: cutting it takes it out again
+        clip["my_restores"] = [{"start": a, "end": b} for x in clip["my_restores"] for a, b in kept_ranges(x, [r])]
+
+
+def merge(clip, start, end, name=""):
+    """Make start..end one clip: bring back anything cut inside it and remove the splits and spoken dividers between.
+    It's keep if any of it was, and takes name."""
+    spans = [s for s in timeline(decisions(clip), clip["duration"]) if not s["gap"] and s["a"] < end - 0.05 and s["b"] > start + 0.05]
+    add_cut(clip, start, end, "my_keeps" if any(s["keep"] for s in spans) else "my_restores")
+    inside = lambda t: start + 0.05 < t < end - 0.05
+    clip["my_merges"] = clip.get("my_merges", []) + [s["t"] for s in decisions(clip)["splits"] if s["why"] == "divider" and inside(s["t"])]
+    clip["my_splits"] = [t for t in clip.get("my_splits", []) if not inside(t)]
+    if name:
+        set_label(clip, start, end, name)
 
 
 def set_label(clip, start, end, text):
