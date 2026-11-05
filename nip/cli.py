@@ -461,6 +461,16 @@ def file_name(text):
     return re.sub(r'[^\w ,.()&+-]', '', text).strip(' .')[:80]
 
 
+def library_folder(proj, info):
+    """The bundle's name, then the date it was filmed. Unnamed footage keeps its project name; a same-named bundle gets a number, never another's folder."""
+    name = file_name(info.get("my_description") or info.get("description") or "")
+    base = f"{name} ({proj.name[:10]})" if name else proj.name
+    folder, n = base, 2
+    while (FINAL / folder).exists() and folder != info.get("library_folder", proj.name):
+        folder, n = f"{base} {n}", n + 1
+    return folder
+
+
 def finalize(proj):
     """Complete a project: write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
     transcript with times from the start of the clip), thumbnail and preview, so editors just see the clips. It's built and
@@ -471,11 +481,12 @@ def finalize(proj):
     if left:
         raise ValueError(f"{left} stretches aren't marked cut or keep yet. Open it and press Mark Complete to settle them.")
     FINAL.mkdir(parents=True, exist_ok=True)
-    out, tmp, dest = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", FINAL / proj.name
+    folder = library_folder(proj, info)
+    out, tmp, old, dest = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", FINAL / info.get("library_folder", proj.name), FINAL / folder
     shutil.rmtree(out, ignore_errors=True)
     (out / "_info").mkdir(parents=True)
     spellings, n, skipped = vocabulary()[1], 0, 0
-    before = [load(f) for f in dest.glob("_info/*.json")]  # tags added to clips outlive finalizing again
+    before = [load(f) for f in old.glob("_info/*.json")]  # tags added to clips outlive finalizing again
     try:
         for c in clips:
             e, source = decisions(c), Path(c["source"])
@@ -508,10 +519,10 @@ def finalize(proj):
         raise
     finally:
         shutil.rmtree(out, ignore_errors=True)
-    if dest.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
-        shutil.rmtree(dest) if "CloudStorage" in str(FINAL) else move_free(dest, TRASH)
+    if old.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
+        shutil.rmtree(old) if "CloudStorage" in str(FINAL) else move_free(old, TRASH)
     tmp.rename(dest)
-    info["finalized"], info["stage"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed"
+    info["finalized"], info["stage"], info["library_folder"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed", folder
     save(proj / "project.json", info)
     print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
     return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir() if f.is_file())}

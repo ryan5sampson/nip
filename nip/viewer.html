@@ -530,7 +530,7 @@ function drawLibrary() {
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value ? `Nothing matches “${esc($('#search').value)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
-const previewOf = c => `/final/${enc(c.project)}/${enc(c.stem + '.preview.mp4')}`;  // small, so browsing never fetches the full clip from Drive
+const previewOf = c => `/final/${enc(c.folder)}/${enc(c.stem + '.preview.mp4')}`;  // small, so browsing never fetches the full clip from Drive
 const clipTitle = c => c.name || (c.text ? `“${c.text.split(' ').slice(0, 7).join(' ')}…”` : c.source);  // an unnamed clip by what's said in it
 const clipKey = c => `${c.project}/${c.stem}`;
 const SORTS = {new: (a, b) => String(b.filmed).localeCompare(a.filmed), old: (a, b) => String(a.filmed).localeCompare(b.filmed), long: (a, b) => b.duration - a.duration,
@@ -550,7 +550,7 @@ function drawClips(words) {  // every kept clip, across all bundles
     && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
   $('#title').textContent = tagFilter || 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
-  const url = (c, f) => `/final/${enc(c.project)}/${enc(f)}`;
+  const url = (c, f) => `/final/${enc(c.folder)}/${enc(f)}`;
   $('#clipcards').innerHTML = shown.length ? shown.map(c => `
     <a class="tile ${chosen.has(clipKey(c)) ? 'chosen' : ''}" href="#/clips" data-clip="${clips.indexOf(c)}" title="Move across the picture to preview. Click for details.">
       <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i><button class="sel" title="Pick for a video" aria-label="Pick for a video">${icon('check')}</button></div>
@@ -569,7 +569,7 @@ $('#pickexport').onclick = () => {
   $('#handoff').showModal();
 };
 $('#handoff').onclose = () => $('#handoff').returnValue && run($('#pickexport'), 'Copying your clips…', async () => {
-  const n = chosen.size, r = await api('/api/handoff', {name: $('#handoffname').value, clips: [...chosen.values()].map(c => ({project: c.project, file: c.file}))});
+  const n = chosen.size, r = await api('/api/handoff', {name: $('#handoffname').value, clips: [...chosen.values()].map(c => ({folder: c.folder, file: c.file}))});
   chosen.clear();
   $('#handoffname').value = '';
   drawLibrary();
@@ -602,9 +602,9 @@ $('#clipdlg').onclose = () => {
   $('#clipvideo').removeAttribute('src');
   $('#clipvideo').load();
   if (tags.map(t => t.trim().toLowerCase()).filter(Boolean).join() !== c.tags.join())
-    run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.project)}/${enc(c.stem)}`, {tags})).tags; drawLibrary(); status('Tags saved'); });
+    run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags})).tags; drawLibrary(); status('Tags saved'); });
 };
-$('#clipreveal').onclick = () => api('/api/reveal', {project: openClip.project, file: openClip.file}).catch(e => status(e.message, true));
+$('#clipreveal').onclick = () => api('/api/reveal', {folder: openClip.folder, file: openClip.file}).catch(e => status(e.message, true));
 $('#clipbundle').onclick = () => { $('#clipdlg').close(); location.hash = '#/p/' + enc(openClip.project); };
 $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it

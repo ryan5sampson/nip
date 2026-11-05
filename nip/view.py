@@ -161,10 +161,10 @@ def scan_library():
     for f in sorted(cli.FINAL.glob("[!.]*/_info/*.json")):
         key, when = str(f.relative_to(cli.FINAL)), f.stat().st_mtime
         if old.get(key, {}).get("mtime") == when:
-            new[key] = old[key]
+            new[key] = {**old[key], "folder": f.parent.parent.name}
             continue
         m = cli.load(f)
-        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem,
+        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem, "folder": f.parent.parent.name,
                     "text": " ".join(w["w"] for w in m["words"]), "file": f.with_suffix(Path(m["source"]).suffix).name}
     if new != old:
         cli.save(cli.INDEX, new)
@@ -188,9 +188,9 @@ def library_answers():
     return not t.is_alive()
 
 
-def final_file(project, name, info=False):
+def final_file(folder, name, info=False):
     """A finalized clip, or from _info its thumbnail or preview."""
-    f = cli.FINAL / project / ("_info" if info else "") / name
+    f = cli.FINAL / folder / ("_info" if info else "") / name
     if not f.is_file():
         raise FileNotFoundError
     return f
@@ -490,7 +490,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("send clips (a list) and name")
                 if not library_answers():
                     raise ValueError("Google Drive isn’t answering, so nothing was exported. Try again in a moment.")
-                files = [final_file(Path(str(c.get("project"))).name, Path(str(c.get("file"))).name) for c in picks]
+                files = [final_file(Path(str(c.get("folder"))).name, Path(str(c.get("file"))).name) for c in picks]
                 self.send_json({"folder": cli.handoff(str(body.get("name", "")), files).name})
             elif len(p) == 3 and p[:2] == ["api", "clear"]:
                 with LOCK:
@@ -505,7 +505,7 @@ class Handler(BaseHTTPRequestHandler):
             elif p == ["api", "add"]:
                 self.send_json({"added": pick_videos()})
             elif p == ["api", "reveal"]:  # select a finalized clip in Finder, to drag it into an editor
-                subprocess.run(["open", "-R", str(final_file(Path(str(body.get("project"))).name, Path(str(body.get("file"))).name))], check=True)
+                subprocess.run(["open", "-R", str(final_file(Path(str(body.get("folder"))).name, Path(str(body.get("file"))).name))], check=True)
                 self.send_json({})
             elif p == ["api", "open"]:  # show a folder in Finder
                 if body.get("what") == "inbox":
@@ -518,7 +518,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():
                     target = cli.UNREADABLE
                 elif body.get("what") == "finalized":
-                    target = cli.FINAL / self.project(str(body.get("project", ""))).name
+                    proj = self.project(str(body.get("project", "")))
+                    target = cli.FINAL / cli.load(proj / "project.json").get("library_folder", proj.name)
                     if not target.exists():
                         raise FileNotFoundError
                 elif body.get("what") == "handoff":
