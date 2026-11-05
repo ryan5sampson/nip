@@ -1,4 +1,4 @@
-"""nip view: the local NIP app. Library, review and adjust takes, Claude edits, export. Also keeps ingesting the inbox."""
+"""nip view: the local NIP app. Inbox, review and adjust takes, Claude edits, the clip library. Also keeps ingesting the inbox."""
 import copy
 import json
 import os
@@ -93,25 +93,23 @@ def summary(proj):
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "stage": cli.stage_of(proj, info), "finalized": bool(info.get("finalized")), "media": [[c["source"], c["duration"]] for c in clips],
+            "stage": cli.stage_of(info), "finalized": bool(info.get("finalized")), "media": [[c["source"], c["duration"]] for c in clips],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
 
 def project_data(proj):
     info, clips = clips_of(proj)
-    return {**info, "name": proj.name, "clips": clips, "stage": cli.stage_of(proj, info),
+    return {**info, "name": proj.name, "clips": clips, "stage": cli.stage_of(info),
             "description": info.get("my_description") or info["description"],
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
 def edited(proj):
-    """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing."""
+    """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing, and any edit reopens Completed."""
     with LOCK:
         info = cli.load(proj / "project.json")
-        if info.pop("finalized", None):  # the finalized clips no longer match
-            cli.save(proj / "project.json", info)
-        if cli.stage_of(proj, info) == "inbox":
+        if info.get("finalized") or cli.stage_of(info) == "inbox":
             cli.set_stage(proj, "processing")
     return project_data(proj)
 
@@ -462,19 +460,20 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(edited(proj))
                 else:
                     raise ValueError("action must be export or delete")
-            elif len(p) == 3 and p[:2] == ["api", "export"]:
-                proj = self.project(p[2])
-                settle(proj, body.get("unmarked"))
-                cli.export(proj, bool(body.get("combined")))
-                self.send_json({"done": str(cli.EXPORTS / proj.name)})
             elif len(p) == 3 and p[:2] == ["api", "stage"]:  # the user moves footage to any stage
                 proj = self.project(p[2])
                 if body.get("stage") not in cli.STAGES:
                     raise ValueError(f"stage must be one of {', '.join(cli.STAGES)}")
-                settle(proj, body.get("unmarked"))
-                with LOCK:
-                    cli.set_stage(proj, body["stage"])
-                self.send_json(project_data(proj))
+                if body["stage"] == "completed":  # cuts the footage down: each kept clip becomes its own file in the library
+                    if not library_answers():
+                        raise ValueError("Google Drive isn’t answering, so nothing was saved. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
+                    settle(proj, body.get("unmarked"))
+                    saved = cli.finalize(proj)
+                    self.send_json({**project_data(proj), "saved": saved})
+                else:
+                    with LOCK:
+                        cli.set_stage(proj, body["stage"])
+                    self.send_json(project_data(proj))
             elif len(p) == 4 and p[:2] == ["api", "clip"]:  # a finalized clip's own tags
                 f = cli.FINAL / p[2] / "_info" / f"{p[3]}.json"
                 tags = body.get("tags")
@@ -485,12 +484,14 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     cli.save(f, {**cli.load(f), "tags": [t.strip().lower() for t in tags if t.strip()]})
                 self.send_json({"tags": cli.load(f)["tags"]})
-            elif len(p) == 3 and p[:2] == ["api", "finalize"]:  # each kept clip as its own file; originals stay
-                proj = self.project(p[2])
+            elif p == ["api", "handoff"]:  # library clips copied to a folder of their own, to make a video with
+                picks = body.get("clips")
+                if not isinstance(picks, list) or not all(isinstance(c, dict) for c in picks):
+                    raise ValueError("send clips (a list) and name")
                 if not library_answers():
-                    raise ValueError("Google Drive isn’t answering, so nothing was saved. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
-                settle(proj, body.get("unmarked"))
-                self.send_json({**cli.finalize(proj), "project": project_data(proj)})
+                    raise ValueError("Google Drive isn’t answering, so nothing was exported. Try again in a moment.")
+                files = [final_file(Path(str(c.get("project"))).name, Path(str(c.get("file"))).name) for c in picks]
+                self.send_json({"folder": cli.handoff(str(body.get("name", "")), files).name})
             elif len(p) == 3 and p[:2] == ["api", "clear"]:
                 with LOCK:
                     self.send_json({"trash": str(cli.clear(self.project(p[2])))})
@@ -518,6 +519,10 @@ class Handler(BaseHTTPRequestHandler):
                     target = cli.UNREADABLE
                 elif body.get("what") == "finalized":
                     target = cli.FINAL / self.project(str(body.get("project", ""))).name
+                    if not target.exists():
+                        raise FileNotFoundError
+                elif body.get("what") == "handoff":
+                    target = cli.HANDOFFS / Path(str(body.get("folder"))).name
                     if not target.exists():
                         raise FileNotFoundError
                 elif body.get("what") == "exports":

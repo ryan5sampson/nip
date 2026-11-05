@@ -3,11 +3,11 @@
 Voice-directed footage prep for an Apple Silicon Mac. The app is Footage Flow; NIP is its assistant (the voice wake word, and the Claude-backed editing in the app). The code, the `nip` command, `~/NIP` and `.nip.json` keep the short name. Footage Flow does not finish videos; it cuts footage down so the final edit in CapCut is fast.
 
 - `nip/commands.py`: transcript words → edit decisions (takes, cuts, markers, tags). Pure, no I/O. All voice-command rules live here.
-- `nip/cli.py`: inbox → library → transcription (mlx-whisper) → report → ffmpeg export.
-- `nip/view.py` + `nip/viewer.html`: the local app (`nip`): library, review, hand edits, export. Stdlib server on 127.0.0.1.
+- `nip/cli.py`: inbox → projects → transcription (mlx-whisper) → report → finalize (kept clips to the Drive library) → handoff (picked clips to a folder).
+- `nip/view.py` + `nip/viewer.html`: the local app (`nip`): inbox, review, hand edits, the clip library. Stdlib server on 127.0.0.1.
 - `nip/brief.py`: Claude edits from a brief, working from the transcript (through the `claude` CLI on the user's Claude plan; Anthropic SDK + `ANTHROPIC_API_KEY` as fallback).
 - Footage is never modified. Each clip has a `<clip>.nip.json` with its words, voice edit decisions, and the user's hand `overrides` (kept through reparse); video is only re-encoded on export.
-- Tests: `python3 -m unittest -v` (stdlib only; the export test needs `ffmpeg`).
+- Tests: `python3 -m unittest -v` (stdlib only; the end-to-end test needs `ffmpeg`).
 
 ## Coding rules (Ponytail)
 

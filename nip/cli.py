@@ -18,6 +18,7 @@ INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
 SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings.json").exists() else {}
 FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "finalized").expanduser()  # kept clips, as their own files
+HANDOFFS = FINAL.parent / "Handoffs"  # clips picked from the library for a video, a folder each
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
@@ -43,7 +44,7 @@ VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
 TRASH = Path.home() / ".Trash"
-STAGES = ("inbox", "processing", "processed", "exported")  # footage moves through these; any can be deleted to the Trash
+STAGES = ("inbox", "processing", "completed")  # footage moves through these; any can be deleted to the Trash. Completed means its clips are in the library
 SHORT_SIDE = 1080  # Reels, TikTok and Shorts all play 1080x1920; more is wasted on them
 
 
@@ -294,7 +295,7 @@ def bundle(projs, title):
     stems = [s for i in infos for s in i["clips"]]
     if len(projs) < 2 or len(set(stems)) < len(stems) or not slug(title):
         raise ValueError("bundle two or more projects with different video names, and give the bundle a name")
-    stages = {stage_of(p, i) for p, i in zip(projs, infos)}
+    stages = {stage_of(i) for i in infos}
     if stages - {"inbox", "processing"}:
         raise ValueError("only footage in the inbox or processing can be bundled")
 
@@ -323,13 +324,18 @@ def bundle(projs, title):
     return dest
 
 
-def stage_of(proj, info):
-    return info.get("stage") or ("exported" if (EXPORTS / proj.name).exists() else "inbox")  # projects from before stages
+def stage_of(info):
+    stage = info.get("stage", "inbox")
+    if stage in STAGES:
+        return stage
+    return "completed" if info.get("finalized") else "processing"  # the old Processed and Exported, from before Complete saved the clips
 
 
 def set_stage(proj, stage):
+    """Move footage out of Completed, or between the stages before it; only finalize() completes it."""
     info = load(proj / "project.json")
     info["stage"] = stage
+    info.pop("finalized", None)  # its clips in the library may no longer match
     save(proj / "project.json", info)
 
 
@@ -451,15 +457,19 @@ def preview(clip, name):
                     "-vf", side.format(360), str(name.with_suffix(".jpg"))], check=True)
 
 
+def file_name(text):
+    return re.sub(r'[^\w ,.()&+-]', '', text).strip(' .')[:80]
+
+
 def finalize(proj):
-    """Write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
+    """Complete a project: write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
     transcript with times from the start of the clip), thumbnail and preview, so editors just see the clips. It's built and
     checked locally and copied over whole, so Drive never uploads half a result. The originals aren't touched."""
     info = load(proj / "project.json")
     clips = [load(proj / f"{stem}.nip.json") for stem in info["clips"]]
     left = sum(len(unmarked(decisions(c))) for c in clips)
     if left:
-        raise ValueError(f"{left} stretches aren't marked cut or keep yet")
+        raise ValueError(f"{left} stretches aren't marked cut or keep yet. Open it and press Mark Complete to settle them.")
     FINAL.mkdir(parents=True, exist_ok=True)
     out, tmp, dest = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", FINAL / proj.name
     shutil.rmtree(out, ignore_errors=True)
@@ -480,7 +490,7 @@ def finalize(proj):
                 n += 1
                 was = next((o for o in before if o["source"] == source.name
                             and min(o["source_end"], s["b"]) - max(o["source_start"], s["a"]) > (s["b"] - s["a"]) / 2), None)
-                f = out / f"{n:02d} {re.sub(r'[^\w ,.()&+-]', '', name or source.stem).strip(' .')[:80]}{source.suffix}"
+                f = out / f"{n:02d} {file_name(name or source.stem)}{source.suffix}"
                 copy_clip(proj / "raw" / source, s["a"], s["b"], f)
                 preview(f, out / "_info" / f.name)
                 save((out / "_info" / f.name).with_suffix(".json"), {
@@ -501,41 +511,28 @@ def finalize(proj):
     if dest.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
         shutil.rmtree(dest) if "CloudStorage" in str(FINAL) else move_free(dest, TRASH)
     tmp.rename(dest)
-    info["finalized"] = {"at": time.time(), "folder": str(dest), "clips": n}
+    info["finalized"], info["stage"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed"
     save(proj / "project.json", info)
     print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
     return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir() if f.is_file())}
 
 
-def export(proj, combined):
-    info = load(proj / "project.json")
-    out = EXPORTS / proj.name
-    out.mkdir(parents=True, exist_ok=True)
-    files, n = [], 1
-    for stem in info["clips"]:
-        clip = load(proj / f"{stem}.nip.json")
-        e = decisions(clip)
-        for t in e["takes"]:
-            pieces = kept_ranges(t, e["cuts"]) if t["keep"] else []
-            if not pieces:
-                continue
-            if t.get("name"):
-                name = f"{n:02d}_{slug(t['name'])}_t{t['take']}.mp4"
-            else:
-                name = f"{n:02d}_{stem}" + (f"_s{t['group']}t{t['take']}" if t["group"] else "") + ".mp4"
-            print(f"exporting {name}")
-            cut(proj / "raw" / clip["source"], pieces[0][0], pieces, out / name)
-            files.append(out / name)
-            n += 1
-    if combined and files:
-        # shortcut: stream-copy concat assumes all clips share resolution/fps; re-encode if mixing cameras
-        lst = out / "list.txt"
-        lst.write_text("".join(f"file '{f.name}'\n" for f in files))
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst),
-                        "-c", "copy", str(out / f"{proj.name}.mp4")], check=True)
-        lst.unlink()
-    set_stage(proj, "exported")
-    print(f"done: {out}")
+def handoff(name, files):
+    """Copy chosen library clips, numbered in the order picked, into a folder of their own for one video. It's built
+    beside its final name, so nobody working from the folder sees half of it."""
+    name = file_name(name)
+    if not name or not files:
+        raise ValueError("name the video and pick at least one clip")
+    tmp = HANDOFFS / f".{name}.building"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    try:
+        for i, f in enumerate(files, 1):
+            shutil.copyfile(f, tmp / f"{i:02d} {re.sub(r'^[0-9]+ ', '', f.name)}")  # not copy2: Drive's own file ids must not come along
+        return move_free(tmp, HANDOFFS, name)
+    except Exception:  # never leave half a result
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
 
 
 def export_story(proj, story):
@@ -560,7 +557,6 @@ def export_story(proj, story):
                         "-c", "copy", str(final)], check=True)
         for f in [lst, *parts]:
             f.unlink()
-    set_stage(proj, "exported")
     print(f"done: {final}")
     return final
 
@@ -584,11 +580,9 @@ def main():
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
     sub.add_parser("view", help="open Footage Flow in your browser and keep processing the inbox (the default)")
-    for c in ("report", "reparse", "retranscribe", "finalize", "export"):
+    for c in ("report", "reparse", "retranscribe", "finalize"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")
-        if c == "export":
-            p.add_argument("--combined", action="store_true", help="also join everything into one video")
     a = ap.parse_args()
     for d in (INBOX, LIBRARY, EXPORTS):
         d.mkdir(parents=True, exist_ok=True)
@@ -610,7 +604,7 @@ def main():
                 print(f"{p.name:50} {len(i['clips'])} clips  {', '.join(i['tags'])}")
     else:
         proj = find(a.project)
-        {"report": report, "reparse": reparse, "retranscribe": retranscribe, "finalize": finalize}.get(a.cmd, lambda p: export(p, a.combined))(proj)
+        {"report": report, "reparse": reparse, "retranscribe": retranscribe, "finalize": finalize}[a.cmd](proj)
 
 
 if __name__ == "__main__":

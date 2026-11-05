@@ -80,10 +80,13 @@
   .search { position: relative; width: 240px; max-width: 40vw; }
   .search svg { position: absolute; left: 7px; top: 6px; width: 14px; height: 14px; color: var(--secondary); }
   .search input { width: 100%; padding-left: 26px; border-radius: 7px; background: var(--fill-strong); box-shadow: none; }
-  .tb-sep { width: .5px; height: 20px; background: var(--separator); margin: 0 4px; }
 
   /* library */
   #library { overflow-y: auto; padding: 20px 24px 40px; }
+  #pickbar { position: sticky; bottom: 0; margin-top: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--toolbar); backdrop-filter: blur(30px); box-shadow: var(--shadow); }
+  #pickbar[hidden] { display: none; }
+  #pickbar .grow { flex: 1; }
+  #clipsort { font: inherit; height: 28px; color: var(--label); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
   .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
   .tile .thumb { aspect-ratio: 3 / 4; border-radius: 8px; background: #000 center / cover no-repeat; box-shadow: 0 0 0 .5px var(--separator); transition: box-shadow .12s; }
@@ -163,6 +166,10 @@
   .tile .scrub { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); border-radius: 0 0 0 8px; pointer-events: none; }
   .tile .del, .tile .tx, .tile .ren { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
   .tile .tx { right: 38px; }
+  .tile .sel { position: absolute; z-index: 1; top: 6px; left: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; }
+  .tile:hover .sel, .tile .sel:focus-visible, .tile.chosen .sel { display: grid; }
+  .tile.chosen .sel { background: var(--accent); }
+  .tile.chosen .thumb { box-shadow: 0 0 0 3px var(--accent); }
   .tile .ren { right: 70px; }
   .tile .ren:hover { background: var(--accent); }
   .tile .del:hover { background: var(--red); }
@@ -292,11 +299,10 @@
 <div class="app">
   <aside class="sidebar" aria-label="Sidebar">
     <div class="brand"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg>Footage Flow</div>
-    <h3>Library</h3>
+    <h3>Workflow</h3>
     <div id="stages"></div>
-    <button class="item" id="allfootage"><svg class="i"><use href="#i-photos"/></svg><span>All Footage</span><small id="allcount" class="num"></small></button>
-    <button class="item" id="clipsnav" title="Search every finalized clip by name, tag or anything said"><svg class="i"><use href="#i-film"/></svg><span>Clips</span><small id="clipcount" class="num"></small></button>
-    <h3 id="tagshead" hidden>Tags</h3>
+    <h3>Library</h3>
+    <button class="item" id="clipsnav" title="Search, preview and pick from every kept clip"><svg class="i"><use href="#i-film"/></svg><span>All Clips</span><small id="clipcount" class="num"></small></button>
     <div id="taglist"></div>
     <div class="spacer"></div>
     <button class="item" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg><span>Add Videos…</span></button>
@@ -310,20 +316,17 @@
       <div class="title"><b id="title">All Footage</b><small id="subtitle" class="num"></small></div>
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
+      <select id="clipsort" aria-label="Sort clips" hidden><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option><option value="short">Shortest first</option><option value="name">By name</option></select>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
-        <button class="icon-btn" id="reveal" title="Show Exports in Finder"><svg class="i"><use href="#i-folder"/></svg></button>
-        <span class="tb-sep"></span>
         <button class="btn" id="startproc" title="Move it to Processing" style="margin-right:6px" hidden><svg class="i"><use href="#i-film"/></svg>Start Processing</button>
-        <button class="btn" id="complete" title="Done going through every clip: move it to Processed"><svg class="i"><use href="#i-check"/></svg>Mark Complete</button>
-        <button class="btn" id="finalize" title="Save each kept clip as its own full-quality file, with its name and transcript. The original footage stays." style="margin-left:6px">Finalize</button>
-        <button class="icon-btn" id="showfinal" title="Show finalized clips in Finder" hidden><svg class="i"><use href="#i-folder"/></svg></button>
-        <button class="btn" id="export" title="Export the kept takes as clips" style="margin-left:6px"><svg class="i"><use href="#i-share"/></svg>Export</button>
-        <button class="btn" id="clear" title="Move this footage to the Trash to free space; exports stay" style="margin-left:6px" hidden><svg class="i"><use href="#i-trash"/></svg>Clear</button>
+        <button class="btn" id="complete" ><svg class="i"><use href="#i-check"/></svg>Mark Complete</button>
+        <button class="icon-btn" id="showfinal" title="Show its clips in Finder" hidden><svg class="i"><use href="#i-folder"/></svg></button>
       </span>
     </div>
 
-    <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div></div>
+    <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div>
+      <div id="pickbar" hidden><span id="picktext" class="num"></span><span class="grow"></span><button class="btn" id="pickclear">Clear</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div></div>
 
     <div id="project" hidden>
       <section class="textcol" aria-label="Transcript">
@@ -425,17 +428,22 @@
     <small id="clipmeta" class="num"></small>
     <div class="field"><label for="cliptags">Tags</label><input type="text" id="cliptags" placeholder="Separate with commas"></div>
     <p id="cliptext"></p>
-    <div class="actions-line"><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open Bundle</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
+    <div class="actions-line"><button type="button" class="btn" id="clippick"></button><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open Bundle</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
   </div>
 </form></dialog>
 <dialog id="details"><form method="dialog">
   <b>Details</b>
   <div class="field" style="margin-top:12px"><label for="desc">Name</label><input type="text" id="desc" placeholder="Describe this footage"></div>
   <div class="field"><label for="tags">Tags</label><input type="text" id="tags" placeholder="Separate with commas"></div>
-  <label class="check"><input type="checkbox" id="combined"> Also export one joined video</label>
   <button type="button" class="btn" id="resetall">Reset My Changes to This Video</button>
   <p class="hint">Goes back to exactly what your voice commands decided.</p>
   <div class="actions-line"><button class="btn default" value="">Done</button></div>
+</form></dialog>
+<dialog id="handoff"><form method="dialog">
+  <b id="handoffhead"></b>
+  <input type="text" id="handoffname" maxlength="80" required aria-label="Name of the video" placeholder="What’s the video?" style="width:100%;margin:10px 0 4px">
+  <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
 </form></dialog>
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
@@ -463,7 +471,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], clips = [], onClips = false, openClip = null, tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
+let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -489,8 +497,7 @@ async function run(btn, busyMsg, fn) {  // disable a button while its request ru
 
 // ---------- library ----------
 const STAGES = {inbox: ['Inbox', 'tray', 'New footage, not started yet. Hover to preview, drag one onto another to bundle them, or delete.'],
-  processing: ['Processing', 'film', 'Being worked on. Drag a card here, or click Start Processing in it.'], processed: ['Processed', 'check', 'Marked complete'],
-  exported: ['Exported', 'share', 'Exported; can be deleted to free space']};
+  processing: ['Processing', 'film', 'Being worked on. Drag a card here, or click Start Processing in it.'], completed: ['Completed', 'check', 'Cut down, with its kept clips saved to the library. Drag a card here, or click Mark Complete in it.']};
 async function loadLibrary() {
   try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
@@ -499,49 +506,76 @@ async function loadLibrary() {
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const counts = {};
-  (onClips ? clips : projects).forEach(p => p.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  clips.forEach(c => c.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
   const tags = Object.keys(counts).sort();
-  $('#tagshead').hidden = !tags.length;
-  $('#taglist').innerHTML = tags.map(t => `<button class="item ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
-  $('#allfootage').classList.toggle('on', !tagFilter && !stageFilter && !proj && !onClips);
-  $('#allcount').textContent = projects.length || '';
-  $('#clipsnav').classList.toggle('on', onClips);
+  $('#taglist').innerHTML = tags.map(t => `<button class="item ${onClips && t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
+  $('#clipsnav').classList.toggle('on', onClips && !tagFilter);
   $('#clipcount').textContent = clips.length || '';
-  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)) && (!stageFilter || p.stage === stageFilter));
+  const shown = projects.filter(p => words.every(w => p.search.includes(w)) && p.stage === stageFilter);
   $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length || ''}</small></button>`).join('');
   if ($('#library').hidden) return;
   $('#cards').hidden = onClips;
   $('#clipcards').hidden = !onClips;
+  $('#pickbar').hidden = !onClips || !chosen.size;
   if (onClips) return drawClips(words);
-  $('#title').textContent = tagFilter || (stageFilter ? STAGES[stageFilter][0] : 'All Footage');
+  $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
     <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
       <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i><button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
-      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${stageFilter ? '' : ` · ${STAGES[p.stage][0]}`}${p.finalized ? ' · Finalized' : ''}</small>
+      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
     </a>`).join('') : projects.length
-    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value || tagFilter ? `Nothing matches “${esc($('#search').value || tagFilter)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
+    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value ? `Nothing matches “${esc($('#search').value)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
 const previewOf = c => `/final/${enc(c.project)}/${enc(c.stem + '.preview.mp4')}`;  // small, so browsing never fetches the full clip from Drive
 const clipTitle = c => c.name || (c.text ? `“${c.text.split(' ').slice(0, 7).join(' ')}…”` : c.source);  // an unnamed clip by what's said in it
-function drawClips(words) {  // every finalized clip, across all bundles
+const clipKey = c => `${c.project}/${c.stem}`;
+const SORTS = {new: (a, b) => String(b.filmed).localeCompare(a.filmed), old: (a, b) => String(a.filmed).localeCompare(b.filmed), long: (a, b) => b.duration - a.duration,
+  short: (a, b) => a.duration - b.duration, name: (a, b) => clipTitle(a).localeCompare(clipTitle(b))};
+function drawPicks() {
+  const secs = [...chosen.values()].reduce((n, c) => n + c.duration, 0);
+  $('#picktext').textContent = `${plural(chosen.size, 'clip')} picked · ${mins(secs)}`;
+  $('#pickbar').hidden = !chosen.size;
+}
+function togglePick(c) {  // picks outlive searching and filtering, so one video can gather clips from many searches
+  chosen.delete(clipKey(c)) || chosen.set(clipKey(c), c);
+  document.querySelector(`[data-clip="${clips.indexOf(c)}"]`)?.classList.toggle('chosen', chosen.has(clipKey(c)));
+  drawPicks();
+}
+function drawClips(words) {  // every kept clip, across all bundles
   const shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter))
-    && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w)));
-  $('#title').textContent = tagFilter || 'Clips';
+    && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
+  $('#title').textContent = tagFilter || 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
   const url = (c, f) => `/final/${enc(c.project)}/${enc(f)}`;
   $('#clipcards').innerHTML = shown.length ? shown.map(c => `
-    <a class="tile" href="#/clips" data-clip="${clips.indexOf(c)}" title="Move across the picture to preview. Click for details.">
-      <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i></div>
+    <a class="tile ${chosen.has(clipKey(c)) ? 'chosen' : ''}" href="#/clips" data-clip="${clips.indexOf(c)}" title="Move across the picture to preview. Click for details.">
+      <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i><button class="sel" title="Pick for a video" aria-label="Pick for a video">${icon('check')}</button></div>
       <b>${esc(clipTitle(c))}</b>
       <small>${esc(c.bundle || c.project)}</small>
       <span class="chips">${c.tags.map(t => `<i>${esc(t)}</i>`).join('')}</span>
-    </a>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Finalize a project and its kept clips appear here.'}</div>`;
+    </a>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Complete a project and its kept clips appear here.'}</div>`;
+  drawPicks();
 }
-$('#clipsnav').onclick = () => location.hash = '#/clips';
+$('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
+$('#clipsort').onchange = drawLibrary;
+$('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
+$('#pickexport').onclick = () => {
+  $('#handoffhead').textContent = `Export ${plural(chosen.size, 'clip')}`;
+  $('#handoff').returnValue = '';
+  $('#handoff').showModal();
+};
+$('#handoff').onclose = () => $('#handoff').returnValue && run($('#pickexport'), 'Copying your clips…', async () => {
+  const n = chosen.size, r = await api('/api/handoff', {name: $('#handoffname').value, clips: [...chosen.values()].map(c => ({project: c.project, file: c.file}))});
+  chosen.clear();
+  $('#handoffname').value = '';
+  drawLibrary();
+  status(`Exported ${plural(n, 'clip')} to Handoffs/${r.folder}`);
+  api('/api/open', {what: 'handoff', folder: r.folder}).catch(e => status(e.message, true));
+});
 $('#clipcards').onmousemove = e => {
   const box = e.target.closest('.dur'), c = clips[+box?.closest('[data-clip]').dataset.clip];
   if (c) scrubCard(box, e, f => f * c.duration, previewOf(c));
@@ -550,7 +584,9 @@ $('#clipcards').onclick = e => {
   const c = clips[+e.target.closest('[data-clip]')?.dataset.clip];
   if (!c) return;
   e.preventDefault();
+  if (e.target.closest('.sel')) return togglePick(c);
   openClip = c;
+  drawClipPick();
   $('#clipvideo').src = previewOf(c);
   $('#cliptitle').textContent = clipTitle(c);
   $('#clipmeta').textContent = `${c.bundle || c.project} · ${mins(c.duration)} · from ${c.source}`;
@@ -559,6 +595,8 @@ $('#clipcards').onclick = e => {
   $('#clipbundle').hidden = !projects.some(p => p.name === c.project);
   $('#clipdlg').showModal();
 };
+const drawClipPick = () => $('#clippick').textContent = chosen.has(clipKey(openClip)) ? 'Picked ✓' : 'Pick for a Video';
+$('#clippick').onclick = () => { togglePick(openClip); drawClipPick(); };
 $('#clipdlg').onclose = () => {
   const c = openClip, tags = $('#cliptags').value.split(',');
   $('#clipvideo').removeAttribute('src');
@@ -653,10 +691,8 @@ const doBundle = name => run($('#cards'), 'Bundling…', async () => {
 $('#taglist').onclick = e => {
   const b = e.target.closest('[data-tag]');
   if (!b) return;
-  tagFilter = tagFilter === b.dataset.tag ? null : b.dataset.tag;
-  if (onClips) return drawLibrary();
-  stageFilter = null;
-  location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
+  tagFilter = onClips && tagFilter === b.dataset.tag ? null : b.dataset.tag;
+  onClips ? drawLibrary() : location.hash = '#/clips';
 };
 $('#stages').ondragover = e => {  // drag a card onto any stage to move it there
   const b = e.target.closest('[data-stage]');
@@ -668,11 +704,10 @@ $('#stages').ondrop = e => {
   e.preventDefault();
   $('#stages').querySelectorAll('.drop').forEach(x => x.classList.remove('drop'));
   const name = dragged, stage = e.target.closest('[data-stage]')?.dataset.stage;
-  if (!stage || !name) return;
-  run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage}); await loadLibrary(); status(`Moved to ${STAGES[stage][0]}`); });
+  if (!stage || !name || projects.find(p => p.name === name)?.stage === stage) return;
+  run($('#cards'), stage === 'completed' ? 'Cutting it down and saving its kept clips…' : 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage}); await loadLibrary(); status(`Moved to ${STAGES[stage][0]}`); });
 };
 $('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
-$('#allfootage').onclick = () => { tagFilter = null; stageFilter = null; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
@@ -700,12 +735,9 @@ function show(d, idx = clipIdx) {
   idx = Math.min(idx, data.clips.length - 1);
   if (idx !== clipIdx) openGap = openSeg = naming = picked = null;  // open panels belong to the video they were on
   clipIdx = idx;
-  $('#complete').hidden = data.stage === 'exported';
-  $('#complete').lastChild.textContent = data.stage === 'processed' ? 'Completed' : 'Mark Complete';
-  $('#complete').title = data.stage === 'processed' ? 'Completed. Click to move it back to Processing.' : 'Done going through every clip: move it to Processed';
-  $('#clear').hidden = data.stage !== 'exported';
-  $('#finalize').textContent = data.finalized ? 'Finalized ✓' : 'Finalize';
-  $('#showfinal').hidden = !data.finalized;
+  $('#complete').lastChild.textContent = data.stage === 'completed' ? 'Completed' : 'Mark Complete';
+  $('#complete').title = data.stage === 'completed' ? 'Its kept clips are in the library. Click to reopen it in Processing.' : 'Done going through every clip: cut it down and save each kept clip to the library. The original footage stays.';
+  $('#showfinal').hidden = data.stage !== 'completed';
   $('#startproc').hidden = data.stage !== 'inbox';
   $('#undobtn').disabled = !clip().undo;
   $('#redobtn').disabled = !clip().redo;
@@ -1227,37 +1259,24 @@ $('#stories').onclick = e => {
   }
   if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () => {
     const r = await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'});
-    show(await api('/api/project/' + enc(proj)));  // now exported
     status(`Exported to ${r.done}`);
+    api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
   });
   if (b.dataset.act === 'delete' && confirm(`Delete the edit “${s.title}”? Exported files are kept.`))
     run(b, 'Deleting…', async () => { show(await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'delete'})); status('Edit deleted'); });
 };
 $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
-const exportAll = unmarked => run($('#export'), 'Exporting kept takes…', async () => {
-  const r = await api('/api/export/' + enc(proj), {combined: $('#combined').checked, unmarked});
-  show(await api('/api/project/' + enc(proj)));  // now exported
-  status(`Exported to ${r.done}`);
+const complete = unmarked => run($('#complete'), 'Cutting it down and saving your kept clips…', async () => {
+  const r = await api('/api/stage/' + enc(proj), {stage: 'completed', unmarked});
+  show(r);
+  status(`Saved ${plural(r.saved.clips, 'clip')} to the library, ${(r.saved.bytes / 1e9).toFixed(2)} GB. The original footage is untouched.${r.saved.skipped ? ` Left out ${plural(r.saved.skipped, 'sliver')} under half a second.` : ''}`);
 });
-const complete = unmarked => run($('#complete'), 'Saving…', async () => {
-  show(await api('/api/stage/' + enc(proj), {stage: 'processed', unmarked}));
-  status('Complete: moved to Processed');
-});
-$('#complete').onclick = () => data.stage === 'processed'
+$('#complete').onclick = () => data.stage === 'completed'
   ? run($('#complete'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Back in Processing'); })
   : settleThen(complete);
-$('#export').onclick = () => settleThen(exportAll);
-const finalize = unmarked => run($('#finalize'), 'Saving your kept clips…', async () => {
-  const r = await api('/api/finalize/' + enc(proj), {unmarked});
-  show(r.project);
-  status(`Finalized ${plural(r.clips, 'clip')}, ${(r.bytes / 1e9).toFixed(2)} GB. The original footage is untouched.${r.skipped ? ` Left out ${plural(r.skipped, 'sliver')} under half a second.` : ''}`);
-});
-$('#finalize').onclick = () => settleThen(finalize);
 $('#showfinal').onclick = () => api('/api/open', {what: 'finalized', project: proj}).catch(e => status(e.message, true));
 $('#startproc').onclick = () => run($('#startproc'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Moved to Processing'); });
-$('#clear').onclick = () => confirm(`Move “${data.description || data.name}” to the Trash? Its footage and edits leave Footage Flow; the exported videos stay. Empty the Trash to free the space.`)
-  && run($('#clear'), 'Clearing…', async () => { await api('/api/clear/' + enc(proj), {}); location.hash = '#/'; status('Moved to the Trash'); });
 let afterSettle = null;
 function settleThen(fn) {  // ask about unmarked footage first, if there is any
   const open = data.clips.filter(c => c.unmarked.length), parts = open.flatMap(c => c.unmarked);
@@ -1270,7 +1289,6 @@ function settleThen(fn) {  // ask about unmarked footage first, if there is any
 };
 $('#settle').onclose = () => $('#settle').returnValue && afterSettle($('#settle').returnValue);
 $('#detailsbtn').onclick = () => $('#details').showModal();
-$('#reveal').onclick = () => api('/api/open', {what: 'exports', project: proj}).catch(e => status(e.message, true));
 
 // ---------- NIP: notes at a moment, notes on the whole video, and new edits, from one box ----------
 const instant = () => $('#instant').checked;
@@ -1433,8 +1451,8 @@ async function poll() {
 }
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips';
-  if (c !== onClips) tagFilter = null;  // clips and projects have their own tags
   onClips = c;
+  $('#clipsort').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
   $('#back').hidden = !m;

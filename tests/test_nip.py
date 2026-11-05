@@ -510,26 +510,35 @@ class Viewer(unittest.TestCase):
                 card = json.loads(get("/api/projects").read())[0]
                 self.assertEqual((card["tiers"], card["stage"]), ({"keep": 0, "unmarked": 1, "cut": 1}, "processing"))  # edited, so it left the Inbox
                 self.assertIn("the hello", card["search"])
-                # three tiers: mark the unmarked footage keep by hand; export can settle the rest as cut
+                # three tiers: mark the unmarked footage keep by hand; completing can settle the rest as cut
                 post("/api/cuts/p/v", {"action": "cut", "start": 3.0, "end": 3.2})  # splits "hello" in two
                 left = json.loads(get("/api/project/p").read())["clips"][0]["unmarked"]
                 self.assertEqual(len(left), 2)
                 post("/api/cuts/p/v", {"action": "keep", "start": left[0][0], "end": left[0][1]})
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], left[1:])
-                with mock.patch.object(cli, "export") as export:
-                    post("/api/export/p", {"unmarked": "cut"})
-                export.assert_called_once()
-                with mock.patch.object(cli, "export", side_effect=FileNotFoundError(2, "No such file", "ffmpeg")), \
+                done = lambda **kw: mock.patch.object(cli, "finalize", **kw)
+                with done(return_value={"clips": 1}) as fin, mock.patch("nip.view.library_answers", return_value=True):
+                    self.assertEqual(json.loads(post("/api/stage/p", {"stage": "completed", "unmarked": "cut"}).read())["saved"], {"clips": 1})
+                fin.assert_called_once()
+                with done(side_effect=FileNotFoundError(2, "No such file", "ffmpeg")), mock.patch("nip.view.library_answers", return_value=True), \
                         self.assertRaises(urllib.error.HTTPError) as cm:
-                    post("/api/export/p", {})
+                    post("/api/stage/p", {"stage": "completed"})
                 self.assertEqual((cm.exception.code, json.loads(cm.exception.read())["error"]),
                                  (500, "Footage Flow can't find ffmpeg; is it installed?"))  # not a bare "not found"
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
-                # stages: opened, then marked complete; any of it can be deleted, to the Trash
+                # stages: opened, then completed; any of it can be deleted, to the Trash
                 post("/api/cuts/p/v", {"action": "uncut", "start": left[1][0]})
                 self.assertEqual(json.loads(post("/api/stage/p", {"stage": "processing"}).read())["stage"], "processing")
-                data = json.loads(post("/api/stage/p", {"stage": "processed", "unmarked": "keep"}).read())
-                self.assertEqual((data["stage"], data["clips"][0]["unmarked"]), ("processed", []))
+                with done(return_value={}), mock.patch("nip.view.library_answers", return_value=True):
+                    self.assertEqual(json.loads(post("/api/stage/p", {"stage": "completed", "unmarked": "keep"}).read())["clips"][0]["unmarked"], [])
+                # the old stages: saved clips make it Completed, otherwise it still has that step to do; an edit reopens it
+                info = cli.load(lib / "p" / "project.json")
+                cli.save(lib / "p" / "project.json", {**info, "stage": "exported"})
+                self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "processing")
+                cli.save(lib / "p" / "project.json", {**info, "stage": "processed", "finalized": {"clips": 1}})
+                self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "completed")
+                self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "reset"}).read())["stage"], "processing")
+                self.assertNotIn("finalized", cli.load(lib / "p" / "project.json"))
                 with self.assertRaises(urllib.error.HTTPError):
                     post("/api/stage/p", {"stage": "done"})
                 self.assertEqual(json.loads(post("/api/stage/p", {"stage": "inbox"}).read())["stage"], "inbox")  # any stage, back too
@@ -575,7 +584,7 @@ class Export(unittest.TestCase):
                 info = json.loads((proj / "project.json").read_text())
                 self.assertEqual((info["clips"], info["my_description"], info["stage"]), (["b", "a"], "Demo day", "inbox"))
                 # finalize: nothing unmarked allowed; then one lossless file and one info file per kept clip
-                with mock.patch.multiple(cli, FINAL=d / "final", TRASH=d / "bin", INDEX=d / "index.json", HOME=d):
+                with mock.patch.multiple(cli, FINAL=d / "final", HANDOFFS=d / "handoffs", TRASH=d / "bin", INDEX=d / "index.json", HOME=d):
                     with self.assertRaises(ValueError):
                         cli.finalize(proj)
                     for stem in ("a", "b"):
@@ -597,11 +606,11 @@ class Export(unittest.TestCase):
                     self.assertEqual(side["words"][0]["start"], round(words[-1]["start"] - side["source_start"], 2))  # times from the clip's start
                     self.assertGreater(cli.probe(d / "final" / proj.name / "02 the goodbit.mp4")[0], 5)
                     self.assertTrue((proj / "raw" / "a.mp4").exists())  # the original stays
-                    self.assertEqual(cli.load(proj / "project.json")["finalized"]["clips"], 2)
+                    self.assertEqual((cli.load(proj / "project.json")["finalized"]["clips"], cli.load(proj / "project.json")["stage"]), (2, "completed"))
                     cli.save(info / "02 the goodbit.json", {**cli.load(info / "02 the goodbit.json"), "tags": ["curve throw"]})
                     cli.finalize(proj)  # redoing it replaces the result; the old one goes to the Trash
                     self.assertEqual(cli.load(info / "02 the goodbit.json")["tags"], ["curve throw"])  # tags outlive it
-                    # the Clips view: listed, served, tagged, and only from inside the finalized folder
+                    # the Library: listed, served, tagged, and only from inside the finalized folder
                     import threading
                     import urllib.error
                     import urllib.parse
@@ -619,6 +628,16 @@ class Export(unittest.TestCase):
                     self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.preview.mp4')}").read()), 500)
                     post = lambda u, b: urllib.request.urlopen(urllib.request.Request(base + u, data=json.dumps(b).encode()))
                     self.assertEqual(json.loads(post(f"/api/clip/{proj.name}/{q('02 the goodbit')}", {"tags": [" Curve ", ""]}).read())["tags"], ["curve"])
+                    # picked clips: copied in the order picked, into a new folder, never over an old one
+                    picks = {"name": "My/ video", "clips": [{"project": proj.name, "file": "02 the goodbit.mp4"}, {"project": proj.name, "file": "01 b.mp4"}]}
+                    self.assertEqual(json.loads(post("/api/handoff", picks).read())["folder"], "My video")
+                    self.assertEqual(json.loads(post("/api/handoff", picks).read())["folder"], "My video 2")
+                    self.assertEqual(sorted(f.name for f in (d / "handoffs" / "My video").iterdir()), ["01 the goodbit.mp4", "02 b.mp4"])
+                    self.assertEqual(sorted(f.name for f in (d / "handoffs").iterdir()), ["My video", "My video 2"])
+                    for bad in ({"name": "x", "clips": []}, {"name": "/", "clips": picks["clips"]}, {"name": "x", "clips": "y"},
+                                {"name": "x", "clips": [{"project": proj.name, "file": "nope.mp4"}]}):
+                        with self.assertRaises(urllib.error.HTTPError):
+                            post("/api/handoff", bad)
                     with mock.patch.object(cli, "FINAL", d / "unplugged"):  # the library out of reach: search still works
                         self.assertEqual(len(json.loads(get("/api/clips").read())), 2)
                     for bad in (lambda: get(f"/final/{proj.name}/..%2Fnope.mp4"), lambda: post("/api/clip/x/y", {"tags": []}),
@@ -628,21 +647,16 @@ class Export(unittest.TestCase):
                     server.shutdown()
                     self.assertEqual([f.name for f in (d / "bin").iterdir()], [proj.name])
                     self.assertFalse(list((d / "final").glob(".*")))
-                cli.export(proj, combined=True)
-                outs = sorted(p.name for p in (cli.EXPORTS / proj.name).iterdir())
-                self.assertEqual(outs, ["01_b_s1t2.mp4", "02_a_s1t2.mp4", f"{proj.name}.mp4"])
-                self.assertEqual(json.loads((proj / "project.json").read_text())["stage"], "exported")
-                dur, _ = cli.probe(cli.EXPORTS / proj.name / f"{proj.name}.mp4")
-                self.assertGreater(dur, 1)
-                size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                                       "stream=width,height", "-of", "csv=p=0", str(cli.EXPORTS / proj.name / outs[0])],
-                                      capture_output=True, text=True, check=True).stdout.strip()
-                self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertFalse(any(cli.INBOX.iterdir()))
                 story = {"title": "Best bits", "pieces": [{"stem": "b", "start": 1.0, "end": 2.0},
                                                           {"stem": "a", "start": 3.0, "end": 4.5}]}
-                dur, _ = cli.probe(cli.export_story(proj, story))
+                final = cli.export_story(proj, story)
+                dur, _ = cli.probe(final)
                 self.assertAlmostEqual(dur, 2.5, delta=0.2)  # two videos joined in Claude's order
+                size = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                       "stream=width,height", "-of", "csv=p=0", str(final)],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+                self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertEqual(sorted(f.name for f in (cli.EXPORTS / proj.name).glob(".*")), [])
 
 
