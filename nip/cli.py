@@ -11,11 +11,12 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, norm, respell, timeline
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_pieces, kept_ranges, made_up, norm, respell, timeline
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
+SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
 VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
 # A word on its own helps the transcription hear it, and fixes its spelling and capitals.
@@ -123,12 +124,29 @@ def add_cut(clip, start, end, layer="my_cuts"):  # layer "my_keeps" marks it kee
     ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
     if not (ok and 0 <= start < end <= clip["duration"]):
         raise ValueError("a range must end after it starts, inside the video")
+    if layer == "my_keeps":
+        start, end = snap(clip, start, end)
     r = {"start": round(float(start), 2), "end": round(float(end), 2)}
     clip.setdefault(layer, []).append(r)
     if layer == "my_keeps":  # keeping footage brings it back if it was cut
         clip.setdefault("my_restores", []).append(dict(r))
     elif layer == "my_cuts" and clip.get("my_restores"):  # and the newest mark wins: cutting it takes it out again
         clip["my_restores"] = [{"start": a, "end": b} for x in clip["my_restores"] for a, b in kept_ranges(x, [r])]
+
+
+def snap(clip, a, b):
+    """Stretch a range that ends in cut footage over a sliver left between it and the footage beside it. Selections stop
+    at words and cuts rarely do, so "up to the clip" falls just short. A whole word in the sliver stays cut: it wasn't selected."""
+    pieces = kept_pieces(decisions(clip))
+    cut_at = lambda t: not any(p - 0.01 <= t <= q + 0.01 for p, q in pieces)
+    whole_word = lambda x, y: any(x <= w["start"] and w["end"] <= y for w in clip["words"])
+    start, end = a, b
+    for p, q in pieces:
+        if cut_at(a) and 0 < a - q < SNAP and not whole_word(q, a):
+            start = q
+        if cut_at(b) and 0 < p - b < SNAP and not whole_word(b, p):
+            end = p
+    return start, end
 
 
 def merge(clip, start, end, name=""):

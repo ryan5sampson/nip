@@ -193,6 +193,17 @@ class Commands(unittest.TestCase):
         cli.add_cut(clip, 0.5, 1, "my_keeps")  # footage in a dropped take too
         self.assertEqual(kept()[0], (0.5, 1))
         self.assertEqual([t["keep"] for t in cli.decisions(clip)["takes"]].count(True), 2)
+        # a selection stopping just short of the footage beside it closes the sliver: "run" straddled a cut's edge
+        take2 = {**take, "start": 0, "at": 0}
+        run = {"w": "run", "start": 9.5, "end": 10.16}
+        sliver = {"duration": 50.0, "words": [run, {"w": "a", "start": 10.16, "end": 10.3}, {"w": "um", "start": 19.7, "end": 19.8}],
+                  "edit": {**edit, "takes": [take2], "markers": []}}
+        cli.add_cut(sliver, 10.16, 19.6, "my_keeps")
+        pieces = lambda c: [(s["a"], s["b"]) for s in timeline(cli.decisions(c), 50.0) if not s["gap"]]
+        self.assertEqual(pieces(sliver), [(0, 10), (10, 19.6), (20, 50)])  # no gap on the left; "um", a whole word, stays cut on the right
+        real = {"duration": 50.0, "words": [], "edit": {**edit, "takes": [take2], "cuts": [{"start": 10, "end": 10.3, "why": "cut by you"}], "markers": []}}
+        cli.add_cut(real, 10.4, 12, "my_keeps")  # keeping footage that wasn't cut leaves a real short cut alone
+        self.assertEqual(pieces(real), [(0, 10), (10.3, 50)])
         # an old keep under a cut stays cut: only new marks bring footage back
         old = {"duration": 50.0, "words": [], "edit": edit, "my_keeps": [{"start": 25, "end": 35}], "my_cuts": [{"start": 28, "end": 30}]}
         self.assertIn((28, 30, "cut by you"), [(c["start"], c["end"], c["why"]) for c in cli.decisions(old)["cuts"]])
