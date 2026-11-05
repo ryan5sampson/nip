@@ -158,13 +158,13 @@ def scan_library():
     if not cli.FINAL.exists():
         return
     new = {}
-    for f in sorted(cli.FINAL.glob("[!.]*/_info/*.json")):
+    for f in sorted(f for s in cli.SHELVES for f in (cli.FINAL / s).glob("[!.]*/_info/*.json")):
         key, when = str(f.relative_to(cli.FINAL)), f.stat().st_mtime
         if old.get(key, {}).get("mtime") == when:
             new[key] = {**old[key], "folder": f.parent.parent.name}
             continue
         m = cli.load(f)
-        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem, "folder": f.parent.parent.name,
+        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem, "folder": f.parent.parent.name, "used": f.parent.parent.parent.name == "Used",
                     "text": " ".join(w["w"] for w in m["words"]), "file": f.with_suffix(Path(m["source"]).suffix).name}
     if new != old:
         cli.save(cli.INDEX, new)
@@ -190,7 +190,7 @@ def library_answers():
 
 def final_file(folder, name, info=False):
     """A finalized clip, or from _info its thumbnail or preview."""
-    f = cli.FINAL / folder / ("_info" if info else "") / name
+    f = cli.library_path(folder) / ("_info" if info else "") / name
     if not f.is_file():
         raise FileNotFoundError
     return f
@@ -475,7 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                         cli.set_stage(proj, body["stage"])
                     self.send_json(project_data(proj))
             elif len(p) == 4 and p[:2] == ["api", "clip"]:  # a finalized clip's own tags
-                f = cli.FINAL / p[2] / "_info" / f"{p[3]}.json"
+                f = cli.library_path(p[2]) / "_info" / f"{p[3]}.json"
                 tags = body.get("tags")
                 if not f.is_file():
                     raise FileNotFoundError
@@ -484,6 +484,12 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     cli.save(f, {**cli.load(f), "tags": [t.strip().lower() for t in tags if t.strip()]})
                 self.send_json({"tags": cli.load(f)["tags"]})
+            elif len(p) == 3 and p[:2] == ["api", "used"]:  # move a completed bundle's folder between Unused and Used
+                proj = self.project(p[2])
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so nothing moved. Try again in a moment.")
+                cli.set_used(cli.load(proj / "project.json").get("library_folder", proj.name), bool(body.get("used")))
+                self.send_json({})
             elif p == ["api", "handoff"]:  # library clips copied to a folder of their own, to make a video with
                 picks = body.get("clips")
                 if not isinstance(picks, list) or not all(isinstance(c, dict) for c in picks):
@@ -519,7 +525,7 @@ class Handler(BaseHTTPRequestHandler):
                     target = cli.UNREADABLE
                 elif body.get("what") == "finalized":
                     proj = self.project(str(body.get("project", "")))
-                    target = cli.FINAL / cli.load(proj / "project.json").get("library_folder", proj.name)
+                    target = cli.library_path(cli.load(proj / "project.json").get("library_folder", proj.name))
                     if not target.exists():
                         raise FileNotFoundError
                 elif body.get("what") == "handoff":

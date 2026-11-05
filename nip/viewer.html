@@ -86,7 +86,7 @@
   #pickbar { position: sticky; bottom: 0; margin-top: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--toolbar); backdrop-filter: blur(30px); box-shadow: var(--shadow); }
   #pickbar[hidden] { display: none; }
   #pickbar .grow { flex: 1; }
-  #clipsort { font: inherit; height: 28px; color: var(--label); }
+  #clipsort, #clipused { font: inherit; height: 28px; color: var(--label); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
   .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
   .tile .thumb { aspect-ratio: 3 / 4; border-radius: 8px; background: #000 center / cover no-repeat; box-shadow: 0 0 0 .5px var(--separator); transition: box-shadow .12s; }
@@ -164,17 +164,20 @@
   .tiers i::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .5px var(--tertiary); }
   .tile .dur video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 8px; background: #000; pointer-events: none; }
   .tile .scrub { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); border-radius: 0 0 0 8px; pointer-events: none; }
-  .tile .del, .tile .tx, .tile .ren { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
+  .tile .del, .tile .tx, .tile .ren, .tile .use { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
   .tile .tx { right: 38px; }
   .tile .sel { position: absolute; z-index: 1; top: 6px; left: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; }
   .tile:hover .sel, .tile .sel:focus-visible, .tile.chosen .sel { display: grid; }
   .tile.chosen .sel { background: var(--accent); }
   .tile.chosen .thumb { box-shadow: 0 0 0 3px var(--accent); }
   .tile .ren { right: 70px; }
+  .tile .use { right: 102px; }
+  .tile .use:hover { background: var(--accent); }
+  .shelf { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--secondary); margin: 0; }
   .tile .ren:hover { background: var(--accent); }
   .tile .del:hover { background: var(--red); }
   .tile .tx:hover { background: var(--accent); }
-  .tile:hover :is(.del, .tx, .ren), .tile :is(.del, .tx, .ren):focus-visible { display: grid; }
+  .tile:hover :is(.del, .tx, .ren, .use), .tile :is(.del, .tx, .ren, .use):focus-visible { display: grid; }
   #transcript { width: min(560px, 90vw); }
   #transcripttext { max-height: 60vh; overflow-y: auto; margin: 8px 0 12px; line-height: 1.5; }
   #transcripttext h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 600; color: var(--secondary); }
@@ -317,6 +320,7 @@
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
       <select id="clipsort" aria-label="Sort clips" hidden><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option><option value="short">Shortest first</option><option value="name">By name</option></select>
+      <select id="clipused" aria-label="Show used or unused clips" hidden><option value="">Used and unused</option><option value="no">Unused</option><option value="yes">Used</option></select>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
         <button class="btn" id="startproc" title="Move it to Processing" style="margin-right:6px" hidden><svg class="i"><use href="#i-film"/></svg>Start Processing</button>
@@ -503,6 +507,7 @@ async function loadLibrary() {
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
 }
+const isUsed = p => clips.some(c => c.project === p.name && c.used);  // the Drive folder it sits in decides, so moving it by hand counts too
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const counts = {};
@@ -520,13 +525,15 @@ function drawLibrary() {
   if (onClips) return drawClips(words);
   $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length, 'project');
-  $('#cards').innerHTML = shown.length ? shown.map(p => `
+  const cards = list => list.map(p => `
     <a class="tile" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i><button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
-    </a>`).join('') : projects.length
+    </a>`).join('');
+  const shelf = (head, list) => list.length ? `<h3 class="shelf">${head}</h3>${cards(list)}` : '';
+  $('#cards').innerHTML = shown.length ? (stageFilter === 'completed' ? shelf('Unused', shown.filter(p => !isUsed(p))) + shelf('Used', shown.filter(isUsed)) : cards(shown)) : projects.length
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value ? `Nothing matches “${esc($('#search').value)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
@@ -546,7 +553,7 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
   drawPicks();
 }
 function drawClips(words) {  // every kept clip, across all bundles
-  const shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter))
+  const used = $('#clipused').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
     && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
   $('#title').textContent = tagFilter || 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
@@ -555,13 +562,13 @@ function drawClips(words) {  // every kept clip, across all bundles
     <a class="tile ${chosen.has(clipKey(c)) ? 'chosen' : ''}" href="#/clips" data-clip="${clips.indexOf(c)}" title="Move across the picture to preview. Click for details.">
       <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i><button class="sel" title="Pick for a video" aria-label="Pick for a video">${icon('check')}</button></div>
       <b>${esc(clipTitle(c))}</b>
-      <small>${esc(c.bundle || c.project)}</small>
+      <small>${esc(c.bundle || c.project)}${c.used ? ' · Used' : ''}</small>
       <span class="chips">${c.tags.map(t => `<i>${esc(t)}</i>`).join('')}</span>
     </a>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Complete a project and its kept clips appear here.'}</div>`;
   drawPicks();
 }
 $('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
-$('#clipsort').onchange = drawLibrary;
+$('#clipsort').onchange = $('#clipused').onchange = drawLibrary;
 $('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
 $('#pickexport').onclick = () => {
   $('#handoffhead').textContent = `Export ${plural(chosen.size, 'clip')}`;
@@ -610,7 +617,7 @@ $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it
 $('#cards').onmousemove = e => {
   const box = e.target.closest('.dur'), p = projects.find(x => x.name === box?.closest('[data-name]').dataset.name);
-  if (!p || !p.media.length || e.target.closest('.del, .tx, .ren')) return;
+  if (!p || !p.media.length || e.target.closest('.del, .tx, .ren, .use')) return;
   const r = box.getBoundingClientRect();
   let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.filmed, i = 0;
   while (i < p.media.length - 1 && t >= p.media[i][1]) t -= p.media[i++][1];
@@ -637,6 +644,18 @@ $('#cards').addEventListener('click', e => {
   $('#renamein').value = renaming.description || '';
   $('#rename').returnValue = '';
   $('#rename').showModal();
+});
+$('#cards').addEventListener('click', e => {
+  const b = e.target.closest('.use');
+  if (!b) return;
+  e.preventDefault();
+  const p = projects.find(x => x.name === b.closest('[data-name]').dataset.name), used = !isUsed(p);
+  run(b, 'Moving…', async () => {
+    await api('/api/used/' + enc(p.name), {used});
+    clips = await api('/api/clips');
+    drawLibrary();
+    status(`Moved to ${used ? 'Used' : 'Unused'}`);
+  });
 });
 $('#rename').onclose = () => $('#rename').returnValue && run($('#cards'), 'Saving…', async () => {
   await api('/api/project/' + enc(renaming.name), {description: $('#renamein').value});
@@ -1452,7 +1471,7 @@ async function poll() {
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips';
   onClips = c;
-  $('#clipsort').hidden = !c;
+  $('#clipsort').hidden = $('#clipused').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
   $('#back').hidden = !m;

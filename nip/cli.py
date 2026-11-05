@@ -18,6 +18,7 @@ INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
 SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings.json").exists() else {}
 FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "finalized").expanduser()  # kept clips, as their own files
+SHELVES = ("Unused", "Used")  # the library's two folders; a bundle's folder sits in one, moved by the app or by hand in Drive
 HANDOFFS = FINAL.parent / "Handoffs"  # clips picked from the library for a video, a folder each
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
@@ -461,12 +462,26 @@ def file_name(text):
     return re.sub(r'[^\w ,.()&+-]', '', text).strip(' .')[:80]
 
 
+def library_path(folder):
+    """Where a bundle's folder is in the library, or would go."""
+    return next((FINAL / s / folder for s in SHELVES if (FINAL / s / folder).exists()), FINAL / SHELVES[0] / folder)
+
+
+def set_used(folder, used):
+    src, dest = library_path(folder), FINAL / SHELVES[used] / folder
+    if not src.exists():
+        raise ValueError(f"“{folder}” isn't in the library anymore")
+    if src != dest:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dest)
+
+
 def library_folder(proj, info):
     """The bundle's name, then the date it was filmed. Unnamed footage keeps its project name; a same-named bundle gets a number, never another's folder."""
     name = file_name(info.get("my_description") or info.get("description") or "")
     base = f"{name} ({proj.name[:10]})" if name else proj.name
     folder, n = base, 2
-    while (FINAL / folder).exists() and folder != info.get("library_folder", proj.name):
+    while library_path(folder).exists() and folder != info.get("library_folder", proj.name):
         folder, n = f"{base} {n}", n + 1
     return folder
 
@@ -480,9 +495,11 @@ def finalize(proj):
     left = sum(len(unmarked(decisions(c))) for c in clips)
     if left:
         raise ValueError(f"{left} stretches aren't marked cut or keep yet. Open it and press Mark Complete to settle them.")
-    FINAL.mkdir(parents=True, exist_ok=True)
+    for s in SHELVES:
+        (FINAL / s).mkdir(parents=True, exist_ok=True)
     folder = library_folder(proj, info)
-    out, tmp, old, dest = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", FINAL / info.get("library_folder", proj.name), FINAL / folder
+    out, tmp, old = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", library_path(info.get("library_folder", proj.name))
+    dest = old.parent / folder  # completing it again leaves it on the same shelf
     shutil.rmtree(out, ignore_errors=True)
     (out / "_info").mkdir(parents=True)
     spellings, n, skipped = vocabulary()[1], 0, 0

@@ -596,16 +596,16 @@ class Export(unittest.TestCase):
                         cli.save(f, c)
                     r = cli.finalize(proj)
                     folder = f"Demo day ({proj.name[:10]})"
-                    got = sorted(f.name for f in (d / "final" / folder).iterdir())
+                    got = sorted(f.name for f in (d / "final" / "Unused" / folder).iterdir())
                     self.assertEqual((r["clips"], got), (2, ["01 b.mp4", "02 the goodbit.mp4", "_info"]))  # editors just see the clips
-                    info = d / "final" / folder / "_info"
+                    info = d / "final" / "Unused" / folder / "_info"
                     self.assertEqual(sorted(f.name for f in info.iterdir() if "goodbit" in f.name),
                                      ["02 the goodbit.jpg", "02 the goodbit.json", "02 the goodbit.preview.mp4"])
                     self.assertFalse((d / ".finalizing" / proj.name).exists())
                     side = cli.load(info / "02 the goodbit.json")
                     self.assertEqual((side["name"], side["source"], side["bundle"]), ("the good/bit", "a.mp4", "Demo day"))
                     self.assertEqual(side["words"][0]["start"], round(words[-1]["start"] - side["source_start"], 2))  # times from the clip's start
-                    self.assertGreater(cli.probe(d / "final" / folder / "02 the goodbit.mp4")[0], 5)
+                    self.assertGreater(cli.probe(d / "final" / "Unused" / folder / "02 the goodbit.mp4")[0], 5)
                     self.assertTrue((proj / "raw" / "a.mp4").exists())  # the original stays
                     self.assertEqual((cli.load(proj / "project.json")["finalized"]["clips"], cli.load(proj / "project.json")["stage"]), (2, "completed"))
                     cli.save(info / "02 the goodbit.json", {**cli.load(info / "02 the goodbit.json"), "tags": ["curve throw"]})
@@ -639,6 +639,14 @@ class Export(unittest.TestCase):
                                 {"name": "x", "clips": [{"folder": folder, "file": "nope.mp4"}]}):
                         with self.assertRaises(urllib.error.HTTPError):
                             post("/api/handoff", bad)
+                    # used: the folder moves, by the app or by hand, and clips still load from it
+                    post(f"/api/used/{proj.name}", {"used": True})
+                    self.assertTrue((d / "final" / "Used" / folder).is_dir())
+                    self.assertTrue(all(c["used"] for c in json.loads(get("/api/clips").read())))
+                    self.assertGreater(len(get(f"/final/{q(folder)}/{q('02 the goodbit.jpg')}").read()), 500)
+                    (d / "final" / "Used" / folder).rename(d / "final" / "Unused" / folder)
+                    self.assertFalse(any(c["used"] for c in json.loads(get("/api/clips").read())))
+                    post(f"/api/used/{proj.name}", {"used": True})
                     with mock.patch.object(cli, "FINAL", d / "unplugged"):  # the library out of reach: search still works
                         self.assertEqual(len(json.loads(get("/api/clips").read())), 2)
                     for bad in (lambda: get(f"/final/{q(folder)}/..%2Fnope.mp4"), lambda: post("/api/clip/x/y", {"tags": []}),
@@ -648,11 +656,11 @@ class Export(unittest.TestCase):
                     server.shutdown()
                     self.assertEqual([f.name for f in (d / "bin").iterdir()], [folder])
                     # renamed, it moves to a folder of the new name with its tags; another bundle's folder is never taken
-                    (d / "final" / "Reel (2026-01-01)").mkdir()
+                    (d / "final" / "Unused" / "Reel (2026-01-01)").mkdir()
                     with mock.patch.object(cli, "library_folder", return_value="Reel (2026-01-01) 2"):
                         cli.finalize(proj)
-                    self.assertFalse((d / "final" / folder).exists())
-                    self.assertEqual(cli.load(d / "final" / "Reel (2026-01-01) 2" / "_info" / "02 the goodbit.json")["tags"], ["curve"])
+                    self.assertFalse((d / "final" / "Used" / folder).exists())  # completing it again stays on its shelf
+                    self.assertEqual(cli.load(d / "final" / "Used" / "Reel (2026-01-01) 2" / "_info" / "02 the goodbit.json")["tags"], ["curve"])
                     self.assertEqual(cli.library_folder(Path("2026-01-01_x"), {"my_description": "Reel."}), "Reel (2026-01-01) 3")
                     self.assertEqual(cli.library_folder(Path("2026-01-01_x"), {"my_description": "Reel", "library_folder": "Reel (2026-01-01)"}), "Reel (2026-01-01)")
                     self.assertEqual(cli.library_folder(Path("2026-01-02_x"), {"description": None}), "2026-01-02_x")
