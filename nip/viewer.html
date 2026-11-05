@@ -128,6 +128,10 @@
   #words .para.cut span[data-t]:not(.sil) { color: var(--tertiary); text-decoration: line-through; }
   #words .sil { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 10px; line-height: 1.6; white-space: nowrap; background: var(--fill-strong); color: var(--secondary); cursor: pointer; }
   #words .picked { background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--label); }
+  #words .para:hover { background: var(--fill); }
+  #words .para.picked { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+  #words .para.picked .picked:not(.sil) { background: none; }
+  #words .tag { cursor: pointer; }
   #words .tag { display: block; font-size: 10px; font-weight: 600; color: var(--secondary); line-height: 1.6; }
   #words .para.keep .tag { color: var(--green); }
   #words .para.cut .tag { color: var(--red); }
@@ -168,7 +172,7 @@
   #stages .item.drop svg { color: #fff; }
   .tile.drop .thumb { box-shadow: 0 0 0 3px var(--green); }
   .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
-  .gap { flex: none; width: 10px; text-align: center; font-size: 10px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
+  .gap { flex: none; min-width: 10px; padding: 0 3px; text-align: center; font-size: 9px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
   .gap:hover { color: var(--label); box-shadow: inset 0 0 0 1px var(--secondary); }
   .gap.open { flex: var(--s) 1 0; width: auto; min-width: 40px; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 26%, transparent) 0 3px, transparent 3px 7px); box-shadow: inset 0 0 0 1.5px var(--red); cursor: text; }
   .tk i, .gap i { position: absolute; pointer-events: none; }
@@ -390,7 +394,7 @@
     <dt>Apply</dt><dd>Notes wait until you press Apply, or tick Apply now</dd></dl>
   <h4>Mouse</h4>
   <dl><dt>Timeline</dt><dd>Click to jump there. Click a clip to name, keep or cut it; click a red cut to open it. Drag a clip’s ends to trim it, or out into the cut beside it to extend it.</dd>
-    <dt>Transcript</dt><dd>Click a word to jump to it. Drag over words, click a silence, or double-click a paragraph to select it, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it. <kbd>K</kbd> brings cut text back.</dd>
+    <dt>Transcript</dt><dd>Click a word to jump to it. Click a clip’s heading or edge to select the whole clip, drag over words, or click a silence, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it. <kbd>K</kbd> brings cut text back.</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
 <dialog id="details"><form method="dialog">
@@ -642,7 +646,7 @@ function show(d, idx = clipIdx) {
       ...e.markers.filter(m => m.end == null && m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:4px"></i>`),
       ...(e.notes || []).filter(n => n.t >= s.a && n.t < s.b).map(n => `<i class="nt" style="${at(n.t)}"></i>`),
       ...c.edit_notes.filter(n => n.status !== 'applied' && n.t >= s.a && n.t < s.b).map(n => `<i class="en" style="${at(n.t)}"></i>`)].join('');
-    if (s.gap) return `<div class="gap ${open ? 'open' : ''}${first}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${open ? short(len) : ''}${marks}</div>`;
+    if (s.gap) return `<div class="gap ${open ? 'open' : ''}${first}" data-k="${k}" style="--s:${len}" title="${len.toFixed(1)}s cut. Click to ${open ? 'move the playhead' : 'open'}.">${short(len)}${marks}</div>`;
     const name = clipName(s);
     return `<div class="tk ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}${first}" data-k="${k}" style="--s:${len}" title="${s.keep ? 'Keep' : 'Not marked'} · ${esc(name)} · ${data.clips.length > 1 ? esc(c.stem) + ' ' : ''}${mmss(s.a)}–${mmss(s.b)}">${esc(name)}${marks}<i class="grip l"></i><i class="grip r"></i></div>`;
   }).join('') + '<div id="playhead"></div><div id="dragline" hidden></div>';
@@ -708,9 +712,9 @@ function show(d, idx = clipIdx) {
     const spans = [...ws.map(w => ({t: w.start, html: `<span data-ci="${s.ci}" data-t="${w.start}" data-e="${w.end}">${esc(w.w)}</span>`})),
       ...s.silences.map(([a, b]) => ({t: a, html: `<span class="sil" data-ci="${s.ci}" data-t="${a}" data-e="${b}" title="No speech, ${mmss(a)}–${mmss(b)}. Click to select it.">${(b - a).toFixed(1)}s silence</span>`}))]
       .sort((x, y) => x.t - y.t).map(x => x.html).join(' ');
-    if (s.gap) return head + (spans ? `<p class="para cut" data-k="${k}"><span class="tag">Cut · ${mmss(s.a)}</span>${spans}</p>` : '');
+    if (s.gap) return head + (spans ? `<p class="para cut ${wholePick(s) ? 'picked' : ''}" data-k="${k}"><span class="tag">Cut · ${mmss(s.a)}</span>${spans}</p>` : '');
     const name = clipName(s);
-    return head + `<p class="para ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''}" data-k="${k}"><span class="tag">${s.keep ? 'Keep' : 'Not marked'}${name ? ' · ' + esc(name) : ''} · ${mmss(s.a)}</span>${spans || '<i class="hint">No speech</i>'}</p>`;
+    return head + `<p class="para ${s.keep ? 'keep' : ''} ${s.ci === clipIdx && s.a === openSeg ? 'sel' : ''} ${wholePick(s) ? 'picked' : ''}" data-k="${k}"><span class="tag">${s.keep ? 'Keep' : 'Not marked'}${name ? ' · ' + esc(name) : ''} · ${mmss(s.a)}</span>${spans || '<i class="hint">No speech</i>'}</p>`;
   }).join('') || '<p class="hint">No speech in this footage.</p>';
   wordEls = [...$('#words').querySelectorAll(`span[data-ci="${clipIdx}"]:not(.sil)`)];
   nowWord = null;
@@ -1082,6 +1086,7 @@ function setPick(ci, a, b) {  // select a stretch from the transcript; K, C and 
   openSeg = openGap = naming = null;
   show(data);
 }
+const wholePick = s => picked?.ci === s.ci && picked.a <= s.a + 0.01 && s.b <= picked.b + 0.01;
 function pickAct(kind) {
   const {a, b} = picked;
   picked = null;
@@ -1091,6 +1096,8 @@ $('#words').onclick = e => {
   if (justPicked) { justPicked = false; return; }  // the click that ends a drag
   const el = e.target.closest('[data-t]');
   if (el?.classList.contains('sil')) return setPick(+el.dataset.ci, +el.dataset.t, +el.dataset.e);
+  const s = !el && allSegs[+e.target.closest('.para')?.dataset.k];  // a clip's heading or edge selects it; a word jumps to it
+  if (s) return wholePick(s) ? (picked = null, show(data)) : setPick(s.ci, s.a, s.b);
   if (picked) { picked = null; show(data); }
   if (el) goTo(+el.dataset.ci, +el.dataset.t);
 };
