@@ -574,6 +574,29 @@ class Export(unittest.TestCase):
                 self.assertTrue(proj.name.endswith("_demo-day"))
                 info = json.loads((proj / "project.json").read_text())
                 self.assertEqual((info["clips"], info["my_description"], info["stage"]), (["b", "a"], "Demo day", "inbox"))
+                # finalize: nothing unmarked allowed; then one lossless file and one info file per kept clip
+                with mock.patch.multiple(cli, FINAL=d / "final", TRASH=d / "bin"):
+                    with self.assertRaises(ValueError):
+                        cli.finalize(proj)
+                    for stem in ("a", "b"):
+                        f = proj / f"{stem}.nip.json"
+                        c = cli.load(f)
+                        for x, y in unmarked(cli.decisions(c)):
+                            cli.add_cut(c, x, y, "my_keeps")
+                        cli.set_label(c, 9.4, 15.0, "the good/bit" if stem == "a" else "")
+                        cli.save(f, c)
+                    r = cli.finalize(proj)
+                    got = sorted(f.name for f in (d / "final" / proj.name).iterdir())
+                    self.assertEqual((r["clips"], got), (2, ["01 b.json", "01 b.mp4", "02 the goodbit.json", "02 the goodbit.mp4"]))
+                    side = cli.load(d / "final" / proj.name / "02 the goodbit.json")
+                    self.assertEqual((side["name"], side["source"], side["bundle"]), ("the good/bit", "a.mp4", "Demo day"))
+                    self.assertEqual(side["words"][0]["start"], round(words[-1]["start"] - side["source_start"], 2))  # times from the clip's start
+                    self.assertGreater(cli.probe(d / "final" / proj.name / "02 the goodbit.mp4")[0], 5)
+                    self.assertTrue((proj / "raw" / "a.mp4").exists())  # the original stays
+                    self.assertEqual(cli.load(proj / "project.json")["finalized"]["clips"], 2)
+                    cli.finalize(proj)  # redoing it replaces the result; the old one goes to the Trash
+                    self.assertEqual([f.name for f in (d / "bin").iterdir()], [proj.name])
+                    self.assertFalse(list((d / "final").glob(".*")))
                 cli.export(proj, combined=True)
                 outs = sorted(p.name for p in (cli.EXPORTS / proj.name).iterdir())
                 self.assertEqual(outs, ["01_b_s1t2.mp4", "02_a_s1t2.mp4", f"{proj.name}.mp4"])

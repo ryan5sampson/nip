@@ -11,11 +11,12 @@ import time
 from datetime import date
 from pathlib import Path
 
-from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_pieces, kept_ranges, made_up, norm, respell, timeline
+from nip.commands import apply_cut_edits, apply_overrides, build_edit, clip_name, drop_loops, kept_pieces, kept_ranges, made_up, norm, respell, timeline, unmarked
 
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
+FINAL = Path(os.environ.get("NIP_FINAL", HOME / "finalized")).expanduser()  # kept clips as their own files, with their info
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
 VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
@@ -427,6 +428,63 @@ def cut(src, start, pieces, out):
                     *encoder(), "-c:a", "aac", "-b:a", "192k", str(out)], check=True)
 
 
+def copy_clip(src, a, b, out):
+    """Copy a..b of src to its own file without re-encoding, then check it. Stream copy measured the same size as a
+    re-encode, with no quality loss, and keeps the footage's location and date."""
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{a:.3f}", "-i", str(src), "-t", f"{b - a:.3f}", "-map", "0:v:0", "-map", "0:a:0?",
+                    "-c", "copy", "-map_metadata", "0", "-movflags", "use_metadata_tags", str(out)], check=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-xerror", "-i", str(out), "-map", "0", "-c", "copy", "-f", "null", "-"], check=True)
+    if probe(out)[0] < b - a - 0.2:
+        raise ValueError(f"{out.name} came out shorter than the clip")
+
+
+def finalize(proj):
+    """Write each kept clip of a fully decided project as its own file, beside a .json with its name, tags and transcript
+    (times from the start of the clip). The originals aren't touched. Redoing it replaces the last result."""
+    info = load(proj / "project.json")
+    clips = [load(proj / f"{stem}.nip.json") for stem in info["clips"]]
+    left = sum(len(unmarked(decisions(c))) for c in clips)
+    if left:
+        raise ValueError(f"{left} stretches aren't marked cut or keep yet")
+    FINAL.mkdir(parents=True, exist_ok=True)
+    out, dest = FINAL / f".{proj.name}.building", FINAL / proj.name
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir()
+    spellings, n, skipped = vocabulary()[1], 0, 0
+    try:
+        for c in clips:
+            e, source = decisions(c), Path(c["source"])
+            words = respell(c["words"], spellings)
+            for s in timeline(e, c["duration"]):
+                name = clip_name(s, e)
+                if s["gap"]:
+                    continue
+                if s["b"] - s["a"] < 0.5 and not name:  # a sliver between marks, not a clip anyone chose
+                    skipped += 1
+                    continue
+                n += 1
+                f = out / f"{n:02d} {re.sub(r'[^\w ,.()&+-]', '', name or source.stem).strip(' .')[:80]}{source.suffix}"
+                copy_clip(proj / "raw" / source, s["a"], s["b"], f)
+                save(f.with_suffix(".json"), {
+                    "name": name, "tags": info.get("my_tags", info["tags"]), "bundle": info.get("my_description") or info["description"],
+                    "project": proj.name, "source": source.name, "source_start": s["a"], "source_end": s["b"],
+                    "duration": round(s["b"] - s["a"], 2), "filmed": c.get("created", ""),
+                    "words": [{**w, "start": round(max(w["start"] - s["a"], 0), 2), "end": round(w["end"] - s["a"], 2)}
+                              for w in words if s["a"] <= (w["start"] + w["end"]) / 2 < s["b"]]})
+        if not n:
+            raise ValueError("nothing is kept in this project")
+    except Exception:  # never leave half a result
+        shutil.rmtree(out, ignore_errors=True)
+        raise
+    if dest.exists():
+        move_free(dest, TRASH)
+    out.rename(dest)
+    info["finalized"] = {"at": time.time(), "folder": str(dest), "clips": n}
+    save(proj / "project.json", info)
+    print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
+    return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir())}
+
+
 def export(proj, combined):
     info = load(proj / "project.json")
     out = EXPORTS / proj.name
@@ -504,7 +562,7 @@ def main():
     sub.add_parser("watch", help="keep checking the inbox")
     sub.add_parser("list", help="list projects")
     sub.add_parser("view", help="open Footage Flow in your browser and keep processing the inbox (the default)")
-    for c in ("report", "reparse", "retranscribe", "export"):
+    for c in ("report", "reparse", "retranscribe", "finalize", "export"):
         p = sub.add_parser(c)
         p.add_argument("project", nargs="?", default="", help="part of the folder name (default: newest)")
         if c == "export":
@@ -530,7 +588,7 @@ def main():
                 print(f"{p.name:50} {len(i['clips'])} clips  {', '.join(i['tags'])}")
     else:
         proj = find(a.project)
-        {"report": report, "reparse": reparse, "retranscribe": retranscribe}.get(a.cmd, lambda p: export(p, a.combined))(proj)
+        {"report": report, "reparse": reparse, "retranscribe": retranscribe, "finalize": finalize}.get(a.cmd, lambda p: export(p, a.combined))(proj)
 
 
 if __name__ == "__main__":

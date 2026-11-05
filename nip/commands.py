@@ -305,6 +305,12 @@ def timeline(edit, duration, words=()):
     return clips
 
 
+def clip_name(s, edit):
+    """The name the user gave this clip: the closest-fitting one around it, or ""."""
+    return min((x for x in edit["labels"] if x["start"] <= s["a"] + 0.05 and s["b"] <= x["end"] + 0.05),
+               key=lambda x: x["end"] - x["start"], default={}).get("text", "")
+
+
 def tiers(edit, duration):
     """The three tiers as (start, end) lists: cut (folded away), unmarked, and keep."""
     merged, loose = kept_pieces(edit), unmarked(edit)

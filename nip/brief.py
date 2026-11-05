@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 from nip import cli
-from nip.commands import kept_ranges, respell, timeline
+from nip.commands import clip_name, kept_ranges, respell, timeline
 
 MODELS = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5"}  # Claude Code alias -> API model id
 BRIEF_AI = ("opus", "medium")  # picking the best lines from a whole transcript is real judgement
@@ -210,10 +210,8 @@ NOTES_SCHEMA = {
 
 
 def clip_line(s, e):
-    name = min((l for l in e["labels"] if l["start"] <= s["a"] + 0.05 and s["b"] <= l["end"] + 0.05),
-               key=lambda l: l["end"] - l["start"], default={}).get("text", "")
     quiet = ",".join(f"{a:.2f}-{b:.2f}" for a, b in s["silences"]) or "none"
-    return f'clip {s["a"]:.2f}-{s["b"]:.2f} {"keep" if s["keep"] else "unmarked"} name="{name}" silences={quiet}'
+    return f'clip {s["a"]:.2f}-{s["b"]:.2f} {"keep" if s["keep"] else "unmarked"} name="{clip_name(s, e)}" silences={quiet}'
 
 
 def notes_prompt(clip, notes):

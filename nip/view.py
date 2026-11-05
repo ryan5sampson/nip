@@ -92,7 +92,7 @@ def summary(proj):
             "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "stage": cli.stage_of(proj, info), "media": [[c["source"], c["duration"]] for c in clips],
+            "stage": cli.stage_of(proj, info), "finalized": bool(info.get("finalized")), "media": [[c["source"], c["duration"]] for c in clips],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
@@ -107,7 +107,10 @@ def project_data(proj):
 def edited(proj):
     """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing."""
     with LOCK:
-        if cli.stage_of(proj, cli.load(proj / "project.json")) == "inbox":
+        info = cli.load(proj / "project.json")
+        if info.pop("finalized", None):  # the finalized clips no longer match
+            cli.save(proj / "project.json", info)
+        if cli.stage_of(proj, info) == "inbox":
             cli.set_stage(proj, "processing")
     return project_data(proj)
 
@@ -422,6 +425,10 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     cli.set_stage(proj, body["stage"])
                 self.send_json(project_data(proj))
+            elif len(p) == 3 and p[:2] == ["api", "finalize"]:  # each kept clip as its own file; originals stay
+                proj = self.project(p[2])
+                settle(proj, body.get("unmarked"))
+                self.send_json({**cli.finalize(proj), "project": project_data(proj)})
             elif len(p) == 3 and p[:2] == ["api", "clear"]:
                 with LOCK:
                     self.send_json({"trash": str(cli.clear(self.project(p[2])))})
@@ -444,6 +451,10 @@ class Handler(BaseHTTPRequestHandler):
                     target = cli.VOCABULARY
                 elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():
                     target = cli.UNREADABLE
+                elif body.get("what") == "finalized":
+                    target = cli.FINAL / self.project(str(body.get("project", ""))).name
+                    if not target.exists():
+                        raise FileNotFoundError
                 elif body.get("what") == "exports":
                     target = cli.EXPORTS / self.project(str(body.get("project", ""))).name
                     target.mkdir(parents=True, exist_ok=True)
