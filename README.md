@@ -52,7 +52,7 @@ Opening it starts Footage Flow in the background, restarting it if it's already 
 
    Then type `/login` and follow the browser steps. If Claude Code isn't installed, Footage Flow falls back to the Anthropic API (set `ANTHROPIC_API_KEY`; billed per use in the Anthropic Console).
 
-6. **Mark Complete.** When you've gone through every clip, **Mark Complete** cuts the footage down and saves each kept clip to the library, then moves the project to Completed. Click **Completed** to reopen it; any edit reopens it too. Mark it complete again to update its clips: the new ones replace the old, and tags stay.
+6. **Mark Complete.** When you've gone through every clip, **Mark Complete** takes you back to the main screen and cuts the footage down in the background, saving each kept clip to the library. A panel in the corner shows the progress, and you can keep working; completing more footage queues it behind. When it's done the project moves to Completed. If anything goes wrong, the panel says why and the project stays in Processing, with the library unchanged. Click **Completed** to reopen it; any edit reopens it too. Mark it complete again to update its clips: the new ones replace the old, and tags stay.
 
 The terminal commands still work: `nip ingest` once, `nip watch` to keep checking, `nip report`, `nip reparse`, `nip retranscribe` (transcribe a project again; keeps a `.bak` of each old transcript), and `nip finalize` (the same as Mark Complete).
 

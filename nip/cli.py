@@ -486,10 +486,11 @@ def library_folder(proj, info):
     return folder
 
 
-def finalize(proj):
+def finalize(proj, progress=lambda step, part: None):
     """Complete a project: write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
     transcript with times from the start of the clip), thumbnail and preview, so editors just see the clips. It's built and
-    checked locally and copied over whole, so Drive never uploads half a result. The originals aren't touched."""
+    checked locally and copied over whole, so Drive never uploads half a result. The originals aren't touched.
+    progress gets what's happening and how much of it is done, from 0 to 1."""
     info = load(proj / "project.json")
     clips = [load(proj / f"{stem}.nip.json") for stem in info["clips"]]
     left = sum(len(unmarked(decisions(c))) for c in clips)
@@ -503,6 +504,7 @@ def finalize(proj):
     shutil.rmtree(out, ignore_errors=True)
     (out / "_info").mkdir(parents=True)
     spellings, n, skipped = vocabulary()[1], 0, 0
+    total = sum(not s["gap"] for c in clips for s in timeline(decisions(c), c["duration"]))
     before = [load(f) for f in old.glob("_info/*.json")]  # tags added to clips outlive finalizing again
     try:
         for c in clips:
@@ -516,6 +518,7 @@ def finalize(proj):
                     skipped += 1
                     continue
                 n += 1
+                progress(f"Cutting clip {n} of {total}", (n - 1) / total / 2)
                 was = next((o for o in before if o["source"] == source.name
                             and min(o["source_end"], s["b"]) - max(o["source_start"], s["a"]) > (s["b"] - s["a"]) / 2), None)
                 f = out / f"{n:02d} {file_name(name or source.stem)}{source.suffix}"
@@ -530,7 +533,14 @@ def finalize(proj):
         if not n:
             raise ValueError("nothing is kept in this project")
         shutil.rmtree(tmp, ignore_errors=True)
-        shutil.copytree(out, tmp)
+        size, copied = sum(f.stat().st_size for f in out.rglob("*") if f.is_file()), 0
+
+        def copy(src, dst):
+            nonlocal copied
+            progress("Saving to the library", .5 + copied / size / 2)
+            copied += Path(src).stat().st_size
+            return shutil.copy2(src, dst)
+        shutil.copytree(out, tmp, copy_function=copy)
     except Exception:  # never leave half a result
         shutil.rmtree(tmp, ignore_errors=True)
         raise

@@ -1,6 +1,7 @@
 import json
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -517,20 +518,33 @@ class Viewer(unittest.TestCase):
                 post("/api/cuts/p/v", {"action": "keep", "start": left[0][0], "end": left[0][1]})
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], left[1:])
                 done = lambda **kw: mock.patch.object(cli, "finalize", **kw)
+
+                def complete(body):  # it runs in the background: wait for the corner to say how it went
+                    post("/api/stage/p", {"stage": "completed", **body})
+                    for _ in range(200):
+                        job = json.loads(get("/api/saves").read())[-1]
+                        if job["state"] in ("done", "failed"):
+                            return job
+                        time.sleep(.05)
+                    self.fail("still saving")
                 with done(return_value={"clips": 1}) as fin, mock.patch("nip.view.library_answers", return_value=True):
-                    self.assertEqual(json.loads(post("/api/stage/p", {"stage": "completed", "unmarked": "cut"}).read())["saved"], {"clips": 1})
+                    self.assertEqual(complete({"unmarked": "cut"})["saved"], {"clips": 1})
                 fin.assert_called_once()
-                with done(side_effect=FileNotFoundError(2, "No such file", "ffmpeg")), mock.patch("nip.view.library_answers", return_value=True), \
-                        self.assertRaises(urllib.error.HTTPError) as cm:
-                    post("/api/stage/p", {"stage": "completed"})
-                self.assertEqual((cm.exception.code, json.loads(cm.exception.read())["error"]),
-                                 (500, "Footage Flow can't find ffmpeg; is it installed?"))  # not a bare "not found"
+                with done(side_effect=FileNotFoundError(2, "No such file", "ffmpeg")), mock.patch("nip.view.library_answers", return_value=True):
+                    job = complete({})
+                self.assertEqual((job["state"], job["error"]), ("failed", "Footage Flow can't find ffmpeg."))
+                self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "processing")  # failed, so it stays there
+                with mock.patch("nip.view.library_answers", return_value=False):
+                    self.assertIn("isn’t answering", complete({})["error"])
+                post("/api/saves/p", {})
+                self.assertEqual(json.loads(get("/api/saves").read()), [])
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
                 # stages: opened, then completed; any of it can be deleted, to the Trash
                 post("/api/cuts/p/v", {"action": "uncut", "start": left[1][0]})
                 self.assertEqual(json.loads(post("/api/stage/p", {"stage": "processing"}).read())["stage"], "processing")
                 with done(return_value={}), mock.patch("nip.view.library_answers", return_value=True):
-                    self.assertEqual(json.loads(post("/api/stage/p", {"stage": "completed", "unmarked": "keep"}).read())["clips"][0]["unmarked"], [])
+                    complete({"unmarked": "keep"})
+                self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
                 # the old stages: saved clips make it Completed, otherwise it still has that step to do; an edit reopens it
                 info = cli.load(lib / "p" / "project.json")
                 cli.save(lib / "p" / "project.json", {**info, "stage": "exported"})

@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -20,6 +21,7 @@ PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
 STATE = {"transcribing": 0}  # videos the background ingest is working on
 SCAN = {"thread": None}  # the library scan, one at a time
+SAVES, JOBS = [], queue.Queue()  # footage being completed, newest last, kept until dismissed; and what's left to do, one at a time
 DOWNLOADS = Path.home() / "Downloads"
 PICK = """set picked to choose file of type {"public.movie"} with prompt "Add videos to Footage Flow" with multiple selections allowed
 set out to ""
@@ -196,6 +198,31 @@ def final_file(folder, name, info=False):
     return f
 
 
+def why(e):
+    if isinstance(e, FileNotFoundError) and e.filename:
+        return f"Footage Flow can't find {Path(e.filename).name}."
+    return "ffmpeg couldn't cut this footage." if isinstance(e, subprocess.CalledProcessError) else str(e) or type(e).__name__
+
+
+def save_footage():
+    """Complete footage in the background, so the app stays usable. It sits in Processing until this succeeds, so a failure,
+    or quitting halfway, leaves it there and the library as it was."""
+    while True:
+        job, proj = JOBS.get()
+        job["state"] = "saving"
+        try:
+            if not library_answers():
+                raise ValueError("Google Drive isn’t answering. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
+            job["saved"] = cli.finalize(proj, lambda step, part: job.update(step=step, part=part))
+            job["state"] = "done"
+        except Exception as e:
+            traceback.print_exc()
+            job.update(state="failed", error=why(e))
+
+
+threading.Thread(target=save_footage, daemon=True).start()
+
+
 def thumbnail(proj):
     """A small frame from the first kept take, made once and cached in the project folder."""
     f = proj / "thumb.jpg"
@@ -271,6 +298,8 @@ class Handler(BaseHTTPRequestHandler):
                                 "unreadable": sum(1 for f in cli.UNREADABLE.iterdir() if not f.name.startswith(".")) if cli.UNREADABLE.exists() else 0,
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
+            elif p == ["api", "saves"]:
+                self.send_json(SAVES)
             elif p == ["api", "projects"]:
                 projs = [d for d in cli.LIBRARY.iterdir() if (d / "project.json").exists()] if cli.LIBRARY.exists() else []
                 self.send_json(sorted((summary(d) for d in projs), key=lambda s: s["modified"], reverse=True))
@@ -465,11 +494,17 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get("stage") not in cli.STAGES:
                     raise ValueError(f"stage must be one of {', '.join(cli.STAGES)}")
                 if body["stage"] == "completed":  # cuts the footage down: each kept clip becomes its own file in the library
-                    if not library_answers():
-                        raise ValueError("Google Drive isn’t answering, so nothing was saved. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
+                    if any(j["project"] == proj.name and j["state"] in ("waiting", "saving") for j in SAVES):
+                        raise ValueError("It’s already being saved")
                     settle(proj, body.get("unmarked"))
-                    saved = cli.finalize(proj)
-                    self.send_json({**project_data(proj), "saved": saved})
+                    with LOCK:
+                        cli.set_stage(proj, "processing")
+                        info = cli.load(proj / "project.json")
+                    job = {"project": proj.name, "title": info.get("my_description") or info.get("description") or proj.name,
+                           "state": "waiting", "step": "Waiting its turn", "part": 0}
+                    SAVES[:] = [j for j in SAVES if j["project"] != proj.name] + [job]
+                    JOBS.put((job, proj))
+                    self.send_json(job)
                 else:
                     with LOCK:
                         cli.set_stage(proj, body["stage"])
@@ -489,6 +524,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not library_answers():
                     raise ValueError("Google Drive isn’t answering, so nothing moved. Try again in a moment.")
                 cli.set_used(cli.load(proj / "project.json").get("library_folder", proj.name), bool(body.get("used")))
+                self.send_json({})
+            elif len(p) == 3 and p[:2] == ["api", "saves"]:  # dismiss a finished one
+                SAVES[:] = [j for j in SAVES if j["project"] != p[2] or j["state"] in ("waiting", "saving")]
                 self.send_json({})
             elif p == ["api", "handoff"]:  # library clips copied to a folder of their own, to make a video with
                 picks = body.get("clips")
