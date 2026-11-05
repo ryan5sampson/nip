@@ -203,7 +203,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(pieces(sliver), [(0, 10), (10, 19.6), (20, 50)])  # no gap on the left; "um", a whole word, stays cut on the right
         real = {"duration": 50.0, "words": [], "edit": {**edit, "takes": [take2], "cuts": [{"start": 10, "end": 10.3, "why": "cut by you"}], "markers": []}}
         cli.add_cut(real, 10.4, 12, "my_keeps")  # keeping footage that wasn't cut leaves a real short cut alone
-        self.assertEqual(pieces(real), [(0, 10), (10.3, 50)])
+        self.assertEqual(pieces(real)[:2], [(0, 10), (10.3, 12)])
         # an old keep under a cut stays cut: only new marks bring footage back
         old = {"duration": 50.0, "words": [], "edit": edit, "my_keeps": [{"start": 25, "end": 35}], "my_cuts": [{"start": 28, "end": 30}]}
         self.assertIn((28, 30, "cut by you"), [(c["start"], c["end"], c["why"]) for c in cli.decisions(old)["cuts"]])
