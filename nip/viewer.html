@@ -170,6 +170,16 @@
   #transcripttext h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 600; color: var(--secondary); }
   #stages .item.drop { background: var(--accent); color: #fff; }
   #stages .item.drop svg { color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .chips i { font-style: normal; font-size: 10px; line-height: 1.6; padding: 0 6px; border-radius: 8px; background: var(--fill-strong); color: var(--secondary); }
+  #clipdlg { width: min(780px, 94vw); padding: 14px; }
+  #clipdlg form { display: flex; gap: 16px; height: min(72vh, 680px); }
+  #clipvideo { height: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 8px; flex: none; max-width: 50%; object-fit: contain; }
+  .clipinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .clipinfo > b { font-size: 15px; font-weight: 600; }
+  .clipinfo > small { color: var(--secondary); font-size: 11px; }
+  .clipinfo .field { margin: 6px 0 0; }
+  #cliptext { flex: 1; overflow-y: auto; margin: 0; line-height: 1.5; color: var(--label); }
   .tile.drop .thumb { box-shadow: 0 0 0 3px var(--green); }
   .tk.keep { background: var(--green); color: #fff; box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); }
   .gap { flex: none; min-width: 10px; padding: 0 3px; text-align: center; font-size: 9px; font-weight: 600; color: var(--red); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--red) 22%, transparent) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--red) 40%, transparent); cursor: pointer; }
@@ -277,6 +287,7 @@
     <h3>Library</h3>
     <div id="stages"></div>
     <button class="item" id="allfootage"><svg class="i"><use href="#i-photos"/></svg><span>All Footage</span><small id="allcount" class="num"></small></button>
+    <button class="item" id="clipsnav" title="Search every finalized clip by name, tag or anything said"><svg class="i"><use href="#i-film"/></svg><span>Clips</span><small id="clipcount" class="num"></small></button>
     <h3 id="tagshead" hidden>Tags</h3>
     <div id="taglist"></div>
     <div class="spacer"></div>
@@ -304,7 +315,7 @@
       </span>
     </div>
 
-    <div id="library" hidden><div class="grid" id="cards"></div></div>
+    <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div></div>
 
     <div id="project" hidden>
       <section class="textcol" aria-label="Transcript">
@@ -399,6 +410,16 @@
     <dt>Transcript</dt><dd>Click a word to jump to it. Click a clip’s heading or edge to select the whole clip, drag over words, or click a silence, then <kbd>K</kbd> keep, <kbd>C</kbd> cut or <kbd>N</kbd> name it. <kbd>K</kbd> brings cut text back.</dd>
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
+<dialog id="clipdlg"><form method="dialog">
+  <video id="clipvideo" controls playsinline></video>
+  <div class="clipinfo">
+    <b id="cliptitle"></b>
+    <small id="clipmeta" class="num"></small>
+    <div class="field"><label for="cliptags">Tags</label><input type="text" id="cliptags" placeholder="Separate with commas"></div>
+    <p id="cliptext"></p>
+    <div class="actions-line"><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open Bundle</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
+  </div>
+</form></dialog>
 <dialog id="details"><form method="dialog">
   <b>Details</b>
   <div class="field" style="margin-top:12px"><label for="desc">Name</label><input type="text" id="desc" placeholder="Describe this footage"></div>
@@ -434,7 +455,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
+let projects = [], clips = [], onClips = false, openClip = null, tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -463,21 +484,26 @@ const STAGES = {inbox: ['Inbox', 'tray', 'New footage, not started yet. Hover to
   processing: ['Processing', 'film', 'Being worked on. Drag a card here, or click Start Processing in it.'], processed: ['Processed', 'check', 'Marked complete'],
   exported: ['Exported', 'share', 'Exported; can be deleted to free space']};
 async function loadLibrary() {
-  try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
+  try { [projects, clips] = await Promise.all([api('/api/projects'), api('/api/clips')]); } catch (e) { return status(e.message, true); }
   drawLibrary();
 }
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const counts = {};
-  projects.forEach(p => p.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  (onClips ? clips : projects).forEach(p => p.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
   const tags = Object.keys(counts).sort();
   $('#tagshead').hidden = !tags.length;
   $('#taglist').innerHTML = tags.map(t => `<button class="item ${t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
-  $('#allfootage').classList.toggle('on', !tagFilter && !stageFilter && !proj);
+  $('#allfootage').classList.toggle('on', !tagFilter && !stageFilter && !proj && !onClips);
   $('#allcount').textContent = projects.length || '';
+  $('#clipsnav').classList.toggle('on', onClips);
+  $('#clipcount').textContent = clips.length || '';
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && (!tagFilter || p.tags.includes(tagFilter)) && (!stageFilter || p.stage === stageFilter));
-  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length || ''}</small></button>`).join('');
+  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length || ''}</small></button>`).join('');
   if ($('#library').hidden) return;
+  $('#cards').hidden = onClips;
+  $('#clipcards').hidden = !onClips;
+  if (onClips) return drawClips(words);
   $('#title').textContent = tagFilter || (stageFilter ? STAGES[stageFilter][0] : 'All Footage');
   $('#subtitle').textContent = plural(shown.length, 'project');
   $('#cards').innerHTML = shown.length ? shown.map(p => `
@@ -490,6 +516,48 @@ function drawLibrary() {
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value || tagFilter ? `Nothing matches “${esc($('#search').value || tagFilter)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
+const clipTitle = c => c.name || (c.text ? `“${c.text.split(' ').slice(0, 7).join(' ')}…”` : c.source);  // an unnamed clip by what's said in it
+function drawClips(words) {  // every finalized clip, across all bundles
+  const shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter))
+    && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w)));
+  $('#title').textContent = tagFilter || 'Clips';
+  $('#subtitle').textContent = plural(shown.length, 'clip');
+  const url = (c, f) => `/final/${enc(c.project)}/${enc(f)}`;
+  $('#clipcards').innerHTML = shown.length ? shown.map(c => `
+    <a class="tile" href="#/clips" data-clip="${clips.indexOf(c)}" title="Move across the picture to preview. Click for details.">
+      <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i></div>
+      <b>${esc(clipTitle(c))}</b>
+      <small>${esc(c.bundle || c.project)}</small>
+      <span class="chips">${c.tags.map(t => `<i>${esc(t)}</i>`).join('')}</span>
+    </a>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Finalize a project and its kept clips appear here.'}</div>`;
+}
+$('#clipsnav').onclick = () => location.hash = '#/clips';
+$('#clipcards').onmousemove = e => {
+  const box = e.target.closest('.dur'), c = clips[+box?.closest('[data-clip]').dataset.clip];
+  if (c) scrubCard(box, e, f => f * c.duration, `/final/${enc(c.project)}/${enc(c.file)}`);
+};
+$('#clipcards').onclick = e => {
+  const c = clips[+e.target.closest('[data-clip]')?.dataset.clip];
+  if (!c) return;
+  e.preventDefault();
+  openClip = c;
+  $('#clipvideo').src = `/final/${enc(c.project)}/${enc(c.file)}`;
+  $('#cliptitle').textContent = clipTitle(c);
+  $('#clipmeta').textContent = `${c.bundle || c.project} · ${mins(c.duration)} · from ${c.source}`;
+  $('#cliptags').value = c.tags.join(', ');
+  $('#cliptext').textContent = c.text || 'No speech';
+  $('#clipbundle').hidden = !projects.some(p => p.name === c.project);
+  $('#clipdlg').showModal();
+};
+$('#clipdlg').onclose = () => {
+  const c = openClip, tags = $('#cliptags').value.split(',');
+  $('#clipvideo').removeAttribute('src');
+  $('#clipvideo').load();
+  if (tags.map(t => t.trim().toLowerCase()).filter(Boolean).join() !== c.tags.join())
+    run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.project)}/${enc(c.stem)}`, {tags})).tags; drawLibrary(); status('Tags saved'); });
+};
+$('#clipreveal').onclick = () => api('/api/reveal', {project: openClip.project, file: openClip.file}).catch(e => status(e.message, true));
+$('#clipbundle').onclick = () => { $('#clipdlg').close(); location.hash = '#/p/' + enc(openClip.project); };
 $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it
 $('#cards').onmousemove = e => {
@@ -498,14 +566,17 @@ $('#cards').onmousemove = e => {
   const r = box.getBoundingClientRect();
   let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.filmed, i = 0;
   while (i < p.media.length - 1 && t >= p.media[i][1]) t -= p.media[i++][1];
-  const src = `/media/${enc(p.name)}/${enc(p.media[i][0])}`;
+  scrubCard(box, e, () => t, `/media/${enc(p.name)}/${enc(p.media[i][0])}`);
+};
+function scrubCard(box, e, at, src) {  // the video under a card's picture follows the mouse; at turns 0..1 across it into a time
+  const r = box.getBoundingClientRect(), x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999);
   let v = box.querySelector('video');
   if (!v) { box.insertAdjacentHTML('afterbegin', '<video muted playsinline preload="auto"></video><div class="scrub"></div>'); v = box.querySelector('video'); }
   if (!v.src.endsWith(src)) v.src = src;
-  if (!v.seeking) v.currentTime = t;
-  box.querySelector('.scrub').style.width = `${100 * (e.clientX - r.left) / r.width}%`;
-};
-$('#cards').onmouseout = e => {
+  if (!v.seeking) v.currentTime = at(x);
+  box.querySelector('.scrub').style.width = `${100 * x}%`;
+}
+$('#cards').onmouseout = $('#clipcards').onmouseout = e => {
   const box = e.target.closest('.dur');
   if (box && !box.contains(e.relatedTarget)) box.querySelectorAll('video, .scrub').forEach(x => { x.removeAttribute('src'); x.remove(); });
 };
@@ -573,6 +644,7 @@ $('#taglist').onclick = e => {
   const b = e.target.closest('[data-tag]');
   if (!b) return;
   tagFilter = tagFilter === b.dataset.tag ? null : b.dataset.tag;
+  if (onClips) return drawLibrary();
   stageFilter = null;
   location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/';
 };
@@ -1350,7 +1422,9 @@ async function poll() {
   } catch (e) { $('#inbox').textContent = 'Footage Flow isn’t running'; }
 }
 function route() {
-  const m = location.hash.match(/^#\/p\/(.+)$/);
+  const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips';
+  if (c !== onClips) tagFilter = null;  // clips and projects have their own tags
+  onClips = c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
   $('#back').hidden = !m;

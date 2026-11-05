@@ -594,7 +594,34 @@ class Export(unittest.TestCase):
                     self.assertGreater(cli.probe(d / "final" / proj.name / "02 the goodbit.mp4")[0], 5)
                     self.assertTrue((proj / "raw" / "a.mp4").exists())  # the original stays
                     self.assertEqual(cli.load(proj / "project.json")["finalized"]["clips"], 2)
+                    tagged = cli.load(d / "final" / proj.name / "02 the goodbit.json")
+                    cli.save(d / "final" / proj.name / "02 the goodbit.json", {**tagged, "tags": ["curve throw"]})
                     cli.finalize(proj)  # redoing it replaces the result; the old one goes to the Trash
+                    self.assertEqual(cli.load(d / "final" / proj.name / "02 the goodbit.json")["tags"], ["curve throw"])  # tags outlive it
+                    # the Clips view: listed, served, tagged, and only from inside the finalized folder
+                    import threading
+                    import urllib.error
+                    import urllib.parse
+                    import urllib.request
+                    import nip.view as view
+                    server = view.ThreadingHTTPServer(("127.0.0.1", 0), view.Handler)
+                    threading.Thread(target=server.serve_forever, daemon=True).start()
+                    base = f"http://127.0.0.1:{server.server_port}"
+                    get = lambda u: urllib.request.urlopen(base + u)
+                    listed = json.loads(get("/api/clips").read())
+                    self.assertEqual([(c["name"], c["file"]) for c in listed], [("", "01 b.mp4"), ("the good/bit", "02 the goodbit.mp4")])
+                    self.assertNotIn("words", listed[0])
+                    q = urllib.parse.quote
+                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.jpg')}").read()), 500)  # made on first ask
+                    self.assertTrue((d / "final" / proj.name / "02 the goodbit.jpg").exists())
+                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.mp4')}").read()), 500)
+                    post = lambda u, b: urllib.request.urlopen(urllib.request.Request(base + u, data=json.dumps(b).encode()))
+                    self.assertEqual(json.loads(post(f"/api/clip/{proj.name}/{q('02 the goodbit')}", {"tags": [" Curve ", ""]}).read())["tags"], ["curve"])
+                    for bad in (lambda: get(f"/final/{proj.name}/..%2Fnope.mp4"), lambda: post("/api/clip/x/y", {"tags": []}),
+                                lambda: post(f"/api/clip/{proj.name}/{q('01 b')}", {"tags": "x"})):
+                        with self.assertRaises(urllib.error.HTTPError):
+                            bad()
+                    server.shutdown()
                     self.assertEqual([f.name for f in (d / "bin").iterdir()], [proj.name])
                     self.assertFalse(list((d / "final").glob(".*")))
                 cli.export(proj, combined=True)

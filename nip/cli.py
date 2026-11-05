@@ -451,6 +451,7 @@ def finalize(proj):
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir()
     spellings, n, skipped = vocabulary()[1], 0, 0
+    before = [load(f) for f in dest.glob("*.json")]  # tags added to clips outlive finalizing again
     try:
         for c in clips:
             e, source = decisions(c), Path(c["source"])
@@ -463,10 +464,12 @@ def finalize(proj):
                     skipped += 1
                     continue
                 n += 1
+                was = next((o for o in before if o["source"] == source.name
+                            and min(o["source_end"], s["b"]) - max(o["source_start"], s["a"]) > (s["b"] - s["a"]) / 2), None)
                 f = out / f"{n:02d} {re.sub(r'[^\w ,.()&+-]', '', name or source.stem).strip(' .')[:80]}{source.suffix}"
                 copy_clip(proj / "raw" / source, s["a"], s["b"], f)
                 save(f.with_suffix(".json"), {
-                    "name": name, "tags": info.get("my_tags", info["tags"]), "bundle": info.get("my_description") or info["description"],
+                    "name": name, "tags": was["tags"] if was else info.get("my_tags", info["tags"]), "bundle": info.get("my_description") or info["description"],
                     "project": proj.name, "source": source.name, "source_start": s["a"], "source_end": s["b"],
                     "duration": round(s["b"] - s["a"], 2), "filmed": c.get("created", ""),
                     "words": [{**w, "start": round(max(w["start"] - s["a"], 0), 2), "end": round(w["end"] - s["a"], 2)}

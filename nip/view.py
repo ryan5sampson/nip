@@ -153,6 +153,29 @@ def apply_notes(f, ids):
         cli.save(f, clip)
 
 
+def final_clips():
+    """Every finalized clip, newest bundle first; what the Clips view searches.
+    shortcut: reads every .json on each load, keep a local index once the library lives on Drive."""
+    out = []
+    for f in sorted(cli.FINAL.glob("[!.]*/*.json"), key=lambda f: (f.parent.name, f.name)):
+        m = cli.load(f)
+        out.append({**{k: v for k, v in m.items() if k != "words"}, "stem": f.stem, "text": " ".join(w["w"] for w in m["words"]),
+                    "file": f.with_suffix(Path(m["source"]).suffix).name})
+    return sorted(out, key=lambda c: c["project"], reverse=True)
+
+
+def final_file(project, name):
+    """A finalized clip's video or thumbnail; thumbnails are made the first time they're asked for."""
+    f = cli.FINAL / project / name
+    if f.suffix == ".jpg" and not f.exists():
+        m = cli.load(f.with_suffix(".json"))
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{m['duration'] / 2:.2f}", "-i", str(f.with_suffix(Path(m["source"]).suffix)),
+                        "-frames:v", "1", "-vf", "scale=360:-2", str(f)], check=True)
+    if not f.is_file():
+        raise FileNotFoundError
+    return f
+
+
 def thumbnail(proj):
     """A small frame from the first kept take, made once and cached in the project folder."""
     f = proj / "thumb.jpg"
@@ -235,6 +258,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(project_data(self.project(p[2])))
             elif len(p) == 2 and p[0] == "thumb":
                 self.send_file(thumbnail(self.project(p[1])), "image/jpeg")
+            elif p == ["api", "clips"]:
+                self.send_json(final_clips())
+            elif len(p) == 3 and p[0] == "final":
+                f = final_file(p[1], p[2])
+                self.send_file(f, "image/jpeg" if f.suffix == ".jpg" else "video/mp4")
             elif len(p) == 3 and p[0] == "media":
                 f = self.project(p[1]) / "raw" / p[2]
                 if not f.is_file():
@@ -425,6 +453,16 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     cli.set_stage(proj, body["stage"])
                 self.send_json(project_data(proj))
+            elif len(p) == 4 and p[:2] == ["api", "clip"]:  # a finalized clip's own tags
+                f = cli.FINAL / p[2] / f"{p[3]}.json"
+                tags = body.get("tags")
+                if not f.is_file():
+                    raise FileNotFoundError
+                if not isinstance(tags, list) or not all(isinstance(t, str) and len(t) <= 40 for t in tags):
+                    raise ValueError("tags must be a list of short texts")
+                with LOCK:
+                    cli.save(f, {**cli.load(f), "tags": [t.strip().lower() for t in tags if t.strip()]})
+                self.send_json({"tags": cli.load(f)["tags"]})
             elif len(p) == 3 and p[:2] == ["api", "finalize"]:  # each kept clip as its own file; originals stay
                 proj = self.project(p[2])
                 settle(proj, body.get("unmarked"))
@@ -441,6 +479,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"name": dest.name})
             elif p == ["api", "add"]:
                 self.send_json({"added": pick_videos()})
+            elif p == ["api", "reveal"]:  # select a finalized clip in Finder, to drag it into an editor
+                subprocess.run(["open", "-R", str(final_file(Path(str(body.get("project"))).name, Path(str(body.get("file"))).name))], check=True)
+                self.send_json({})
             elif p == ["api", "open"]:  # show a folder in Finder
                 if body.get("what") == "inbox":
                     cli.INBOX.mkdir(parents=True, exist_ok=True)
