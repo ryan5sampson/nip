@@ -1,4 +1,4 @@
-"""NIP command line: ingest, watch, reparse, report, list, export."""
+"""NIP command line: ingest, watch, reparse, retranscribe, report, list, finalize."""
 import argparse
 import copy
 import json
@@ -47,6 +47,7 @@ PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
 TRASH = Path.home() / ".Trash"
 STAGES = ("inbox", "processing", "completed")  # footage moves through these; any can be deleted to the Trash. Completed means its clips are in the library
 SHORT_SIDE = 1080  # Reels, TikTok and Shorts all play 1080x1920; more is wasted on them
+HW = ["-hwaccel", "videotoolbox"] if sys.platform == "darwin" else []  # 4K HDR in software took minutes a clip, not seconds
 
 
 def load(p):
@@ -54,7 +55,9 @@ def load(p):
 
 
 def save(p, data):
-    p.write_text(json.dumps(data, indent=1))
+    tmp = p.with_name(f".{p.name}.{time.time_ns()}")  # swapped in whole: a crash can't leave half a file, and nobody reads one
+    tmp.write_text(json.dumps(data, indent=1))
+    os.replace(tmp, p)
 
 
 def decisions(clip):
@@ -125,9 +128,12 @@ def override_take(clip, at, body):
     overrides[key] = o
 
 
+def is_range(clip, start, end):
+    return all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end)) and 0 <= start < end <= clip["duration"]
+
+
 def add_cut(clip, start, end, layer="my_cuts"):  # layer "my_keeps" marks it keep instead
-    ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
-    if not (ok and 0 <= start < end <= clip["duration"]):
+    if not is_range(clip, start, end):
         raise ValueError("a range must end after it starts, inside the video")
     if layer == "my_keeps":
         start, end = snap(clip, start, end)
@@ -168,8 +174,7 @@ def merge(clip, start, end, name=""):
 
 def set_label(clip, start, end, text):
     """Describe a stretch of footage; replaces any label already on it, and empty text removes it."""
-    ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end))
-    if not (ok and 0 <= start < end <= clip["duration"]) or not isinstance(text, str) or len(text) > 200:
+    if not is_range(clip, start, end) or not isinstance(text, str) or len(text) > 200:
         raise ValueError("a label needs a range inside the video and text of 200 characters at most")
     clip["labels"] = [l for l in clip.get("labels", []) if not start <= (l["start"] + l["end"]) / 2 <= end]
     if text.strip():
@@ -215,7 +220,7 @@ def transcribe(path):
     try:
         import mlx_whisper
     except ImportError:
-        sys.exit("mlx-whisper isn't installed. It needs an Apple Silicon Mac: pip install -e .")
+        raise RuntimeError("mlx-whisper isn't installed. It needs an Apple Silicon Mac: pip install -e .")  # not sys.exit: it would silently end the app's inbox thread
     r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,  # the prompt biases it to the user's words
                                initial_prompt=f"{', '.join(vocabulary()[0])}. {PROMPT}", condition_on_previous_text=False)
     words, noise = [], []
@@ -252,6 +257,16 @@ def ingest():
         process(new_project(name), vids)
         if vids[0].parent != INBOX and not any(vids[0].parent.iterdir()):
             vids[0].parent.rmdir()
+
+
+def rescue():
+    """Footage whose transcribing was interrupted (the app quit, or Whisper crashed) has no project.json, so nothing lists it. It goes back to the inbox."""
+    for p in LIBRARY.iterdir():
+        if (p / "raw").is_dir() and not (p / "project.json").exists():
+            for v in (p / "raw").iterdir():
+                if v.suffix.lower() in VIDEO:
+                    move_free(v, INBOX)
+            shutil.rmtree(p)  # only what NIP made is left
 
 
 def new_project(name):
@@ -431,8 +446,7 @@ def cut(src, start, pieces, out):
     graph += f"concat=n={len(pieces)}:v=1:a=1[vc][a];"
     s = SHORT_SIDE  # scale the short side down to s, whichever way the footage is held; never upscale
     graph += f"[vc]scale=w='if(lt(iw,ih),min({s},iw),-2)':h='if(lt(iw,ih),-2,min({s},ih))'[v]"
-    hw = ["-hwaccel", "videotoolbox"] if sys.platform == "darwin" else []
-    subprocess.run(["ffmpeg", "-v", "error", "-y", *hw, "-ss", f"{start:.3f}", "-to", f"{pieces[-1][1]:.3f}",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *HW, "-ss", f"{start:.3f}", "-to", f"{pieces[-1][1]:.3f}",
                     "-i", str(src), "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
                     *encoder(), "-c:a", "aac", "-b:a", "192k", str(out)], check=True)
 
@@ -450,8 +464,7 @@ def copy_clip(src, a, b, out):
 def preview(clip, name):
     """A thumbnail and a small video, so browsing never has to fetch the full clip from Drive (measured about 4% of its size)."""
     side = "scale='if(lt(iw,ih),{0},-2)':'if(lt(iw,ih),-2,{0})'"
-    hw = ["-hwaccel", "videotoolbox"] if sys.platform == "darwin" else []  # 4K HDR in software took minutes a clip, not seconds
-    run = ["ffmpeg", "-v", "error", "-y", *hw, "-i", str(clip)]
+    run = ["ffmpeg", "-v", "error", "-y", *HW, "-i", str(clip)]
     subprocess.run(run + ["-vf", side.format(540), "-c:v", *(["h264_videotoolbox", "-b:v", "1500k"] if sys.platform == "darwin" else ["libx264", "-crf", "28"]),
                           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(name.with_suffix(".preview.mp4"))], check=True)
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{probe(clip)[0] / 2:.2f}", "-i", str(clip), "-frames:v", "1",
@@ -546,9 +559,18 @@ def finalize(proj, progress=lambda step, part: None):
         raise
     finally:
         shutil.rmtree(out, ignore_errors=True)
-    if old.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
-        shutil.rmtree(old) if "CloudStorage" in str(FINAL) else move_free(old, TRASH)
-    tmp.rename(dest)
+    spare = FINAL / f".{proj.name}.old"  # the old clips stay until the new ones are in place
+    shutil.rmtree(spare, ignore_errors=True)
+    if old.exists():
+        old.rename(spare)
+    try:
+        tmp.rename(dest)
+    except OSError:
+        if spare.exists():
+            spare.rename(old)
+        raise
+    if spare.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
+        shutil.rmtree(spare) if "CloudStorage" in str(FINAL) else move_free(spare, TRASH, old.name)
     info["finalized"], info["stage"], info["library_folder"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed", folder
     save(proj / "project.json", info)
     print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
@@ -645,5 +667,12 @@ def main():
         {"report": report, "reparse": reparse, "retranscribe": retranscribe, "finalize": finalize}[a.cmd](proj)
 
 
+def run():
+    try:
+        main()
+    except RuntimeError as e:
+        sys.exit(str(e))
+
+
 if __name__ == "__main__":
-    main()
+    run()

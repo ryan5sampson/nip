@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = ["mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'", "anthropic"]
 
 [project.scripts]
-nip = "nip.cli:main"
+nip = "nip.cli:run"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -92,10 +92,10 @@ def summary(proj):
     ts = [tiers(c["edit"], c["duration"]) for c in clips]
     return {"name": proj.name, "description": desc, "named": bool(info.get("my_description")), "tags": tags, "videos": len(clips),
             "clips": names, "filmed": sum(c["duration"] for c in clips), "kept": sum(map(kept_seconds, clips)),
-            "highlights": sum(len(c["edit"]["markers"]) for c in clips), "notes": len(notes),
+            "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "stage": cli.stage_of(info), "finalized": bool(info.get("finalized")), "media": [[c["source"], c["duration"]] for c in clips],
+            "said": " ".join(w["w"] for c in clips for w in c["words"])[:brief.ASSIST_SAID], "stage": cli.stage_of(info), "media": [[c["source"], c["duration"]] for c in clips],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
@@ -161,19 +161,23 @@ def scan_library():
         return
     new = {}
     for f in sorted(f for s in cli.SHELVES for f in (cli.FINAL / s).glob("[!.]*/_info/*.json")):
-        key, when = str(f.relative_to(cli.FINAL)), f.stat().st_mtime
-        if old.get(key, {}).get("mtime") == when:
-            new[key] = {**old[key], "folder": f.parent.parent.name}
-            continue
-        m = cli.load(f)
-        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem, "folder": f.parent.parent.name, "used": f.parent.parent.parent.name == "Used",
-                    "text": " ".join(w["w"] for w in m["words"]), "file": f.with_suffix(Path(m["source"]).suffix).name}
+        key = str(f.relative_to(cli.FINAL))
+        try:  # one unreadable clip, like a file Drive hasn't finished syncing, mustn't hide the rest
+            when = f.stat().st_mtime
+            if old.get(key, {}).get("mtime") == when:
+                new[key] = old[key]
+                continue
+            m = cli.load(f)
+            new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem, "folder": f.parent.parent.name, "used": f.parent.parent.parent.name == "Used",
+                        "text": " ".join(w["w"] for w in m["words"]), "file": f.with_suffix(Path(m["source"]).suffix).name}
+        except (OSError, ValueError, KeyError) as e:
+            print(f"library: skipped {key}: {e}")
     if new != old:
         cli.save(cli.INDEX, new)
 
 
 def final_clips():
-    """Every finalized clip, newest bundle first; what the Clips view searches. A stalled Drive blocks forever inside the
+    """Every finalized clip, newest bundle first; what the Library searches. A stalled Drive blocks forever inside the
     system, so the scan runs on the side and the last index answers if it's slow, offline or waiting on a permission."""
     if not (SCAN["thread"] and SCAN["thread"].is_alive()):
         SCAN["thread"] = threading.Thread(target=scan_library, daemon=True)
@@ -196,6 +200,28 @@ def final_file(folder, name, info=False):
     if not f.is_file():
         raise FileNotFoundError
     return f
+
+
+def saving(name):
+    return any(j["project"] == name and j["state"] in ("waiting", "saving") for j in SAVES)
+
+
+def cards():
+    """Every project's card. One that can't be read is left out, not the whole library."""
+    out = []
+    for d in cli.LIBRARY.iterdir() if cli.LIBRARY.exists() else []:
+        if (d / "project.json").exists():
+            try:
+                out.append(summary(d))
+            except (OSError, ValueError, KeyError) as e:
+                print(f"library: skipped {d.name}: {e}")
+    return sorted(out, key=lambda s: s["modified"], reverse=True)
+
+
+def clean_tags(tags):
+    if not isinstance(tags, list) or not all(isinstance(t, str) and len(t) <= 40 for t in tags):
+        raise ValueError("tags must be a list of short texts")
+    return [t.strip().lower() for t in tags if t.strip()]
 
 
 def why(e):
@@ -241,6 +267,9 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def parts(self):
+        host, origin = self.headers.get("Host", ""), self.headers.get("Origin")
+        if host.split(":")[0] not in ("127.0.0.1", "localhost") or origin not in (None, f"http://{host}"):
+            raise ValueError("this request didn't come from Footage Flow")  # any website can send a POST to this Mac; only this page may
         parts = [unquote(p) for p in self.path.split("?")[0].strip("/").split("/")]
         if any(p in (".", "..") or "/" in p or "\\" in p for p in parts):
             raise FileNotFoundError
@@ -251,6 +280,11 @@ class Handler(BaseHTTPRequestHandler):
         if not name or not (proj / "project.json").exists():
             raise FileNotFoundError
         return proj
+
+    def clip_file(self, proj, stem):
+        if stem not in cli.load(proj / "project.json")["clips"]:
+            raise FileNotFoundError
+        return proj / f"{stem}.nip.json"
 
     def send_json(self, data, status=200):
         body = json.dumps(data).encode()
@@ -293,16 +327,14 @@ class Handler(BaseHTTPRequestHandler):
             if p == [""]:
                 self.send_file(PAGE, "text/html; charset=utf-8")
             elif p == ["api", "status"]:
-                waiting = [v for v in cli.INBOX.rglob("*") if v.suffix.lower() in cli.VIDEO] if cli.INBOX.exists() else []
-                self.send_json({"inbox": str(cli.INBOX), "waiting": len(waiting), "transcribing": STATE["transcribing"],
+                self.send_json({"inbox": str(cli.INBOX), "transcribing": STATE["transcribing"],
                                 "unreadable": sum(1 for f in cli.UNREADABLE.iterdir() if not f.name.startswith(".")) if cli.UNREADABLE.exists() else 0,
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
             elif p == ["api", "saves"]:
                 self.send_json(SAVES)
             elif p == ["api", "projects"]:
-                projs = [d for d in cli.LIBRARY.iterdir() if (d / "project.json").exists()] if cli.LIBRARY.exists() else []
-                self.send_json(sorted((summary(d) for d in projs), key=lambda s: s["modified"], reverse=True))
+                self.send_json(cards())
             elif len(p) == 3 and p[:2] == ["api", "project"]:
                 self.send_json(project_data(self.project(p[2])))
             elif len(p) == 2 and p[0] == "thumb":
@@ -340,11 +372,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             if not isinstance(body, dict):
                 raise ValueError("expected a JSON object")
+            if len(p) >= 3 and p[1] != "saves" and saving(p[2]):  # its edits are being cut right now, so a change would be lost
+                raise ValueError("It’s being saved right now; try again when it’s done")
             if len(p) == 4 and p[:2] == ["api", "override"]:
                 proj = self.project(p[2])
-                if p[3] not in cli.load(proj / "project.json")["clips"]:
-                    raise FileNotFoundError
-                f = proj / f"{p[3]}.nip.json"
+                f = self.clip_file(proj, p[3])
                 with LOCK:
                     clip = cli.load(f)
                     cli.remember(clip)
@@ -356,9 +388,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(edited(proj))
             elif len(p) == 4 and p[:2] == ["api", "notes"]:  # second-round edit notes for Claude
                 proj = self.project(p[2])
-                if p[3] not in cli.load(proj / "project.json")["clips"]:
-                    raise FileNotFoundError
-                f = proj / f"{p[3]}.nip.json"
+                f = self.clip_file(proj, p[3])
                 act = body.get("action")
                 if act == "add":
                     text, t = body.get("text"), body.get("t")
@@ -402,9 +432,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(edited(proj))
             elif len(p) == 4 and p[:2] == ["api", "cuts"]:  # restore a voice cut, add or remove your own, or reset
                 proj = self.project(p[2])
-                if p[3] not in cli.load(proj / "project.json")["clips"]:
-                    raise FileNotFoundError
-                f = proj / f"{p[3]}.nip.json"
+                f = self.clip_file(proj, p[3])
                 with LOCK:
                     clip = cli.load(f)
                     act, start = body.get("action"), body.get("start")
@@ -449,10 +477,7 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError("description must be text, 200 characters at most")
                         info["my_description"] = body["description"].strip()
                     if "tags" in body:
-                        tags = body["tags"]
-                        if not isinstance(tags, list) or not all(isinstance(t, str) and len(t) <= 40 for t in tags):
-                            raise ValueError("tags must be a list of short texts")
-                        info["my_tags"] = [t.strip().lower() for t in tags if t.strip()]
+                        info["my_tags"] = clean_tags(body["tags"])
                     cli.save(proj / "project.json", info)
                 self.send_json(project_data(proj))
             elif len(p) == 3 and p[:2] == ["api", "brief"]:
@@ -494,8 +519,6 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get("stage") not in cli.STAGES:
                     raise ValueError(f"stage must be one of {', '.join(cli.STAGES)}")
                 if body["stage"] == "completed":  # cuts the footage down: each kept clip becomes its own file in the library
-                    if any(j["project"] == proj.name and j["state"] in ("waiting", "saving") for j in SAVES):
-                        raise ValueError("It’s already being saved")
                     settle(proj, body.get("unmarked"))
                     with LOCK:
                         cli.set_stage(proj, "processing")
@@ -511,14 +534,12 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(project_data(proj))
             elif len(p) == 4 and p[:2] == ["api", "clip"]:  # a finalized clip's own tags
                 f = cli.library_path(p[2]) / "_info" / f"{p[3]}.json"
-                tags = body.get("tags")
                 if not f.is_file():
                     raise FileNotFoundError
-                if not isinstance(tags, list) or not all(isinstance(t, str) and len(t) <= 40 for t in tags):
-                    raise ValueError("tags must be a list of short texts")
+                tags = clean_tags(body.get("tags"))
                 with LOCK:
-                    cli.save(f, {**cli.load(f), "tags": [t.strip().lower() for t in tags if t.strip()]})
-                self.send_json({"tags": cli.load(f)["tags"]})
+                    cli.save(f, {**cli.load(f), "tags": tags})
+                self.send_json({"tags": tags})
             elif len(p) == 3 and p[:2] == ["api", "used"]:  # move a completed bundle's folder between Unused and Used
                 proj = self.project(p[2])
                 if not library_answers():
@@ -528,6 +549,16 @@ class Handler(BaseHTTPRequestHandler):
             elif len(p) == 3 and p[:2] == ["api", "saves"]:  # dismiss a finished one
                 SAVES[:] = [j for j in SAVES if j["project"] != p[2] or j["state"] in ("waiting", "saving")]
                 self.send_json({})
+            elif p == ["api", "nip"]:  # the home screen's NIP: answers from the whole library, and says what to do
+                text, history = body.get("message"), body.get("history", [])
+                if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                    raise ValueError("write a message of up to 2000 characters")
+                if not isinstance(history, list) or not all(isinstance(m, dict) for m in history):
+                    raise ValueError("history must be a list of messages")
+                try:
+                    self.send_json(brief.assist(text.strip(), history[-10:], str(body.get("view", "")), cards(), final_clips()))
+                except RuntimeError as e:
+                    raise ValueError(str(e))
             elif p == ["api", "handoff"]:  # library clips copied to a folder of their own, to make a video with
                 picks = body.get("clips")
                 if not isinstance(picks, list) or not all(isinstance(c, dict) for c in picks):
@@ -574,7 +605,7 @@ class Handler(BaseHTTPRequestHandler):
                     target = cli.EXPORTS / self.project(str(body.get("project", ""))).name
                     target.mkdir(parents=True, exist_ok=True)
                 else:
-                    raise ValueError("what must be inbox or exports")
+                    raise ValueError("what must be inbox, vocabulary, unreadable, finalized, handoff or exports")
                 subprocess.run(["open", str(target)], check=True)
                 self.send_json({"opened": str(target)})
             else:
@@ -608,6 +639,7 @@ def watch_inbox():
 def serve(port=8765):
     for d in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
         d.mkdir(parents=True, exist_ok=True)
+    cli.rescue()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
     threading.Thread(target=watch_inbox, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"

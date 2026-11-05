@@ -71,7 +71,29 @@
   .inbox .spin { width: 12px; height: 12px; border: 1.5px solid var(--tertiary); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
   body.dropping::after { content: "Drop videos to add them to the inbox"; position: fixed; inset: 10px; z-index: 100; display: grid; place-items: center; border: 3px dashed var(--accent); border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--label); font-size: 20px; font-weight: 600; pointer-events: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .main { display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; }
+  .main { display: grid; grid-template-rows: 52px minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) 320px; min-width: 0; }
+  .main > .toolbar, #project { grid-column: 1 / -1; }
+  #nipchat { display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; border-left: .5px solid var(--separator); background: var(--window); }
+  body.editing #nipchat { display: none; }
+  #chatlog { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .msg { display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
+  .msg p { margin: 0; white-space: pre-wrap; }
+  .msg.you { align-self: flex-end; max-width: 85%; padding: 6px 10px; border-radius: 12px; background: var(--accent); color: #fff; }
+  .msg.bad p, .msg .bad { color: var(--red); }
+  .msg small { color: var(--secondary); font-size: 11px; }
+  .msg a { color: var(--accent); text-decoration: none; }
+  .chatclips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .chatclips button { padding: 0; border: none; background: none; text-align: left; color: inherit; font-size: 11px; line-height: 1.25; display: flex; flex-direction: column; gap: 3px; }
+  .chatclips i { aspect-ratio: 3 / 4; border-radius: 6px; background: #000 center / cover no-repeat; }
+  .chatclips span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #chatform { display: flex; gap: 6px; align-items: flex-end; }
+  #chatin { flex: 1; min-width: 0; resize: none; }
+  body:not(.editing) #saves { right: 336px; }
+  @media (max-width: 900px) {
+    .main { grid-template-columns: minmax(0, 1fr); }
+    #nipchat { display: none; }
+    body:not(.editing) #saves { right: 16px; }
+  }
   .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--toolbar); backdrop-filter: blur(30px); border-bottom: .5px solid var(--separator); min-width: 0; }
   .toolbar .title { display: flex; flex-direction: column; min-width: 0; margin: 0 6px; }
   .toolbar .title b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -296,7 +318,6 @@
   <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.4 10.4 3.6 3.6"/></symbol>
   <symbol id="i-tray" viewBox="0 0 16 16"><path d="M1.8 9.2h3.6l1 1.8h3.2l1-1.8h3.6M1.8 9.2 3.6 3.2h8.8l1.8 6v4.1H1.8z"/></symbol>
   <symbol id="i-tag" viewBox="0 0 16 16"><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5" cy="5" r=".9"/></symbol>
-  <symbol id="i-photos" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="m1.8 10.6 3.4-3 3 2.6 2-1.6 4 3.2"/></symbol>
   <symbol id="i-text" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8M2.6 6.5h10.8M2.6 9.4h10.8M2.6 12.3h6.4"/></symbol>
   <symbol id="i-pencil" viewBox="0 0 16 16"><path d="m2.6 13.4.6-3 7.6-7.6 2.4 2.4-7.6 7.6zM9.4 4.2l2.4 2.4"/></symbol>
   <symbol id="i-split" viewBox="0 0 16 16"><path d="M8 1.8v12.4M5.4 5.2 2.6 8l2.8 2.8M10.6 5.2 13.4 8l-2.8 2.8"/></symbol>
@@ -340,6 +361,12 @@
 
     <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div>
       <div id="pickbar" hidden><span id="picktext" class="num"></span><span class="grow"></span><button class="btn" id="pickclear">Clear</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div></div>
+
+    <aside id="nipchat" aria-label="NIP">
+      <div class="niphead"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg><b>NIP</b><span class="hint">Press <kbd>E</kbd></span></div>
+      <div id="chatlog" role="log" aria-live="polite"></div>
+      <form id="chatform" autocomplete="off"><textarea id="chatin" rows="2" maxlength="2000" aria-label="Message to NIP" placeholder="Ask NIP, or tell it what to do"></textarea><button class="btn default" id="chatsend">Send</button></form>
+    </aside>
 
     <div id="project" hidden>
       <section class="textcol" aria-label="Transcript">
@@ -625,7 +652,9 @@ $('#clipcards').onclick = e => {
   const c = clips[+e.target.closest('[data-clip]')?.dataset.clip];
   if (!c) return;
   e.preventDefault();
-  if (e.target.closest('.sel')) return togglePick(c);
+  e.target.closest('.sel') ? togglePick(c) : showClip(c);
+};
+function showClip(c) {
   openClip = c;
   drawClipPick();
   $('#clipvideo').src = previewOf(c);
@@ -635,7 +664,7 @@ $('#clipcards').onclick = e => {
   $('#cliptext').textContent = c.text || 'No speech';
   $('#clipbundle').hidden = !projects.some(p => p.name === c.project);
   $('#clipdlg').showModal();
-};
+}
 const drawClipPick = () => $('#clippick').textContent = chosen.has(clipKey(openClip)) ? 'Picked ✓' : 'Pick for a Video';
 $('#clippick').onclick = () => { togglePick(openClip); drawClipPick(); };
 $('#clipdlg').onclose = () => {
@@ -765,7 +794,6 @@ $('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
 const clip = () => data.clips[clipIdx];
-const pct = t => `${100 * t / clip().duration}%`;
 // same as kept_ranges() in commands.py: the pieces of a take that survive the cuts
 function pieces(t, cuts) {
   let ps = [[t.start, t.end]];
@@ -1456,6 +1484,75 @@ function showKeys(open) {
 }
 $('#keyshide').onclick = () => showKeys(false);
 $('#keystoggle').onclick = () => showKeys(true);
+
+// ---------- NIP on the home screen: questions, finding footage, small jobs ----------
+const chat = [];  // this visit's conversation; a reload starts fresh
+const titleOf = name => { const p = projects.find(x => x.name === name); return p?.description || name; };
+const clipOf = key => clips.find(c => clipKey(c) === key);
+function drawChat(thinking) {
+  $('#chatlog').innerHTML = (chat.length ? '' : `<div class="msg"><p>Ask me about your footage, have me find clips, or tell me what to do, like “find clips where I throw” or “mark the Bambu video as used”.</p></div>`)
+    + chat.map(m => `<div class="msg ${m.role} ${m.bad ? 'bad' : ''}"><p>${esc(m.text)}</p>
+      ${m.clips?.length ? `<div class="chatclips">${m.clips.map(clipOf).filter(Boolean).map(c => `<button type="button" data-key="${esc(clipKey(c))}" title="Play this clip"><i style="background-image:url('/final/${enc(c.folder)}/${enc(c.stem + '.jpg')}')"></i><span>${esc(clipTitle(c))}</span></button>`).join('')}</div>` : ''}
+      ${(m.projects || []).map(p => `<a href="#/p/${enc(p)}">${esc(titleOf(p))}</a>`).join('')}
+      ${(m.done || []).map(d => `<small class="${d.bad ? 'bad' : ''}">${esc(d.text)}</small>`).join('')}
+    </div>`).join('') + (thinking ? '<div class="msg"><small>NIP is thinking…</small></div>' : '');
+  const log = $('#chatlog');
+  log.scrollTop = log.lastElementChild.offsetTop - log.offsetTop;  // from the top of the newest message, which may be long
+}
+async function nipDo(a) {  // each goes through the same checked routes as the buttons
+  const picks = a.clips.map(clipOf).filter(Boolean);
+  if (a.action === 'open') { location.hash = '#/p/' + enc(a.project); return `Opened ${titleOf(a.project)}`; }
+  if (a.action === 'search') { $('#search').value = a.text; tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; return `Searched the Library for “${a.text}”`; }
+  if (a.action === 'pick') { picks.forEach(c => chosen.set(clipKey(c), c)); return `Picked ${plural(picks.length, 'clip')}`; }
+  if (a.action === 'export') {
+    const r = await api('/api/handoff', {name: a.text, clips: picks.map(c => ({folder: c.folder, file: c.file}))});
+    api('/api/open', {what: 'handoff', folder: r.folder}).catch(e => status(e.message, true));
+    return `Exported ${plural(picks.length, 'clip')} to Handoffs/${r.folder}`;
+  }
+  if (a.action === 'mark_used' || a.action === 'mark_unused') { await api('/api/used/' + enc(a.project), {used: a.action === 'mark_used'}); return `Moved ${titleOf(a.project)} to ${a.action === 'mark_used' ? 'Used' : 'Unused'}`; }
+  if (a.action === 'rename') { await api('/api/project/' + enc(a.project), {description: a.text}); return `Renamed it “${a.text}”`; }
+  if (a.action === 'tag') {
+    for (const c of picks) c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags: [...new Set([...c.tags, ...a.text.split(',')])]})).tags;
+    return `Tagged ${plural(picks.length, 'clip')}`;
+  }
+  if (a.action === 'move') { await api('/api/stage/' + enc(a.project), {stage: a.text}); return `Moved ${titleOf(a.project)} to ${STAGES[a.text][0]}`; }
+  if (a.action === 'complete') { await api('/api/stage/' + enc(a.project), {stage: 'completed'}); return `Saving ${titleOf(a.project)}; progress is in the corner`; }
+  throw new Error(`I don’t know how to ${a.action}`);
+}
+$('#chatform').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('#chatin').value.trim();
+  if (!text || $('#chatsend').disabled) return;
+  $('#chatin').value = '';
+  $('#chatsend').disabled = true;
+  const history = chat.map(m => ({role: m.role, text: [m.text, ...(m.done || []).map(d => d.text)].join(' ')}));  // so NIP knows how its jobs went
+  chat.push({role: 'you', text});
+  drawChat(true);
+  try {
+    const r = await api('/api/nip', {message: text, history, view: onClips ? 'Library' : STAGES[stageFilter][0]});
+    const m = {...r, role: 'nip', text: r.reply, done: []};
+    chat.push(m);
+    drawChat();
+    for (const a of r.actions) {
+      try { m.done.push({text: await nipDo(a)}); } catch (err) { m.done.push({text: err.message, bad: true}); }
+      drawChat();
+    }
+    if (r.actions.length) { await loadLibrary(); watchSaves(); }
+  } catch (err) { chat.push({role: 'nip', text: err.message, bad: true}); }
+  $('#chatsend').disabled = false;
+  drawChat();
+};
+$('#chatin').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#chatform').requestSubmit(); }
+  else if (e.key === 'Escape') $('#chatin').blur();
+};
+$('#chatlog').onclick = e => { const c = clipOf(e.target.closest('[data-key]')?.dataset.key); if (c) showClip(c); };
+document.addEventListener('keydown', e => {
+  if (e.key !== 'e' || !$('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  $('#chatin').focus();
+});
+drawChat();
 
 // ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
 $('#vocabulary').onclick = () => api('/api/open', {what: 'vocabulary'}).catch(e => status(e.message, true));

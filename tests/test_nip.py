@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -6,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from nip import brief, cli
 from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, respell, silences, timeline, unmarked
 
 
@@ -690,6 +692,169 @@ class Export(unittest.TestCase):
                                       capture_output=True, text=True, check=True).stdout.strip()
                 self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertEqual(sorted(f.name for f in (cli.EXPORTS / proj.name).glob(".*")), [])
+
+
+class Robustness(unittest.TestCase):
+    def serve(self, d):
+        import threading
+        import nip.view as view
+        patch = mock.patch.multiple(cli, LIBRARY=d / "lib", INBOX=d / "inbox", FINAL=d / "final", HANDOFFS=d / "handoffs", INDEX=d / "index.json", TRASH=d / "bin", HOME=d)
+        patch.start()
+        self.addCleanup(patch.stop)
+        server = view.ThreadingHTTPServer(("127.0.0.1", 0), view.Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_port}", view
+
+    def project(self, d, name="p", words=()):
+        p = d / "lib" / name
+        (p / "raw").mkdir(parents=True)
+        (p / "raw" / "v.mov").write_bytes(b"x")
+        cli.save(p / "project.json", {"description": "A video", "tags": [], "clips": ["v"], "stage": "processing"})
+        cli.save(p / "v.nip.json", {"source": "v.mov", "duration": 4.0, "words": list(words), "edit": build_edit(list(words), 4.0)})
+        return p
+
+    def test_only_this_page_can_post(self):
+        import urllib.error
+        import urllib.request
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            (d / "lib").mkdir()
+            base, _ = self.serve(d)
+            self.project(d)
+            ask = lambda **h: urllib.request.urlopen(urllib.request.Request(base + "/api/clear/p", data=b"{}", headers=h))
+            for bad in ({"Origin": "https://evil.example"}, {"Origin": "null"}, {"Host": "evil.example"}):
+                with self.assertRaises(urllib.error.HTTPError):
+                    ask(**bad)
+            self.assertTrue((d / "lib" / "p").exists())
+            (d / "bin").mkdir()
+            self.assertEqual(ask(Origin=base).status, 200)  # the page itself
+            self.assertFalse((d / "lib" / "p").exists())
+
+    def test_saving_footage_cant_be_changed(self):
+        import urllib.error
+        import urllib.request
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            (d / "lib").mkdir()
+            base, view = self.serve(d)
+            self.project(d)
+            view.SAVES[:] = [{"project": "p", "state": "saving"}]
+            self.addCleanup(view.SAVES.clear)
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(urllib.request.Request(base + "/api/cuts/p/v", data=json.dumps({"action": "cut", "start": 1, "end": 2}).encode()))
+            self.assertIn("being saved", json.loads(cm.exception.read())["error"])
+
+    def test_one_bad_project_or_clip_hides_nothing_else(self):
+        import urllib.request
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            (d / "lib").mkdir()
+            base, view = self.serve(d)
+            self.project(d)
+            self.project(d, "broken")
+            (d / "lib" / "broken" / "v.nip.json").write_text("{half a fi")
+            self.assertEqual([c["name"] for c in json.load(urllib.request.urlopen(base + "/api/projects"))], ["p"])
+            for name, text in (("good", {"project": "p", "source": "v.mov", "tags": [], "words": []}), ("bad", None)):
+                f = d / "final" / "Unused" / "b" / "_info" / f"{name}.json"
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(json.dumps(text) if text else "{half")
+            view.scan_library()
+            self.assertEqual([c["stem"] for c in cli.load(cli.INDEX).values()], ["good"])
+
+    def test_saves_are_whole_and_lost_footage_returns_to_the_inbox(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, LIBRARY=d / "lib", INBOX=d / "inbox"):
+                f = d / "a.json"
+                cli.save(f, {"a": 1})
+                with mock.patch("os.replace", side_effect=OSError("disk full")), self.assertRaises(OSError):
+                    cli.save(f, {"a": 2})
+                self.assertEqual(cli.load(f), {"a": 1})  # a failed save leaves the last good one
+                (d / "lib" / "stopped" / "raw").mkdir(parents=True)
+                (d / "lib" / "stopped" / "raw" / "v.MOV").write_bytes(b"x")
+                (d / "lib" / "stopped" / "v.nip.json").write_text("{}")
+                (d / "lib" / "fine" / "raw").mkdir(parents=True)
+                (d / "lib" / "fine" / "project.json").write_text("{}")
+                cli.rescue()
+                self.assertTrue((d / "inbox" / "v.MOV").exists())
+                self.assertEqual([p.name for p in (d / "lib").iterdir()], ["fine"])
+
+    def test_nip_on_the_home_screen_is_checked(self):
+        projects = [{"name": "p", "description": "Printers", "stage": "completed", "filmed": 60, "kept": 30, "tags": ["farm"], "said": "my print farm"}]
+        clips = [{"project": "p", "stem": "01 a", "name": "Throw", "bundle": "Printers", "duration": 3.0, "tags": [], "text": "watch this", "used": False}]
+        answer = {"reply": "Found it.", "clips": [0, 7], "projects": ["p", "nope"], "actions": [
+            {"action": "pick", "project": "", "clips": [0], "text": ""}, {"action": "mark_used", "project": "p", "clips": [], "text": ""},
+            {"action": "mark_used", "project": "nope", "clips": [], "text": ""}, {"action": "delete", "project": "p", "clips": [], "text": ""},
+            {"action": "move", "project": "p", "clips": [], "text": "completed"}, {"action": "tag", "project": "", "clips": [9], "text": "x"}]}
+        with mock.patch.object(brief, "claude_json", return_value=answer) as ask:
+            r = brief.assist("find my throw", [{"role": "you", "text": "hi"}], "Library", projects, clips)
+        sent = ask.call_args.args[0]
+        self.assertIn('[0] title="Throw"', sent)
+        self.assertIn('said="my print farm"', sent)
+        self.assertIn("you: hi", sent)
+        self.assertEqual((r["clips"], r["projects"]), (["p/01 a"], ["p"]))  # only what exists
+        self.assertEqual([a["action"] for a in r["actions"]], ["pick", "mark_used"])  # no delete, no skipping Mark Complete's rules
+        self.assertEqual(r["actions"][0]["clips"], ["p/01 a"])
+        self.assertIn("4 of that couldn't be done", r["reply"])
+
+    def test_nip_route_checks_the_message(self):
+        import urllib.error
+        import urllib.request
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            (d / "lib").mkdir()
+            base, _ = self.serve(d)
+            self.project(d, words=[{"w": "hello", "start": 1.0, "end": 1.5}])
+            post = lambda b: urllib.request.urlopen(urllib.request.Request(base + "/api/nip", data=json.dumps(b).encode()))
+            for bad in ({"message": ""}, {"message": "x" * 2001}, {"message": "hi", "history": "no"}):
+                with self.assertRaises(urllib.error.HTTPError):
+                    post(bad)
+            said = {"reply": "Hi.", "clips": [], "projects": [], "actions": []}
+            with mock.patch.object(brief, "claude_json", return_value=said) as ask:
+                self.assertEqual(json.load(post({"message": "hi", "view": "Inbox"}))["reply"], "Hi.")
+            self.assertIn("hello", ask.call_args.args[0])
+
+    def test_a_failed_swap_keeps_the_old_clips(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, LIBRARY=d / "lib", FINAL=d / "final", HOME=d):
+                proj = self.project(d)
+                c = cli.load(proj / "v.nip.json")
+                cli.add_cut(c, 0.0, 4.0, "my_keeps")
+                cli.save(proj / "v.nip.json", c)
+                old = d / "final" / "Unused" / "p"
+                old.mkdir(parents=True)
+                (old / "01 old.mov").write_bytes(b"old")
+                real = Path.rename
+
+                def rename(self, target):
+                    if self.name.endswith(".building"):
+                        raise OSError("Drive said no")
+                    return real(self, target)
+                fake = lambda src, a, b, out: out.write_bytes(b"new")
+                make = lambda clip, name: None
+                with mock.patch.object(Path, "rename", rename), mock.patch.object(cli, "copy_clip", fake), mock.patch.object(cli, "preview", make), self.assertRaises(OSError):
+                    cli.finalize(proj)
+                self.assertTrue((old / "01 old.mov").exists())
+
+
+class Page(unittest.TestCase):
+    """The tests can't run the page, so a slip in its script blanks the app. Catch the two kinds that have."""
+    page = (Path(__file__).parent.parent / "nip" / "viewer.html").read_text()
+
+    def test_every_element_the_script_uses_exists(self):
+        import re
+        self.assertEqual(sorted(set(re.findall(r"\$\('#([\w-]+)'\)", self.page)) - set(re.findall(r'id="([\w-]+)"', self.page))), [])
+
+    @unittest.skipUnless(shutil.which("osascript"), "needs macOS's JavaScript")
+    def test_the_script_parses(self):
+        src = self.page[self.page.rindex("<script>") + 8:self.page.rindex("</script>")]
+        with tempfile.TemporaryDirectory() as t:
+            f = Path(t) / "check.js"
+            f.write_text(f"new Function({json.dumps(src)}); 'ok'")
+            r = subprocess.run(["osascript", "-l", "JavaScript", str(f)], capture_output=True, text=True)
+        self.assertEqual((r.stdout.strip(), r.stderr), ("ok", ""))
 
 
 if __name__ == "__main__":
