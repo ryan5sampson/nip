@@ -1,3 +1,5 @@
+<img src="assets/app-icon.png" width="96" alt="Footage Flow logo">
+
 # Footage Flow
 
 Footage Flow preps footage for editing. Drop videos into a folder; Footage Flow transcribes them, and NIP, its assistant, finds the takes and commands you spoke while filming and helps you cut the footage down. It exports cleaned-up clips ready for CapCut.
@@ -26,6 +28,12 @@ For a double-click app, make one on your Desktop once:
 
 ```bash
 osacompile -o ~/Desktop/"Footage Flow.app" -e 'do shell script quoted form of "'"$PWD"'/open-nip.sh"'
+```
+
+Give it the Footage Flow icon:
+
+```bash
+osascript -l JavaScript -e 'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.setIconForFileOptions($.NSImage.alloc.initWithContentsOfFile("'"$PWD"'/assets/app-icon.png"), "'"$HOME"'/Desktop/Footage Flow.app", 0)'
 ```
 
 Opening it starts Footage Flow in the background, restarting it if it's already running so the latest code loads, and opens it in your browser after about 10 seconds. You can also bookmark `http://127.0.0.1:8765/` and refresh it while Footage Flow runs. Its output goes to `~/NIP/nip.log`.
