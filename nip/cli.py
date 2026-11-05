@@ -16,7 +16,9 @@ from nip.commands import apply_cut_edits, apply_overrides, build_edit, clip_name
 HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
 INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
 LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
-FINAL = Path(os.environ.get("NIP_FINAL", HOME / "finalized")).expanduser()  # kept clips as their own files, with their info
+SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings.json").exists() else {}
+FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "finalized").expanduser()  # kept clips, as their own files
+INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
 VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
@@ -438,20 +440,32 @@ def copy_clip(src, a, b, out):
         raise ValueError(f"{out.name} came out shorter than the clip")
 
 
+def preview(clip, name):
+    """A thumbnail and a small video, so browsing never has to fetch the full clip from Drive (measured about 4% of its size)."""
+    side = "scale='if(lt(iw,ih),{0},-2)':'if(lt(iw,ih),-2,{0})'"
+    hw = ["-hwaccel", "videotoolbox"] if sys.platform == "darwin" else []  # 4K HDR in software took minutes a clip, not seconds
+    run = ["ffmpeg", "-v", "error", "-y", *hw, "-i", str(clip)]
+    subprocess.run(run + ["-vf", side.format(540), "-c:v", *(["h264_videotoolbox", "-b:v", "1500k"] if sys.platform == "darwin" else ["libx264", "-crf", "28"]),
+                          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(name.with_suffix(".preview.mp4"))], check=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{probe(clip)[0] / 2:.2f}", "-i", str(clip), "-frames:v", "1",
+                    "-vf", side.format(360), str(name.with_suffix(".jpg"))], check=True)
+
+
 def finalize(proj):
-    """Write each kept clip of a fully decided project as its own file, beside a .json with its name, tags and transcript
-    (times from the start of the clip). The originals aren't touched. Redoing it replaces the last result."""
+    """Write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
+    transcript with times from the start of the clip), thumbnail and preview, so editors just see the clips. It's built and
+    checked locally and copied over whole, so Drive never uploads half a result. The originals aren't touched."""
     info = load(proj / "project.json")
     clips = [load(proj / f"{stem}.nip.json") for stem in info["clips"]]
     left = sum(len(unmarked(decisions(c))) for c in clips)
     if left:
         raise ValueError(f"{left} stretches aren't marked cut or keep yet")
     FINAL.mkdir(parents=True, exist_ok=True)
-    out, dest = FINAL / f".{proj.name}.building", FINAL / proj.name
+    out, tmp, dest = HOME / ".finalizing" / proj.name, FINAL / f".{proj.name}.building", FINAL / proj.name
     shutil.rmtree(out, ignore_errors=True)
-    out.mkdir()
+    (out / "_info").mkdir(parents=True)
     spellings, n, skipped = vocabulary()[1], 0, 0
-    before = [load(f) for f in dest.glob("*.json")]  # tags added to clips outlive finalizing again
+    before = [load(f) for f in dest.glob("_info/*.json")]  # tags added to clips outlive finalizing again
     try:
         for c in clips:
             e, source = decisions(c), Path(c["source"])
@@ -468,7 +482,8 @@ def finalize(proj):
                             and min(o["source_end"], s["b"]) - max(o["source_start"], s["a"]) > (s["b"] - s["a"]) / 2), None)
                 f = out / f"{n:02d} {re.sub(r'[^\w ,.()&+-]', '', name or source.stem).strip(' .')[:80]}{source.suffix}"
                 copy_clip(proj / "raw" / source, s["a"], s["b"], f)
-                save(f.with_suffix(".json"), {
+                preview(f, out / "_info" / f.name)
+                save((out / "_info" / f.name).with_suffix(".json"), {
                     "name": name, "tags": was["tags"] if was else info.get("my_tags", info["tags"]), "bundle": info.get("my_description") or info["description"],
                     "project": proj.name, "source": source.name, "source_start": s["a"], "source_end": s["b"],
                     "duration": round(s["b"] - s["a"], 2), "filmed": c.get("created", ""),
@@ -476,16 +491,20 @@ def finalize(proj):
                               for w in words if s["a"] <= (w["start"] + w["end"]) / 2 < s["b"]]})
         if not n:
             raise ValueError("nothing is kept in this project")
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.copytree(out, tmp)
     except Exception:  # never leave half a result
-        shutil.rmtree(out, ignore_errors=True)
+        shutil.rmtree(tmp, ignore_errors=True)
         raise
-    if dest.exists():
-        move_free(dest, TRASH)
-    out.rename(dest)
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
+    if dest.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
+        shutil.rmtree(dest) if "CloudStorage" in str(FINAL) else move_free(dest, TRASH)
+    tmp.rename(dest)
     info["finalized"] = {"at": time.time(), "folder": str(dest), "clips": n}
     save(proj / "project.json", info)
     print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
-    return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir())}
+    return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir() if f.is_file())}
 
 
 def export(proj, combined):

@@ -484,8 +484,9 @@ const STAGES = {inbox: ['Inbox', 'tray', 'New footage, not started yet. Hover to
   processing: ['Processing', 'film', 'Being worked on. Drag a card here, or click Start Processing in it.'], processed: ['Processed', 'check', 'Marked complete'],
   exported: ['Exported', 'share', 'Exported; can be deleted to free space']};
 async function loadLibrary() {
-  try { [projects, clips] = await Promise.all([api('/api/projects'), api('/api/clips')]); } catch (e) { return status(e.message, true); }
-  drawLibrary();
+  try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
+  drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
+  api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
 }
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -516,6 +517,7 @@ function drawLibrary() {
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value || tagFilter ? `Nothing matches “${esc($('#search').value || tagFilter)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
+const previewOf = c => `/final/${enc(c.project)}/${enc(c.stem + '.preview.mp4')}`;  // small, so browsing never fetches the full clip from Drive
 const clipTitle = c => c.name || (c.text ? `“${c.text.split(' ').slice(0, 7).join(' ')}…”` : c.source);  // an unnamed clip by what's said in it
 function drawClips(words) {  // every finalized clip, across all bundles
   const shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter))
@@ -534,14 +536,14 @@ function drawClips(words) {  // every finalized clip, across all bundles
 $('#clipsnav').onclick = () => location.hash = '#/clips';
 $('#clipcards').onmousemove = e => {
   const box = e.target.closest('.dur'), c = clips[+box?.closest('[data-clip]').dataset.clip];
-  if (c) scrubCard(box, e, f => f * c.duration, `/final/${enc(c.project)}/${enc(c.file)}`);
+  if (c) scrubCard(box, e, f => f * c.duration, previewOf(c));
 };
 $('#clipcards').onclick = e => {
   const c = clips[+e.target.closest('[data-clip]')?.dataset.clip];
   if (!c) return;
   e.preventDefault();
   openClip = c;
-  $('#clipvideo').src = `/final/${enc(c.project)}/${enc(c.file)}`;
+  $('#clipvideo').src = previewOf(c);
   $('#cliptitle').textContent = clipTitle(c);
   $('#clipmeta').textContent = `${c.bundle || c.project} · ${mins(c.duration)} · from ${c.source}`;
   $('#cliptags').value = c.tags.join(', ');

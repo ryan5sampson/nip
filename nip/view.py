@@ -19,6 +19,7 @@ from nip.commands import kept_ranges, respell, tiers, timeline, unmarked
 PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
 STATE = {"transcribing": 0}  # videos the background ingest is working on
+SCAN = {"thread": None}  # the library scan, one at a time
 DOWNLOADS = Path.home() / "Downloads"
 PICK = """set picked to choose file of type {"public.movie"} with prompt "Add videos to Footage Flow" with multiple selections allowed
 set out to ""
@@ -153,24 +154,45 @@ def apply_notes(f, ids):
         cli.save(f, clip)
 
 
-def final_clips():
-    """Every finalized clip, newest bundle first; what the Clips view searches.
-    shortcut: reads every .json on each load, keep a local index once the library lives on Drive."""
-    out = []
-    for f in sorted(cli.FINAL.glob("[!.]*/*.json"), key=lambda f: (f.parent.name, f.name)):
+def scan_library():
+    """Bring the local index up to date, reading only clips that changed."""
+    old = cli.load(cli.INDEX) if cli.INDEX.exists() else {}
+    if not cli.FINAL.exists():
+        return
+    new = {}
+    for f in sorted(cli.FINAL.glob("[!.]*/_info/*.json")):
+        key, when = str(f.relative_to(cli.FINAL)), f.stat().st_mtime
+        if old.get(key, {}).get("mtime") == when:
+            new[key] = old[key]
+            continue
         m = cli.load(f)
-        out.append({**{k: v for k, v in m.items() if k != "words"}, "stem": f.stem, "text": " ".join(w["w"] for w in m["words"]),
-                    "file": f.with_suffix(Path(m["source"]).suffix).name})
-    return sorted(out, key=lambda c: c["project"], reverse=True)
+        new[key] = {**{k: v for k, v in m.items() if k != "words"}, "mtime": when, "stem": f.stem,
+                    "text": " ".join(w["w"] for w in m["words"]), "file": f.with_suffix(Path(m["source"]).suffix).name}
+    if new != old:
+        cli.save(cli.INDEX, new)
 
 
-def final_file(project, name):
-    """A finalized clip's video or thumbnail; thumbnails are made the first time they're asked for."""
-    f = cli.FINAL / project / name
-    if f.suffix == ".jpg" and not f.exists():
-        m = cli.load(f.with_suffix(".json"))
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{m['duration'] / 2:.2f}", "-i", str(f.with_suffix(Path(m["source"]).suffix)),
-                        "-frames:v", "1", "-vf", "scale=360:-2", str(f)], check=True)
+def final_clips():
+    """Every finalized clip, newest bundle first; what the Clips view searches. A stalled Drive blocks forever inside the
+    system, so the scan runs on the side and the last index answers if it's slow, offline or waiting on a permission."""
+    if not (SCAN["thread"] and SCAN["thread"].is_alive()):
+        SCAN["thread"] = threading.Thread(target=scan_library, daemon=True)
+        SCAN["thread"].start()
+    SCAN["thread"].join(4)
+    return sorted((cli.load(cli.INDEX) if cli.INDEX.exists() else {}).values(), key=lambda c: c["project"], reverse=True)
+
+
+def library_answers():
+    """False if the library's folder doesn't answer within a few seconds."""
+    t = threading.Thread(target=lambda: cli.FINAL.mkdir(parents=True, exist_ok=True) or list(cli.FINAL.iterdir()), daemon=True)
+    t.start()
+    t.join(8)
+    return not t.is_alive()
+
+
+def final_file(project, name, info=False):
+    """A finalized clip, or from _info its thumbnail or preview."""
+    f = cli.FINAL / project / ("_info" if info else "") / name
     if not f.is_file():
         raise FileNotFoundError
     return f
@@ -261,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
             elif p == ["api", "clips"]:
                 self.send_json(final_clips())
             elif len(p) == 3 and p[0] == "final":
-                f = final_file(p[1], p[2])
+                f = final_file(p[1], p[2], info=True)
                 self.send_file(f, "image/jpeg" if f.suffix == ".jpg" else "video/mp4")
             elif len(p) == 3 and p[0] == "media":
                 f = self.project(p[1]) / "raw" / p[2]
@@ -454,7 +476,7 @@ class Handler(BaseHTTPRequestHandler):
                     cli.set_stage(proj, body["stage"])
                 self.send_json(project_data(proj))
             elif len(p) == 4 and p[:2] == ["api", "clip"]:  # a finalized clip's own tags
-                f = cli.FINAL / p[2] / f"{p[3]}.json"
+                f = cli.FINAL / p[2] / "_info" / f"{p[3]}.json"
                 tags = body.get("tags")
                 if not f.is_file():
                     raise FileNotFoundError
@@ -465,6 +487,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"tags": cli.load(f)["tags"]})
             elif len(p) == 3 and p[:2] == ["api", "finalize"]:  # each kept clip as its own file; originals stay
                 proj = self.project(p[2])
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so nothing was saved. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
                 settle(proj, body.get("unmarked"))
                 self.send_json({**cli.finalize(proj), "project": project_data(proj)})
             elif len(p) == 3 and p[:2] == ["api", "clear"]:

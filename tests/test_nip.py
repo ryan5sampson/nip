@@ -575,7 +575,7 @@ class Export(unittest.TestCase):
                 info = json.loads((proj / "project.json").read_text())
                 self.assertEqual((info["clips"], info["my_description"], info["stage"]), (["b", "a"], "Demo day", "inbox"))
                 # finalize: nothing unmarked allowed; then one lossless file and one info file per kept clip
-                with mock.patch.multiple(cli, FINAL=d / "final", TRASH=d / "bin"):
+                with mock.patch.multiple(cli, FINAL=d / "final", TRASH=d / "bin", INDEX=d / "index.json", HOME=d):
                     with self.assertRaises(ValueError):
                         cli.finalize(proj)
                     for stem in ("a", "b"):
@@ -587,17 +587,20 @@ class Export(unittest.TestCase):
                         cli.save(f, c)
                     r = cli.finalize(proj)
                     got = sorted(f.name for f in (d / "final" / proj.name).iterdir())
-                    self.assertEqual((r["clips"], got), (2, ["01 b.json", "01 b.mp4", "02 the goodbit.json", "02 the goodbit.mp4"]))
-                    side = cli.load(d / "final" / proj.name / "02 the goodbit.json")
+                    self.assertEqual((r["clips"], got), (2, ["01 b.mp4", "02 the goodbit.mp4", "_info"]))  # editors just see the clips
+                    info = d / "final" / proj.name / "_info"
+                    self.assertEqual(sorted(f.name for f in info.iterdir() if "goodbit" in f.name),
+                                     ["02 the goodbit.jpg", "02 the goodbit.json", "02 the goodbit.preview.mp4"])
+                    self.assertFalse((d / ".finalizing" / proj.name).exists())
+                    side = cli.load(info / "02 the goodbit.json")
                     self.assertEqual((side["name"], side["source"], side["bundle"]), ("the good/bit", "a.mp4", "Demo day"))
                     self.assertEqual(side["words"][0]["start"], round(words[-1]["start"] - side["source_start"], 2))  # times from the clip's start
                     self.assertGreater(cli.probe(d / "final" / proj.name / "02 the goodbit.mp4")[0], 5)
                     self.assertTrue((proj / "raw" / "a.mp4").exists())  # the original stays
                     self.assertEqual(cli.load(proj / "project.json")["finalized"]["clips"], 2)
-                    tagged = cli.load(d / "final" / proj.name / "02 the goodbit.json")
-                    cli.save(d / "final" / proj.name / "02 the goodbit.json", {**tagged, "tags": ["curve throw"]})
+                    cli.save(info / "02 the goodbit.json", {**cli.load(info / "02 the goodbit.json"), "tags": ["curve throw"]})
                     cli.finalize(proj)  # redoing it replaces the result; the old one goes to the Trash
-                    self.assertEqual(cli.load(d / "final" / proj.name / "02 the goodbit.json")["tags"], ["curve throw"])  # tags outlive it
+                    self.assertEqual(cli.load(info / "02 the goodbit.json")["tags"], ["curve throw"])  # tags outlive it
                     # the Clips view: listed, served, tagged, and only from inside the finalized folder
                     import threading
                     import urllib.error
@@ -612,11 +615,12 @@ class Export(unittest.TestCase):
                     self.assertEqual([(c["name"], c["file"]) for c in listed], [("", "01 b.mp4"), ("the good/bit", "02 the goodbit.mp4")])
                     self.assertNotIn("words", listed[0])
                     q = urllib.parse.quote
-                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.jpg')}").read()), 500)  # made on first ask
-                    self.assertTrue((d / "final" / proj.name / "02 the goodbit.jpg").exists())
-                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.mp4')}").read()), 500)
+                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.jpg')}").read()), 500)
+                    self.assertGreater(len(get(f"/final/{proj.name}/{q('02 the goodbit.preview.mp4')}").read()), 500)
                     post = lambda u, b: urllib.request.urlopen(urllib.request.Request(base + u, data=json.dumps(b).encode()))
                     self.assertEqual(json.loads(post(f"/api/clip/{proj.name}/{q('02 the goodbit')}", {"tags": [" Curve ", ""]}).read())["tags"], ["curve"])
+                    with mock.patch.object(cli, "FINAL", d / "unplugged"):  # the library out of reach: search still works
+                        self.assertEqual(len(json.loads(get("/api/clips").read())), 2)
                     for bad in (lambda: get(f"/final/{proj.name}/..%2Fnope.mp4"), lambda: post("/api/clip/x/y", {"tags": []}),
                                 lambda: post(f"/api/clip/{proj.name}/{q('01 b')}", {"tags": "x"})):
                         with self.assertRaises(urllib.error.HTTPError):
