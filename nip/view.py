@@ -21,6 +21,7 @@ PAGE = Path(__file__).with_name("viewer.html")
 LOCK = threading.Lock()  # one writer at a time for project.json and the .nip.json files
 STATE = {"transcribing": 0}  # videos the background ingest is working on
 SCAN = {"thread": None}  # the library scan, one at a time
+NO_DRIVE = "Google Drive isn’t answering, so nothing was deleted. Try again in a moment."
 SAVES, JOBS = [], queue.Queue()  # footage being completed, newest last, kept until dismissed; and what's left to do, one at a time
 DOWNLOADS = Path.home() / "Downloads"
 PICK = """set picked to choose file of type {"public.movie"} with prompt "Add videos to Footage Flow" with multiple selections allowed
@@ -337,7 +338,7 @@ class Handler(BaseHTTPRequestHandler):
             if p == [""]:
                 self.send_file(PAGE, "text/html; charset=utf-8")
             elif p == ["api", "status"]:
-                self.send_json({"inbox": str(cli.INBOX), "transcribing": STATE["transcribing"],
+                self.send_json({"inbox": str(cli.INBOX), "transcribing": STATE["transcribing"], "fetching": (cli.HOME / ".fetching").exists(),
                                 "unreadable": sum(1 for f in cli.UNREADABLE.iterdir() if not f.name.startswith(".")) if cli.UNREADABLE.exists() else 0,
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
@@ -581,8 +582,16 @@ class Handler(BaseHTTPRequestHandler):
                 files = [final_file(Path(str(c.get("folder"))).name, Path(str(c.get("file"))).name) for c in picks]
                 self.send_json({"folder": cli.handoff(str(body.get("name", "")), files).name})
             elif len(p) == 3 and p[:2] == ["api", "clear"]:
+                proj = self.project(p[2])
+                if not library_answers():
+                    raise ValueError(NO_DRIVE)
                 with LOCK:
-                    self.send_json({"trash": str(cli.clear(self.project(p[2])))})
+                    self.send_json({"trash": str(cli.clear(proj))})
+            elif p == ["api", "clear-bundle"]:  # a bundle in the library whose project is already gone
+                if not library_answers():
+                    raise ValueError(NO_DRIVE)
+                cli.delete_bundle(Path(str(body.get("folder"))).name)
+                self.send_json({})
             elif p == ["api", "bundle"]:  # several projects become one, named by the user
                 names = body.get("projects")
                 if not isinstance(names, list) or not isinstance(body.get("name"), str):
@@ -637,6 +646,16 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_POST
 
 
+def watch_drive():
+    """Its own thread: a stalled Drive blocks forever inside the system, and the local inbox has to keep working."""
+    while cli.DRIVE_INBOX:
+        try:
+            cli.fetch()
+        except Exception as e:  # a file that didn't copy stays on Drive and is tried again
+            print(f"drive inbox: {e}")
+        time.sleep(10)
+
+
 def watch_inbox():
     while True:
         try:
@@ -655,6 +674,7 @@ def serve(port=8765):
     cli.rescue()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
     threading.Thread(target=watch_inbox, daemon=True).start()
+    threading.Thread(target=watch_drive, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"Footage Flow at {url}  (watching {cli.INBOX}; Ctrl+C to stop)")
     webbrowser.open(url)

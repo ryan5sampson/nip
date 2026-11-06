@@ -20,6 +20,7 @@ SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings
 FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "finalized").expanduser()  # kept clips, as their own files
 SHELVES = ("Unused", "Used")  # the library's two folders; a bundle's folder sits in one, moved by the app or by hand in Drive
 HANDOFFS = FINAL.parent / "Handoffs"  # clips picked from the library for a video, a folder each
+DRIVE_INBOX = FINAL.parent / "Inbox" if "CloudStorage" in str(FINAL) else None  # footage added on Drive, from a phone or anywhere; beside a local library it would be ~/NIP/inbox itself
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
@@ -259,6 +260,30 @@ def ingest():
             vids[0].parent.rmdir()
 
 
+def fetch():
+    """Bring what's in the Inbox folder on Drive into the local inbox. Each video is copied whole first, and only then deleted from Drive."""
+    if not FINAL.parent.is_dir():  # Drive isn't running; creating folders here would only confuse it
+        return
+    DRIVE_INBOX.mkdir(exist_ok=True)
+    tmp = HOME / ".fetching"  # not in the inbox: it would start on a folder still copying
+    for p in sorted(DRIVE_INBOX.glob("[!.]*")):
+        vids = [v for v in sorted(p.iterdir()) if v.suffix.lower() in VIDEO] if p.is_dir() else [p] * (p.suffix.lower() in VIDEO)
+        if not vids or not all(settled(v) for v in vids):
+            continue
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        for v in vids:
+            shutil.copy2(v, tmp)
+            if (tmp / v.name).stat().st_size != v.stat().st_size:
+                raise OSError(f"{v.name} didn't copy whole, so it stays on Drive")
+        move_free(tmp, INBOX, p.name) if p.is_dir() else move_free(tmp / p.name, INBOX)
+        for v in vids:
+            v.unlink()
+        if p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def rescue():
     """Footage whose transcribing was interrupted (the app quit, or Whisper crashed) has no project.json, so nothing lists it. It goes back to the inbox."""
     for p in LIBRARY.iterdir():
@@ -357,8 +382,11 @@ def set_stage(proj, stage):
 
 
 def clear(proj):
-    """Move a project's footage and edits to the Trash, to free space; its exports stay."""
-    return move_free(proj, TRASH)
+    """Move a project's footage and edits to the Trash, and delete its clips from the library; its exports stay."""
+    folder = load(proj / "project.json").get("library_folder") or proj.name
+    dest = move_free(proj, TRASH)
+    delete_bundle(folder)
+    return dest
 
 
 def move_free(src, folder, name=None):
@@ -490,6 +518,17 @@ def set_used(folder, used):
         src.rename(dest)
 
 
+def discard(path, name=None):
+    """Delete from the library. On Drive that goes to Drive's own trash; moving to this Mac's would download it all first."""
+    shutil.rmtree(path) if "CloudStorage" in str(FINAL) else move_free(path, TRASH, name)
+
+
+def delete_bundle(folder):
+    path = library_path(folder)
+    if (path / "_info").is_dir():  # only a bundle: a blank or ".." name resolves to the shelf or the library itself
+        discard(path)
+
+
 def library_folder(proj, info):
     """The bundle's name, then the date it was filmed. Unnamed footage keeps its project name; a same-named bundle gets a number, never another's folder."""
     name = file_name(info.get("my_description") or info.get("description") or "")
@@ -570,8 +609,8 @@ def finalize(proj, progress=lambda step, part: None):
         if spare.exists():
             spare.rename(old)
         raise
-    if spare.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
-        shutil.rmtree(spare) if "CloudStorage" in str(FINAL) else move_free(spare, TRASH, old.name)
+    if spare.exists():
+        discard(spare, old.name)
     info["finalized"], info["stage"], info["library_folder"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed", folder
     info.pop("unsaved", None)
     save(proj / "project.json", info)

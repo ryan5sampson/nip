@@ -590,7 +590,7 @@ function drawLibrary() {
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cards = list => list.map(p => `
     <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete: footage to the Trash (drag it back into ~/NIP/library to undo), clips out of the library" aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${p.stage === 'completed' ? `${mins(p.kept)} kept` : `${mins(p.filmed)} filmed`}${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${p.unsaved ? ' · Changes not saved' : ''}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i>${p.stage === 'completed' ? '' : `<i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i>`}</span>
@@ -598,7 +598,7 @@ function drawLibrary() {
   const shelf = (head, list) => list.length ? `<h3 class="shelf">${head}</h3>${cards(list)}` : '';
   const loneCards = lone.map(cs => `
     <a class="tile" href="#/clips" data-name="" data-lone="${esc(cs[0].folder)}" title="Its project was deleted from Footage Flow, but its clips are still in the library. Click to see them.">
-      <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div><button class="del" title="Delete these clips from the library" aria-label="Delete from the library"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(cs[0].bundle || cs[0].folder)}</b>
       <small>${plural(cs.length, 'clip')}${cs[0].used ? ' · Used' : ''}</small>
     </a>`).join('');
@@ -708,7 +708,7 @@ $('#cards').onmouseout = $('#clipcards').onmouseout = e => {
 };
 $('#cards').addEventListener('click', e => {  // a bundle with no project: its clips are in the Library
   const b = e.target.closest('[data-lone]');
-  if (b) $('#search').value = b.dataset.lone;
+  if (b && !e.target.closest('.del')) $('#search').value = b.dataset.lone;
 });
 let renaming = null;  // name a card from the library, without opening or bundling it
 $('#cards').addEventListener('click', e => {
@@ -752,8 +752,16 @@ $('#cards').onclick = e => {
   const b = e.target.closest('.del');
   if (!b) return;
   e.preventDefault();
-  const p = projects.find(x => x.name === b.closest('[data-name]').dataset.name);
-  run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status(`Moved “${p.description || p.name}” to the Trash; drag it back into ~/NIP/library to undo`); });
+  const sure = (name, n) => confirm(`Delete “${name}” and its ${plural(n, 'clip')} from the library? Anyone using them on Drive loses them too. Drive keeps deleted files in its trash for 30 days.`);
+  const lone = b.closest('[data-lone]')?.dataset.lone;
+  if (lone) {
+    const cs = clips.filter(c => c.folder === lone);
+    if (sure(cs[0].bundle || lone, cs.length)) run(b, 'Deleting…', async () => { await api('/api/clear-bundle', {folder: lone}); await loadLibrary(); status(`Deleted “${lone}” from the library`); });
+    return;
+  }
+  const p = projects.find(x => x.name === b.closest('[data-name]').dataset.name), name = p.description || p.name, n = clips.filter(c => c.project === p.name).length;
+  if (n && !sure(name, n)) return;
+  run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status(`Moved “${name}” to the Trash${n ? ' and deleted its clips from the library' : ''}; drag it back into ~/NIP/library to undo`); });
 };
 let dragged = null, bundling = [];  // drag a project onto another to bundle them into one
 $('#cards').ondragstart = e => { dragged = e.target.closest('[data-name]')?.dataset.name; };
@@ -1606,7 +1614,7 @@ async function poll() {
     const s = await api('/api/status');
     $('#inbox').innerHTML = s.transcribing
       ? `<span class="spin"></span><span><b>Transcribing</b> ${plural(s.transcribing, 'video')}…</span>`
-      : `${icon('tray')}<span>Inbox empty</span>`;
+      : s.fetching ? `<span class="spin"></span><span><b>Downloading</b> from Drive…</span>` : `${icon('tray')}<span>Inbox empty</span>`;
     $('#inbox').insertAdjacentHTML('beforeend', `<button class="icon-btn small" id="openinbox" title="Open Inbox in Finder (${esc(s.inbox)})" style="margin-left:auto">${icon('folder')}</button>`);
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
     $('#unreadable')?.remove();

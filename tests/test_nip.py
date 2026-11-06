@@ -583,7 +583,7 @@ class Viewer(unittest.TestCase):
                 self.assertEqual((media[0][:2], round(sum(m[2] for m in media), 2)), (["v.mov", 0], 4.4))
                 cli.save(lib / "p" / "project.json", {**cli.load(lib / "p" / "project.json"), "my_description": "Pockets"})
                 self.assertTrue(json.loads(get("/api/projects").read())[0]["named"])  # bundling onto it keeps this name, no prompt
-                with mock.patch.object(cli, "TRASH", Path(d) / "trash"):
+                with mock.patch.multiple(cli, TRASH=Path(d) / "trash", FINAL=Path(d) / "final"):
                     (Path(d) / "trash").mkdir()
                     post("/api/clear/p", {})
                     self.assertTrue((Path(d) / "trash" / "p" / "raw" / "v.mov").exists())
@@ -727,6 +727,54 @@ class Export(unittest.TestCase):
 
 
 class Robustness(unittest.TestCase):
+    def test_deleting_takes_the_clips_out_of_the_library(self):
+        import urllib.error
+        import urllib.request
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            url, view = self.serve(d)
+            post = lambda path, body: urllib.request.urlopen(urllib.request.Request(url + path, json.dumps(body).encode(), {"Content-Type": "application/json"}))
+            for shelf, folder in (("Used", "Mine (2026)"), ("Unused", "Other (2026)"), ("Unused", "Lone (2026)")):
+                (d / "final" / shelf / folder / "_info").mkdir(parents=True)
+            self.project(d)
+            cli.save(d / "lib" / "p" / "project.json", {**cli.load(d / "lib" / "p" / "project.json"), "library_folder": "Mine (2026)"})
+            with mock.patch("nip.view.library_answers", return_value=False):  # Drive stalled: nothing is half deleted
+                with self.assertRaises(urllib.error.HTTPError):
+                    post("/api/clear/p", {})
+            self.assertTrue((d / "lib" / "p").exists())
+            post("/api/clear/p", {})
+            self.assertEqual(sorted(f.name for f in (d / "bin").iterdir()), ["Mine (2026)", "p"])  # a local library goes to the Trash too
+            self.assertFalse((d / "final" / "Used" / "Mine (2026)").exists())
+            self.assertTrue((d / "final" / "Unused" / "Other (2026)").exists())
+            post("/api/clear-bundle", {"folder": "Lone (2026)"})
+            self.assertFalse((d / "final" / "Unused" / "Lone (2026)").exists())
+            for bad in ("", "..", ".", "Unknown", None):  # never the shelf or the library itself
+                post("/api/clear-bundle", {"folder": bad})
+            self.assertTrue((d / "final" / "Unused" / "Other (2026)" / "_info").exists())
+
+    def test_the_drive_inbox_empties_into_the_local_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            drive = d / "drive" / "Inbox"
+            (drive / "Shoot").mkdir(parents=True)
+            with mock.patch.multiple(cli, HOME=d, INBOX=d / "inbox", FINAL=d / "drive" / "Library", DRIVE_INBOX=drive), mock.patch.object(cli, "settled", lambda p: p.name != "uploading.mov"):
+                for f in ("a.mov", "uploading.mov", "note.txt", "Shoot/b.mov", "Shoot/c.MP4", "Shoot/photo.jpg"):
+                    (drive / f).write_bytes(f.encode())
+                (d / "inbox").mkdir()
+                (d / "inbox" / "a.mov").write_bytes(b"already here")
+                with mock.patch.object(cli.shutil, "copy2", side_effect=OSError("disk full")):
+                    with self.assertRaises(OSError):
+                        cli.fetch()
+                self.assertTrue((drive / "a.mov").exists())  # nothing leaves Drive until it's here
+                cli.fetch()
+                self.assertEqual(sorted(str(f.relative_to(d / "inbox")) for f in (d / "inbox").rglob("*") if f.is_file()), ["Shoot/b.mov", "Shoot/c.MP4", "a 2.mov", "a.mov"])
+                self.assertEqual((d / "inbox" / "a 2.mov").read_bytes(), b"a.mov")
+                self.assertEqual(sorted(str(f.relative_to(drive)) for f in drive.rglob("*") if f.is_file()), ["Shoot/photo.jpg", "note.txt", "uploading.mov"])
+                self.assertFalse((d / ".fetching").exists())
+            with mock.patch.multiple(cli, FINAL=d / "gone" / "Library", DRIVE_INBOX=d / "gone" / "Inbox"):  # Drive not running
+                cli.fetch()
+                self.assertFalse((d / "gone").exists())
+
     def serve(self, d):
         import threading
         import nip.view as view
