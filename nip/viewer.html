@@ -108,6 +108,7 @@
   #pickbar { position: sticky; bottom: 0; margin-top: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--toolbar); backdrop-filter: blur(30px); box-shadow: var(--shadow); }
   #pickbar[hidden] { display: none; }
   #pickbar .grow { flex: 1; }
+  #tagpicks { display: flex; flex-wrap: wrap; gap: 0 14px; margin-bottom: 6px; }
   #clipsort, #clipused, #clipreuse { font: inherit; height: 28px; color: var(--label); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
   .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
@@ -376,7 +377,7 @@
     </div>
 
     <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div>
-      <div id="pickbar" hidden><span id="picktext" class="num"></span><span class="grow"></span><button class="btn" id="pickclear">Clear</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div></div>
+      <div id="pickbar" hidden><span id="picktext" class="num"></span><span class="grow"></span><button class="btn" id="pickclear">Clear</button><button class="btn" id="picktags"><svg class="i"><use href="#i-tag"/></svg>Tags…</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div></div>
 
     <aside id="nipchat" aria-label="NIP">
       <div class="niphead"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg><b>NIP</b><span class="hint">Press <kbd>E</kbd></span></div>
@@ -502,6 +503,14 @@
   <input type="text" id="handoffname" maxlength="80" required aria-label="Name of the video" placeholder="What’s the video?" style="width:100%;margin:10px 0 4px">
   <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
+</form></dialog>
+<dialog id="tagdlg"><form method="dialog">
+  <b id="taghead"></b>
+  <p>Tick to add a tag to all of them, untick to remove it. A dash means only some have it, and they stay that way.</p>
+  <div id="tagpicks"></div>
+  <input type="text" id="tagnew" aria-label="New tags" placeholder="New tags, separated with commas" style="width:100%">
+  <div class="field" style="margin-top:8px"><label for="tagreuse">Use</label><select id="tagreuse"><option value="">Leave as they are</option><option value="yes">Reusable</option><option value="no">One-off</option></select></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Apply</button></div>
 </form></dialog>
 <dialog id="sortdlg"><form method="dialog">
   <b>Sort These Clips</b>
@@ -675,6 +684,41 @@ function drawClips(words) {  // every kept clip, across all bundles
 $('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
 $('#clipsort').onchange = $('#clipused').onchange = $('#clipreuse').onchange = drawLibrary;
 $('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
+let tagging = [];  // the selected clips, while their tags are being changed
+$('#picktags').onclick = () => {
+  tagging = [...chosen.values()].map(c => clips.find(x => clipKey(x) === clipKey(c)) || c);  // the library may have reloaded since they were picked
+  const counts = {};
+  clips.forEach(c => c.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  const popular = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 8);
+  const tags = [...new Set(['gameplay', 'throwing', 'talking head', ...tagging.flatMap(c => c.tags), ...popular])];
+  $('#taghead').textContent = `Tag ${plural(tagging.length, 'Clip')}`;
+  $('#tagpicks').innerHTML = tags.map(t => `<label class="opt"><input type="checkbox" value="${esc(t)}"> ${esc(t)}</label>`).join('');
+  $('#tagpicks').querySelectorAll('input').forEach(box => {
+    const have = tagging.filter(c => c.tags.includes(box.value)).length;
+    box.checked = have === tagging.length;
+    box.indeterminate = have > 0 && have < tagging.length;
+  });
+  $('#tagnew').value = $('#tagreuse').value = '';
+  $('#tagdlg').returnValue = '';  // Esc and Cancel close without an answer
+  $('#tagdlg').showModal();
+};
+$('#tagdlg').onclose = () => {
+  if (!$('#tagdlg').returnValue) return;
+  const boxes = [...$('#tagpicks').querySelectorAll('input')].filter(b => !b.indeterminate), reuse = $('#tagreuse').value;
+  const add = [...boxes.filter(b => b.checked).map(b => b.value), ...$('#tagnew').value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)];
+  const drop = boxes.filter(b => !b.checked).map(b => b.value);
+  run($('#picktags'), 'Saving…', async () => {
+    try {
+      for (const c of tagging) {
+        const reusable = reuse ? reuse === 'yes' : c.reusable;
+        c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags: [...new Set([...c.tags.filter(t => !drop.includes(t)), ...add])], reusable})).tags;
+        c.reusable = reusable;
+        chosen.set(clipKey(c), c);
+      }
+      status(`Updated ${plural(tagging.length, 'clip')}`);
+    } finally { drawLibrary(); }  // if one fails, show the ones that saved
+  });
+};
 $('#pickexport').onclick = () => {
   $('#handoffhead').textContent = `Export ${plural(chosen.size, 'clip')}`;
   $('#handoff').returnValue = '';
