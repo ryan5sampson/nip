@@ -604,6 +604,17 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(NO_DRIVE)
                 with LOCK:
                     self.send_json({"trash": str(cli.clear(proj))})
+            elif p == ["api", "sort-bundle"]:  # a bundle already in the library: only its labels change, no clip is cut or copied
+                sort = clean_sort(body.get("sort") or "")
+                if any(j["state"] in ("waiting", "saving") for j in SAVES):  # a save moves bundle folders
+                    raise ValueError("Wait for the save in the corner to finish, then sort.")
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so nothing was sorted. Try again in a moment.")
+                infos = cli.library_path(Path(str(body.get("folder"))).name) / "_info"
+                if not infos.is_dir():
+                    raise FileNotFoundError
+                cli.sort_clips(infos, sort)
+                self.send_json({})
             elif p == ["api", "clear-bundle"]:  # a bundle in the library whose project is already gone
                 if not library_answers():
                     raise ValueError(NO_DRIVE)

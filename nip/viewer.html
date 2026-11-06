@@ -186,7 +186,7 @@
   .tiers i::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .5px var(--tertiary); }
   .tile .dur video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 8px; background: #000; pointer-events: none; }
   .tile .scrub { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); border-radius: 0 0 0 8px; pointer-events: none; }
-  .tile .del, .tile .tx, .tile .ren, .tile .use { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
+  .tile .del, .tile .tx, .tile .ren, .tile .use, .tile .srt { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; cursor: pointer; }
   .tile .tx { right: 38px; }
   .tile .sel { position: absolute; z-index: 1; top: 6px; left: 6px; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: none; place-items: center; }
   .tile:hover .sel, .tile .sel:focus-visible, .tile.chosen .sel { display: grid; }
@@ -194,12 +194,14 @@
   .tile.chosen .thumb { box-shadow: 0 0 0 3px var(--accent); }
   .tile .ren { right: 70px; }
   .tile .use { right: 102px; }
-  .tile .use:hover { background: var(--accent); }
+  .tile .use:hover, .tile .srt:hover { background: var(--accent); }
+  .tile .srt { right: 134px; }
+  .tile[data-lone] .srt { right: 38px; }
   .shelf { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--secondary); margin: 0; }
   .tile .ren:hover { background: var(--accent); }
   .tile .del:hover { background: var(--red); }
   .tile .tx:hover { background: var(--accent); }
-  .tile:hover :is(.del, .tx, .ren, .use), .tile :is(.del, .tx, .ren, .use):focus-visible { display: grid; }
+  .tile:hover :is(.del, .tx, .ren, .use, .srt), .tile :is(.del, .tx, .ren, .use, .srt):focus-visible { display: grid; }
   #transcript { width: min(560px, 90vw); }
   #transcripttext { max-height: 60vh; overflow-y: auto; margin: 8px 0 12px; line-height: 1.5; }
   #transcripttext h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 600; color: var(--secondary); }
@@ -505,7 +507,7 @@
   </div>
   <label class="opt"><input type="radio" name="sort" value="custom"><span>Custom<small>Tell Claude how to sort them</small></span></label>
   <div class="sortmore" id="sortcustom" hidden><textarea id="sorttext" maxlength="2000" aria-label="How to sort these clips" placeholder="Keep the catches, tag them “catch”. The rest are one-offs."></textarea></div>
-  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><span class="grow"></span><button type="button" class="btn" onclick="this.closest('dialog').close('skip')" title="Complete without changing how the clips are sorted">Skip</button><button class="btn default" value="ok">Complete</button></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><span class="grow"></span><button type="button" class="btn" id="sortskip" onclick="this.closest('dialog').close('skip')" title="Complete without changing how the clips are sorted">Skip</button><button class="btn default" id="sortgo" value="ok"></button></div>
 </form></dialog>
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
@@ -611,7 +613,7 @@ function drawLibrary() {
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cards = list => list.map(p => `
     <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete: footage to the Trash (drag it back into ~/NIP/library to undo), clips out of the library" aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>${sortBtn(clips.find(c => c.project === p.name)?.folder)}` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete: footage to the Trash (drag it back into ~/NIP/library to undo), clips out of the library" aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${p.stage === 'completed' ? `${mins(p.kept)} kept` : `${mins(p.filmed)} filmed`}${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${p.unsaved ? ' · Changes not saved' : ''}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i>${p.stage === 'completed' ? '' : `<i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i>`}</span>
@@ -619,7 +621,7 @@ function drawLibrary() {
   const shelf = (head, list) => list.length ? `<h3 class="shelf">${head}</h3>${cards(list)}` : '';
   const loneCards = lone.map(cs => `
     <a class="tile" href="#/clips" data-name="" data-lone="${esc(cs[0].folder)}" title="Its project was deleted from Footage Flow, but its clips are still in the library. Click to see them.">
-      <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div><button class="del" title="Delete these clips from the library" aria-label="Delete from the library"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div>${sortBtn(cs[0].folder)}<button class="del" title="Delete these clips from the library" aria-label="Delete from the library"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(cs[0].bundle || cs[0].folder)}</b>
       <small>${plural(cs.length, 'clip')}${cs[0].used ? ' · Used' : ''}</small>
     </a>`).join('');
@@ -642,6 +644,7 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
   document.querySelector(`[data-clip="${clips.indexOf(c)}"]`)?.classList.toggle('chosen', chosen.has(clipKey(c)));
   drawPicks();
 }
+const sortBtn = folder => folder ? `<button class="srt" data-folder="${esc(folder)}" title="Sort these clips" aria-label="Sort these clips">${icon('tag')}</button>` : '';
 const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
 function drawClips(words) {  // every kept clip, across all bundles
   const used = $('#clipused').value, reuse = $('#clipreuse').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
@@ -714,7 +717,7 @@ $('#search').oninput = drawLibrary;
 // hover a card's picture to scrub through all its footage, left to right, without opening it
 $('#cards').onmousemove = e => {
   const box = e.target.closest('.dur'), p = projects.find(x => x.name === box?.closest('[data-name]').dataset.name);
-  if (!p || !p.media.length || e.target.closest('.del, .tx, .ren, .use')) return;
+  if (!p || !p.media.length || e.target.closest('.del, .tx, .ren, .use, .srt')) return;
   const r = box.getBoundingClientRect();
   let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.media.reduce((n, m) => n + m[2], 0), i = 0;
   while (i < p.media.length - 1 && t >= p.media[i][2]) t -= p.media[i++][2];
@@ -734,7 +737,7 @@ $('#cards').onmouseout = $('#clipcards').onmouseout = e => {
 };
 $('#cards').addEventListener('click', e => {  // a bundle with no project: its clips are in the Library
   const b = e.target.closest('[data-lone]');
-  if (b && !e.target.closest('.del')) $('#search').value = b.dataset.lone;
+  if (b && !e.target.closest('.del, .srt')) $('#search').value = b.dataset.lone;
 });
 let renaming = null;  // name a card from the library, without opening or bundling it
 $('#cards').addEventListener('click', e => {
@@ -773,6 +776,12 @@ $('#cards').addEventListener('click', async e => {  // a card's transcript, to t
     $('#transcripttext').innerHTML = d.clips.map(c => `${d.clips.length > 1 ? `<h4>${esc(c.source)} · ${mins(c.duration)}</h4>` : ''}<div>${esc(c.words.map(w => w.w).join(' ')) || '<i>No speech</i>'}</div>`).join('');
     $('#transcript').showModal();
   } catch (err) { status(err.message, true); }
+});
+$('#cards').addEventListener('click', e => {  // a saved bundle: only its labels change
+  const b = e.target.closest('.srt');
+  if (!b) return;
+  e.preventDefault();
+  askSort(sort => run(b, 'Sorting…', async () => { await api('/api/sort-bundle', {folder: b.dataset.folder, sort}); await loadLibrary(); status('Clips sorted'); }), null, 'Sort');
 });
 $('#cards').onclick = e => {
   const b = e.target.closest('.del');
@@ -1414,10 +1423,12 @@ $('#complete').onclick = () => data.unsaved ? complete('keep') : data.stage === 
 $('#showfinal').onclick = () => api('/api/open', {what: 'finalized', project: proj}).catch(e => status(e.message, true));
 $('#startproc').onclick = () => run($('#startproc'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Moved to Processing'); });
 let afterSort = null;
-function askSort(fn, name) {  // how to sort a bundle's clips, as it's completed; fn gets undefined for Skip, or if every video was sorted by voice
+function askSort(fn, name, go = 'Complete') {  // how to sort a bundle's clips, as it's completed; fn gets undefined for Skip, or if every video was sorted by voice
   const p = projects.find(x => x.name === name);
   if (p && !p.unsorted) return fn();
   afterSort = fn;
+  $('#sortgo').textContent = go;
+  $('#sortskip').hidden = go !== 'Complete';
   $('#sortvoice').textContent = p && p.unsorted < p.videos ? `${p.videos - p.unsorted} of ${plural(p.videos, 'video')} already sorted by voice. This sets the rest. ` : 'Sets every clip in this bundle at once. ';
   $('#sortdlg').returnValue = '';  // Esc and Cancel close without an answer
   $('#sortdlg').showModal();

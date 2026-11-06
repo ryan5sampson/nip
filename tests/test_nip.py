@@ -793,6 +793,30 @@ class Robustness(unittest.TestCase):
             with self.assertRaises(ValueError):
                 view.clean_sort(bad)
 
+    def test_a_saved_bundle_sorts_without_cutting_again(self):
+        import urllib.error
+        import urllib.request
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            url, view = self.serve(d)
+            post = lambda body: urllib.request.urlopen(urllib.request.Request(url + "/api/sort-bundle", json.dumps(body).encode(), {"Content-Type": "application/json"}))
+            f = d / "final" / "Used" / "Mine (2026)" / "_info" / "01 a.json"
+            f.parent.mkdir(parents=True)
+            cli.save(f, {"name": "", "tags": ["mine"], "duration": 2, "words": []})
+            with mock.patch.object(cli, "finalize", side_effect=AssertionError("nothing is cut")):
+                post({"folder": "Mine (2026)", "sort": {"mode": "talking"}})
+                self.assertEqual((cli.load(f)["reusable"], cli.load(f)["tags"]), (False, ["mine", "talking head"]))
+                post({"folder": "Mine (2026)", "sort": {"mode": "action", "tags": ["gameplay"]}})  # a change of mind leaves no trace of the old sort
+                self.assertEqual((cli.load(f)["reusable"], cli.load(f)["tags"]), (True, ["mine", "gameplay"]))
+            for bad in ({"folder": "Mine (2026)"}, {"folder": "Nope", "sort": {"mode": "talking"}}, {"folder": "..", "sort": {"mode": "talking"}}):
+                with self.assertRaises(urllib.error.HTTPError):
+                    post(bad)
+            view.SAVES.append({"project": "x", "state": "saving"})
+            self.addCleanup(view.SAVES.clear)
+            with self.assertRaises(urllib.error.HTTPError):
+                post({"folder": "Mine (2026)", "sort": {"mode": "talking"}})
+            self.assertTrue(cli.load(f)["reusable"])
+
     def test_deleting_takes_the_clips_out_of_the_library(self):
         import urllib.error
         import urllib.request

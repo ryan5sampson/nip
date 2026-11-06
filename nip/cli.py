@@ -552,7 +552,7 @@ def sort_clips(infos, sort):
     else:
         answers = brief.sort_clips(clips, brief.SORT_MIXED if sort["mode"] == "mixed" else sort["text"])
     for f, c, a in zip(files, clips, answers):
-        save(f, {**c, "reusable": a["reusable"], "tags": list(dict.fromkeys(c["tags"] + a["tags"]))})
+        save(f, {**c, "reusable": a["reusable"], "tags": list(dict.fromkeys([t for t in c["tags"] if t != "talking head"] + a["tags"]))})  # that one's from an earlier sort; this answer says again if it still fits
 
 
 def finalize(proj, progress=lambda step, part: None, sort=None):
