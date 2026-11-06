@@ -192,11 +192,21 @@ def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
 
 
-def probe(path):
+def file_format(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", str(path)],
                          capture_output=True, text=True, check=True).stdout
-    fmt = json.loads(out)["format"]
+    return json.loads(out)["format"]
+
+
+def probe(path):
+    fmt = file_format(path)
     return float(fmt["duration"]), fmt.get("tags", {}).get("creation_time", "")
+
+
+def camera(path):
+    """The tag for what filmed this, as a list; empty for anything else, like a screen recording."""
+    model = file_format(path).get("tags", {}).get("com.apple.quicktime.model", "").lower()
+    return ["iphone"] if "iphone" in model else ["meta glasses"] if "meta" in model or "ray-ban" in model else []
 
 
 def vocabulary():
@@ -578,6 +588,7 @@ def finalize(proj, progress=lambda step, part: None, sort=None):
     try:
         for c in clips:
             e, source, spoken = decisions(c), Path(c["source"]), c["edit"].get("reusable")
+            filmed_on = camera(proj / "raw" / source)
             words = respell(c["words"], spellings)
             for s in timeline(e, c["duration"]):
                 name = clip_name(s, e)
@@ -594,7 +605,7 @@ def finalize(proj, progress=lambda step, part: None, sort=None):
                 copy_clip(proj / "raw" / source, s["a"], s["b"], f)
                 preview(f, out / "_info" / f.name)
                 save((out / "_info" / f.name).with_suffix(".json"), {
-                    "name": name, "tags": list(dict.fromkeys((was["tags"] if was else info.get("my_tags", info["tags"])) + c["edit"].get("video_tags", []))),
+                    "name": name, "tags": list(dict.fromkeys((was["tags"] if was else info.get("my_tags", info["tags"])) + c["edit"].get("video_tags", []) + filmed_on)),
                     "reusable": spoken if not was or was.get("reusable") is None else was["reusable"], "spoken": spoken is not None, "bundle": info.get("my_description") or info["description"],
                     "project": proj.name, "source": source.name, "source_start": s["a"], "source_end": s["b"],
                     "duration": round(s["b"] - s["a"], 2), "filmed": c.get("created", ""),

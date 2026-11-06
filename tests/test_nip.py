@@ -755,6 +755,12 @@ class Export(unittest.TestCase):
 
 
 class Robustness(unittest.TestCase):
+    def test_filming_source_comes_from_the_file(self):
+        for model, tags in (("iPhone 12 Pro", ["iphone"]), ("Ray-Ban Meta Smart Glasses 2", ["meta glasses"]), ("Oakley Meta HSTN", ["meta glasses"]), ("Pixel 9", []), (None, [])):
+            fmt = {"tags": {"com.apple.quicktime.model": model} if model else {}}
+            with mock.patch.object(cli, "file_format", return_value=fmt):
+                self.assertEqual(cli.camera("v.mov"), tags, model)
+
     def test_completing_sorts_a_bundles_clips(self):
         from nip import brief
         import nip.view as view
@@ -1004,7 +1010,7 @@ class Robustness(unittest.TestCase):
                     return real(self, target)
                 fake = lambda src, a, b, out: out.write_bytes(b"new")
                 make = lambda clip, name: None
-                with mock.patch.object(Path, "rename", rename), mock.patch.object(cli, "copy_clip", fake), mock.patch.object(cli, "preview", make), self.assertRaises(OSError):
+                with mock.patch.object(Path, "rename", rename), mock.patch.object(cli, "copy_clip", fake), mock.patch.object(cli, "preview", make), mock.patch.object(cli, "camera", return_value=[]), self.assertRaises(OSError):
                     cli.finalize(proj)
                 self.assertTrue((old / "01 old.mov").exists())
 
