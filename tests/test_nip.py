@@ -547,18 +547,40 @@ class Viewer(unittest.TestCase):
                 with done(return_value={}), mock.patch("nip.view.library_answers", return_value=True):
                     complete({"unmarked": "keep"})
                 self.assertEqual(json.loads(get("/api/project/p").read())["clips"][0]["unmarked"], [])
-                # the old stages: saved clips make it Completed, otherwise it still has that step to do; an edit reopens it
+                # the old stages: saved clips make it Completed, otherwise it still has that step to do
                 info = cli.load(lib / "p" / "project.json")
                 cli.save(lib / "p" / "project.json", {**info, "stage": "exported"})
                 self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "processing")
                 cli.save(lib / "p" / "project.json", {**info, "stage": "processed", "finalized": {"clips": 1}})
                 self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "completed")
-                self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "reset"}).read())["stage"], "processing")
-                self.assertNotIn("finalized", cli.load(lib / "p" / "project.json"))
+                # Completed shows only what was kept; trimming it stays in Completed, unsaved until the new clips replace the old
+                d3 = json.loads(get("/api/project/p").read())["clips"][0]
+                kept = d3["segments"]
+                self.assertTrue(kept and not any(s["gap"] for s in kept))
+                self.assertTrue(all(any(s["a"] <= (w["start"] + w["end"]) / 2 < s["b"] for s in kept) for w in d3["words"]))
+                self.assertLess(len(d3["words"]), len(cli.load(lib / "p" / "v.nip.json")["words"]))
+                for act in ("restore", "uncut", "unkeep", "merge", "reset"):
+                    with self.assertRaises(urllib.error.HTTPError) as cm:
+                        post("/api/cuts/p/v", {"action": act, "start": 0, "end": 1})
+                    self.assertIn("Processing", json.loads(cm.exception.read())["error"])
+                post("/api/notes/p/v", {"action": "add", "t": None, "text": "later"})
+                self.assertNotIn("unsaved", cli.load(lib / "p" / "project.json"))  # a note changes no clip
+                trimmed = json.loads(post("/api/cuts/p/v", {"action": "cut", "start": kept[0]["a"], "end": kept[0]["a"] + .3}).read())
+                self.assertEqual((trimmed["stage"], trimmed["unsaved"]), ("completed", True))
+                self.assertTrue(json.loads(get("/api/projects").read())[0]["unsaved"])
+                with done(return_value={}) as fin, mock.patch("nip.view.library_answers", return_value=True):
+                    complete({"unmarked": "keep"})
+                fin.assert_called_once()
+                self.assertEqual(json.loads(get("/api/project/p").read())["stage"], "completed")  # never left Completed
+                with done(side_effect=ValueError("no")), mock.patch("nip.view.library_answers", return_value=True):
+                    complete({"unmarked": "keep"})
+                info = cli.load(lib / "p" / "project.json")
+                self.assertEqual((cli.stage_of(info), "finalized" in info, "unsaved" in info), ("processing", False, False))  # the panel says it's back there
                 with self.assertRaises(urllib.error.HTTPError):
                     post("/api/stage/p", {"stage": "done"})
                 self.assertEqual(json.loads(post("/api/stage/p", {"stage": "inbox"}).read())["stage"], "inbox")  # any stage, back too
-                self.assertEqual(json.loads(get("/api/projects").read())[0]["media"], [["v.mov", 4.4]])  # the card scrubs these
+                media = json.loads(get("/api/projects").read())[0]["media"]  # the card scrubs these
+                self.assertEqual((media[0][:2], round(sum(m[2] for m in media), 2)), (["v.mov", 0], 4.4))
                 cli.save(lib / "p" / "project.json", {**cli.load(lib / "p" / "project.json"), "my_description": "Pockets"})
                 self.assertTrue(json.loads(get("/api/projects").read())[0]["named"])  # bundling onto it keeps this name, no prompt
                 with mock.patch.object(cli, "TRASH", Path(d) / "trash"):
@@ -627,6 +649,16 @@ class Export(unittest.TestCase):
                     cli.save(info / "02 the goodbit.json", {**cli.load(info / "02 the goodbit.json"), "tags": ["curve throw"]})
                     cli.finalize(proj)  # redoing it replaces the result; the old one goes to the Trash
                     self.assertEqual(cli.load(info / "02 the goodbit.json")["tags"], ["curve throw"])  # tags outlive it
+                    # trimmed after completing: the shorter clip replaces the old one, and undo can't reach back past it
+                    long = cli.probe(d / "final" / "Unused" / folder / "02 the goodbit.mp4")[0]
+                    c = cli.load(proj / "a.nip.json")
+                    cli.remember(c)
+                    cli.add_cut(c, side["source_start"], side["source_start"] + 2)
+                    cli.save(proj / "a.nip.json", c)
+                    cli.finalize(proj)
+                    self.assertLess(cli.probe(d / "final" / "Unused" / folder / "02 the goodbit.mp4")[0], long - 1)
+                    self.assertEqual(sorted(f.name for f in (d / "final" / "Unused" / folder).iterdir()), got)
+                    self.assertEqual(cli.load(proj / "a.nip.json").get("undo"), None)
                     # the Library: listed, served, tagged, and only from inside the finalized folder
                     import threading
                     import urllib.error
@@ -670,7 +702,7 @@ class Export(unittest.TestCase):
                         with self.assertRaises(urllib.error.HTTPError):
                             bad()
                     server.shutdown()
-                    self.assertEqual([f.name for f in (d / "bin").iterdir()], [folder])
+                    self.assertEqual(sorted(f.name for f in (d / "bin").iterdir()), [folder, f"{folder} 2"])
                     # renamed, it moves to a folder of the new name with its tags; another bundle's folder is never taken
                     (d / "final" / "Unused" / "Reel (2026-01-01)").mkdir()
                     with mock.patch.object(cli, "library_folder", return_value="Reel (2026-01-01) 2"):

@@ -352,6 +352,7 @@ def set_stage(proj, stage):
     info = load(proj / "project.json")
     info["stage"] = stage
     info.pop("finalized", None)  # its clips in the library may no longer match
+    info.pop("unsaved", None)
     save(proj / "project.json", info)
 
 
@@ -572,7 +573,13 @@ def finalize(proj, progress=lambda step, part: None):
     if spare.exists():  # on Drive, deleting goes to Drive's own trash; moving to this Mac's would download it all first
         shutil.rmtree(spare) if "CloudStorage" in str(FINAL) else move_free(spare, TRASH, old.name)
     info["finalized"], info["stage"], info["library_folder"] = {"at": time.time(), "folder": str(dest), "clips": n}, "completed", folder
+    info.pop("unsaved", None)
     save(proj / "project.json", info)
+    for stem, c in zip(info["clips"], clips):  # what was cut is gone now, so undo can't bring it back
+        for k in ("undo", "redo", "undo_notes"):
+            c.pop(k, None)
+        save(proj / f"{stem}.nip.json", c)
+    (proj / "thumb.jpg").unlink(missing_ok=True)  # it may show footage that's now cut
     print(f"finalized {n} clips to {dest}" + (f" ({skipped} slivers under half a second left out)" if skipped else ""))
     return {"folder": str(dest), "clips": n, "skipped": skipped, "bytes": sum(f.stat().st_size for f in dest.iterdir() if f.is_file())}
 

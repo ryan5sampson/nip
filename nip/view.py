@@ -70,8 +70,12 @@ def clips_of(proj):
         c = cli.load(proj / f"{stem}.nip.json")
         c["words"] = respell(c["words"], spellings)  # at read time: saved transcripts stay as Whisper heard them
         e = cli.decisions(c)
+        segments = timeline(e, c["duration"], c["words"])
+        if cli.stage_of(info) == "completed":  # only the kept clips and what's said in them; what was cut is gone
+            segments = [s for s in segments if not s["gap"]]
+            c["words"] = [w for w in c["words"] if any(s["a"] <= (w["start"] + w["end"]) / 2 < s["b"] for s in segments)]
         out.append({"stem": stem, "source": c["source"], "duration": c["duration"],
-                    "words": c["words"], "edit": e, "unmarked": unmarked(e), "segments": timeline(e, c["duration"], c["words"]),
+                    "words": c["words"], "edit": e, "unmarked": unmarked(e), "segments": segments,
                     "edit_notes": c.get("edit_notes", []), "can_undo": bool(c.get("undo_notes")),
                     "undo": len(c.get("undo", [])), "redo": len(c.get("redo", []))})
     return info, out
@@ -95,7 +99,8 @@ def summary(proj):
             "notes": len(notes),
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
-            "said": " ".join(w["w"] for c in clips for w in c["words"])[:brief.ASSIST_SAID], "stage": cli.stage_of(info), "media": [[c["source"], c["duration"]] for c in clips],
+            "said": " ".join(w["w"] for c in clips for w in c["words"])[:brief.ASSIST_SAID], "stage": cli.stage_of(info), "unsaved": bool(info.get("unsaved")),
+            "media": [[c["source"], s["a"], s["b"] - s["a"]] for c in clips for s in c["segments"]],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
 
@@ -107,12 +112,15 @@ def project_data(proj):
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
-def edited(proj):
-    """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing, and any edit reopens Completed."""
+def edited(proj, clips=True):
+    """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing. Completed footage stays
+    in Completed, marked unsaved until its new clips replace the old ones in the library. clips=False: this edit left them alone."""
     with LOCK:
         info = cli.load(proj / "project.json")
-        if info.get("finalized") or cli.stage_of(info) == "inbox":
+        if cli.stage_of(info) == "inbox":
             cli.set_stage(proj, "processing")
+        elif clips and info.get("finalized"):
+            cli.save(proj / "project.json", {**info, "unsaved": True})
     return project_data(proj)
 
 
@@ -231,8 +239,8 @@ def why(e):
 
 
 def save_footage():
-    """Complete footage in the background, so the app stays usable. It sits in Processing until this succeeds, so a failure,
-    or quitting halfway, leaves it there and the library as it was."""
+    """Complete footage in the background, so the app stays usable. New footage sits in Processing until this succeeds, and
+    footage being updated in Completed drops back to Processing if it fails; either way the library stays as it was."""
     while True:
         job, proj = JOBS.get()
         job["state"] = "saving"
@@ -243,6 +251,8 @@ def save_footage():
             job["state"] = "done"
         except Exception as e:
             traceback.print_exc()
+            with LOCK:
+                cli.set_stage(proj, "processing")
             job.update(state="failed", error=why(e))
 
 
@@ -255,8 +265,8 @@ def thumbnail(proj):
     if not f.exists():
         _, clips = clips_of(proj)
         c = clips[0]
-        t = next((t["start"] for t in c["edit"]["takes"] if t["keep"]), 0) + 1
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{min(t, c['duration'] - 0.1):.2f}",
+        t = next(((s["a"] + s["b"]) / 2 for s in c["segments"] if not s["gap"]), 0)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t:.2f}",
                         "-i", str(proj / "raw" / c["source"]), "-frames:v", "1", "-vf", "scale=360:-2",
                         str(f)], check=True)
     return f
@@ -429,13 +439,15 @@ class Handler(BaseHTTPRequestHandler):
                         cli.save(f, clip)
                 else:
                     raise ValueError("action must be add, apply, delete or undo")
-                self.send_json(edited(proj))
+                self.send_json(edited(proj, act in ("apply", "undo") or bool(body.get("apply"))))
             elif len(p) == 4 and p[:2] == ["api", "cuts"]:  # restore a voice cut, add or remove your own, or reset
                 proj = self.project(p[2])
                 f = self.clip_file(proj, p[3])
                 with LOCK:
                     clip = cli.load(f)
                     act, start = body.get("action"), body.get("start")
+                    if act in ("restore", "uncut", "unkeep", "merge", "reset") and cli.stage_of(cli.load(proj / "project.json")) == "completed":
+                        raise ValueError("Completed footage can only be trimmed further. Move it back to Processing to bring back what was cut.")
                     if act not in ("undo", "redo"):
                         cli.remember(clip)
                     if act in ("undo", "redo"):  # step back or forward through this video's hand edits
@@ -497,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
                     story["created"] = time.time()
                     stories.append(story)
                     cli.save(proj / "project.json", info)
-                self.send_json(edited(proj))
+                self.send_json(edited(proj, False))
             elif len(p) == 4 and p[:2] == ["api", "story"]:
                 proj = self.project(p[2])
                 info = cli.load(proj / "project.json")
@@ -511,7 +523,7 @@ class Handler(BaseHTTPRequestHandler):
                         info = cli.load(proj / "project.json")
                         info["stories"] = [s for s in info["stories"] if s["id"] != story["id"]]
                         cli.save(proj / "project.json", info)
-                    self.send_json(edited(proj))
+                    self.send_json(edited(proj, False))
                 else:
                     raise ValueError("action must be export or delete")
             elif len(p) == 3 and p[:2] == ["api", "stage"]:  # the user moves footage to any stage
@@ -521,7 +533,8 @@ class Handler(BaseHTTPRequestHandler):
                 if body["stage"] == "completed":  # cuts the footage down: each kept clip becomes its own file in the library
                     settle(proj, body.get("unmarked"))
                     with LOCK:
-                        cli.set_stage(proj, "processing")
+                        if not cli.load(proj / "project.json").get("finalized"):  # an update stays in Completed while it saves
+                            cli.set_stage(proj, "processing")
                         info = cli.load(proj / "project.json")
                     job = {"project": proj.name, "title": info.get("my_description") or info.get("description") or proj.name,
                            "state": "waiting", "step": "Waiting its turn", "part": 0}

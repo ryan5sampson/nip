@@ -569,6 +569,7 @@ $('#saves').onclick = e => {
   if (b) api('/api/saves/' + enc(b.dataset.dismiss), {}).then(watchSaves).catch(err => status(err.message, true));
 };
 const isUsed = p => clips.some(c => c.project === p.name && c.used);  // the Drive folder it sits in decides, so moving it by hand counts too
+const loneBundles = () => Object.values(Object.groupBy(clips.filter(c => !projects.some(p => p.name === c.project)), c => c.folder));  // in the library, their project deleted here
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const counts = {};
@@ -578,23 +579,30 @@ function drawLibrary() {
   $('#clipsnav').classList.toggle('on', onClips && !tagFilter);
   $('#clipcount').textContent = clips.length || '';
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && p.stage === stageFilter);
-  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length || ''}</small></button>`).join('');
+  const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
+  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0) || ''}</small></button>`).join('');
   if ($('#library').hidden) return;
   $('#cards').hidden = onClips;
   $('#clipcards').hidden = !onClips;
   $('#pickbar').hidden = !onClips || !chosen.size;
   if (onClips) return drawClips(words);
   $('#title').textContent = STAGES[stageFilter][0];
-  $('#subtitle').textContent = plural(shown.length, 'project');
+  $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cards = list => list.map(p => `
     <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
       <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Move to the Trash (drag it back into ~/NIP/library to undo)" aria-label="Move to the Trash"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
-      <small>${esc(p.name.slice(0, 10))} · ${mins(p.filmed)} filmed${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}</small>
-      <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i><i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i></span>
+      <small>${esc(p.name.slice(0, 10))} · ${p.stage === 'completed' ? `${mins(p.kept)} kept` : `${mins(p.filmed)} filmed`}${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${p.unsaved ? ' · Changes not saved' : ''}</small>
+      <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i>${p.stage === 'completed' ? '' : `<i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i>`}</span>
     </a>`).join('');
   const shelf = (head, list) => list.length ? `<h3 class="shelf">${head}</h3>${cards(list)}` : '';
-  $('#cards').innerHTML = shown.length ? (stageFilter === 'completed' ? shelf('Unused', shown.filter(p => !isUsed(p))) + shelf('Used', shown.filter(isUsed)) : cards(shown)) : projects.length
+  const loneCards = lone.map(cs => `
+    <a class="tile" href="#/clips" data-name="" data-lone="${esc(cs[0].folder)}" title="Its project was deleted from Footage Flow, but its clips are still in the library. Click to see them.">
+      <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div></div>
+      <b>${esc(cs[0].bundle || cs[0].folder)}</b>
+      <small>${plural(cs.length, 'clip')}${cs[0].used ? ' · Used' : ''}</small>
+    </a>`).join('');
+  $('#cards').innerHTML = shown.length || lone.length ? (stageFilter === 'completed' ? shelf('Unused', shown.filter(p => !isUsed(p))) + shelf('Used', shown.filter(isUsed)) + (lone.length ? `<h3 class="shelf">Clips Only</h3>${loneCards}` : '') : cards(shown)) : projects.length
     ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value ? `Nothing matches “${esc($('#search').value)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
@@ -615,7 +623,7 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
 }
 function drawClips(words) {  // every kept clip, across all bundles
   const used = $('#clipused').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
-    && words.every(w => [c.name, c.bundle, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
+    && words.every(w => [c.name, c.bundle, c.folder, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
   $('#title').textContent = tagFilter || 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
   const url = (c, f) => `/final/${enc(c.folder)}/${enc(f)}`;
@@ -682,9 +690,9 @@ $('#cards').onmousemove = e => {
   const box = e.target.closest('.dur'), p = projects.find(x => x.name === box?.closest('[data-name]').dataset.name);
   if (!p || !p.media.length || e.target.closest('.del, .tx, .ren, .use')) return;
   const r = box.getBoundingClientRect();
-  let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.filmed, i = 0;
-  while (i < p.media.length - 1 && t >= p.media[i][1]) t -= p.media[i++][1];
-  scrubCard(box, e, () => t, `/media/${enc(p.name)}/${enc(p.media[i][0])}`);
+  let t = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999) * p.media.reduce((n, m) => n + m[2], 0), i = 0;
+  while (i < p.media.length - 1 && t >= p.media[i][2]) t -= p.media[i++][2];
+  scrubCard(box, e, () => p.media[i][1] + t, `/media/${enc(p.name)}/${enc(p.media[i][0])}`);
 };
 function scrubCard(box, e, at, src) {  // the video under a card's picture follows the mouse; at turns 0..1 across it into a time
   const r = box.getBoundingClientRect(), x = Math.min(Math.max((e.clientX - r.left) / r.width, 0), .999);
@@ -698,6 +706,10 @@ $('#cards').onmouseout = $('#clipcards').onmouseout = e => {
   const box = e.target.closest('.dur');
   if (box && !box.contains(e.relatedTarget)) box.querySelectorAll('video, .scrub').forEach(x => { x.removeAttribute('src'); x.remove(); });
 };
+$('#cards').addEventListener('click', e => {  // a bundle with no project: its clips are in the Library
+  const b = e.target.closest('[data-lone]');
+  if (b) $('#search').value = b.dataset.lone;
+});
 let renaming = null;  // name a card from the library, without opening or bundling it
 $('#cards').addEventListener('click', e => {
   const b = e.target.closest('.ren');
@@ -789,11 +801,12 @@ $('#stages').ondrop = e => {
   if (!stage || !name || projects.find(p => p.name === name)?.stage === stage) return;
   run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage}); await watchSaves(); await loadLibrary(); status(stage === 'completed' ? 'Saving in the background' : `Moved to ${STAGES[stage][0]}`); });
 };
-$('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
+$('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; $('#search').value = ''; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#back').onclick = () => location.hash = '#/';
 
 // ---------- project ----------
 const clip = () => data.clips[clipIdx];
+const allClips = () => data.clips.reduce((n, c) => n + c.segments.filter(s => !s.gap).length, 0);
 // same as kept_ranges() in commands.py: the pieces of a take that survive the cuts
 function pieces(t, cuts) {
   let ps = [[t.start, t.end]];
@@ -816,9 +829,12 @@ function show(d, idx = clipIdx) {
   idx = Math.min(idx, data.clips.length - 1);
   if (idx !== clipIdx) openGap = openSeg = naming = picked = null;  // open panels belong to the video they were on
   clipIdx = idx;
-  $('#complete').lastChild.textContent = data.stage === 'completed' ? 'Completed' : 'Mark Complete';
-  $('#complete').title = data.stage === 'completed' ? 'Its kept clips are in the library. Click to reopen it in Processing.' : 'Done going through every clip: cut it down and save each kept clip to the library. The original footage stays.';
-  $('#showfinal').hidden = data.stage !== 'completed';
+  const done = data.stage === 'completed';
+  $('#complete').lastChild.textContent = data.unsaved ? 'Update Library' : done ? 'Completed' : 'Mark Complete';
+  $('#complete').title = data.unsaved ? 'Your changes replace its old clips in the library when you leave this video, or now if you click.'
+    : done ? 'Its kept clips are in the library. Click to reopen it in Processing, with what was cut.' : 'Done going through every clip: cut it down and save each kept clip to the library. The original footage stays.';
+  $('#showfinal').hidden = !done;
+  $('#mergebtn').hidden = $('#resetall').hidden = $('#resetall').nextElementSibling.hidden = done;  // both bring back what was cut
   $('#startproc').hidden = data.stage !== 'inbox';
   $('#undobtn').disabled = !clip().undo;
   $('#redobtn').disabled = !clip().redo;
@@ -833,7 +849,7 @@ function show(d, idx = clipIdx) {
   $('#subtitle').textContent = `${data.name.slice(0, 10)}${data.tags.length ? ' · ' + data.tags.join(', ') : ''}`;
   if (document.activeElement !== $('#desc')) $('#desc').value = data.description || '';
   if (document.activeElement !== $('#tags')) $('#tags').value = data.tags.join(', ');
-  $('#meta').textContent = `${mmss(filmed - keptLen)} cut from ${mmss(filmed)} filmed${data.clips.length > 1 ? ` · video ${clipIdx + 1} of ${data.clips.length}: ${c.stem}` : ''}`;
+  $('#meta').textContent = `${done ? `${plural(allClips(), 'clip')} kept` : `${mmss(filmed - keptLen)} cut from ${mmss(filmed)} filmed`}${data.clips.length > 1 ? ` · video ${clipIdx + 1} of ${data.clips.length}: ${c.stem}` : ''}`;
   $('#edittotal').textContent = `/ ${mmss(keptLen)}`;
 
   allSegs = data.clips.flatMap((c, ci) => c.segments.map(s => ({...s, ci})));  // every video on one timeline, in order
@@ -851,7 +867,7 @@ function show(d, idx = clipIdx) {
   }).join('') + '<div id="playhead"></div><div id="dragline" hidden></div>';
   drawGap();
 
-  $('#takesbox').hidden = !e.takes.some(t => t.group);  // most footage has no takes
+  $('#takesbox').hidden = done || !e.takes.some(t => t.group);  // most footage has no takes
   $('#takecount').textContent = e.takes.filter(t => t.group).length;
   $('#takes').innerHTML = e.takes.map((t, i) => t.mine ? '' : `
     <div class="row ${t.keep ? '' : 'dropped'}" data-i="${i}">
@@ -1017,6 +1033,8 @@ video.addEventListener('loadedmetadata', () => {
   if (playing) video.play();
 });
 const seek = t => { stopPlaying(); video.currentTime = t; };
+const onKept = (t, back) => data.stage !== 'completed' || !kept.length ? t  // completed footage has nothing between its clips to land on
+  : back ? Math.min(t, kept.findLast(([a]) => a <= t)?.[1] ?? kept[0][0]) : Math.max(t, kept.find(([, b]) => t < b)?.[0] ?? kept.at(-1)[1]);
 function goTo(ci, t) {  // the playhead to time t in video ci, loading it first if it isn't the one showing
   if (ci === clipIdx && pendingSeek == null) return seek(t);
   stopPlaying();
@@ -1350,11 +1368,12 @@ $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(awai
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
 const complete = unmarked => run($('#complete'), 'Saving…', async () => {
   await api('/api/stage/' + enc(proj), {stage: 'completed', unmarked});
+  data.unsaved = false;  // leaving mustn't save it again
   await watchSaves();
   location.hash = '#/';
   status('Saving in the background');
 });
-$('#complete').onclick = () => data.stage === 'completed'
+$('#complete').onclick = () => data.unsaved ? complete('keep') : data.stage === 'completed'
   ? run($('#complete'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Back in Processing'); })
   : settleThen(complete);
 $('#showfinal').onclick = () => api('/api/open', {what: 'finalized', project: proj}).catch(e => status(e.message, true));
@@ -1467,7 +1486,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape' && armed) { disarm(); status('Cancelled'); }
   else if (e.key === 'Escape' && picked) { picked = null; show(data); }
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.shiftKey) { e.preventDefault(); jumpClip(e.key === 'ArrowLeft' ? -1 : 1); }
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * 2)); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); seek(onKept(Math.max(0, t + (e.key === 'ArrowLeft' ? -1 : 1) * 2), e.key === 'ArrowLeft')); }
   else if ((e.key === 'i' || e.key === 'o') && i >= 0) edit(i, e.key === 'i' ? {start: t} : {end: t});
   else if (e.key === 't' && i >= 0) edit(i, {keep: !clip().edit.takes[i].keep});
   else if (e.key === 's') split();
@@ -1602,6 +1621,8 @@ async function poll() {
 }
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips';
+  if (data?.unsaved && data.name !== (m && decodeURIComponent(m[1])))  // leaving edited completed footage replaces its clips in the library
+    api('/api/stage/' + enc(data.name), {stage: 'completed', unmarked: 'keep'}).then(watchSaves).then(loadLibrary).catch(e => status(e.message, true));
   onClips = c;
   $('#clipsort').hidden = $('#clipused').hidden = !c;
   $('#library').hidden = !!m;
@@ -1618,6 +1639,7 @@ function route() {
   loadLibrary();  // the sidebar's tags and counts show on every page
 }
 window.onhashchange = route;
+addEventListener('focus', () => $('#project').hidden && loadLibrary());  // folders moved by hand in Drive show up on coming back
 route();
 watchSaves();
 poll();
