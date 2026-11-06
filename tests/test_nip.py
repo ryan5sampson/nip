@@ -63,6 +63,18 @@ class Commands(unittest.TestCase):
         self.assertEqual(len(e["markers"]), 1)
         self.assertEqual(e["pending"][0]["text"], "make it louder")
 
+    def test_saying_how_a_video_sorts(self):
+        for said, tags, reusable in (("NIP, this video is gameplay.", ["gameplay"], True), ("NIP, this video is game play and throwing.", ["gameplay", "throwing"], True),
+                                     ("NIP, this video is funny.", ["funny"], None), ("NIP, this video is a talking head.", ["talking head"], False),
+                                     ("NIP, this video is non-reusable.", [], False), ("NIP, not reusable.", [], False), ("NIP, one-off.", [], False),
+                                     ("NIP, reusable.", [], True), ("NIP, throwing.", ["throwing"], True), ("NIP, this footage is reusable and funny.", ["funny"], True)):
+            _, e = summary(f"gameplay / {said} / end")
+            self.assertEqual((e["video_tags"], e["reusable"], e["pending"]), (tags, reusable, []), said)
+        _, e = summary("NIP, tag gameplay / end")
+        self.assertEqual((e["tags"], e["video_tags"], e["reusable"]), (["gameplay"], [], True))
+        _, e = summary("NIP, this video is about how we print all of our balls / end")  # a sentence, not a label
+        self.assertEqual((e["video_tags"], e["reusable"], len(e["pending"])), ([], None, 1))
+
     def test_nip_instruction_stops_at_pause(self):
         _, e = summary("NIP, this is a test / this is narration")
         self.assertEqual(e["description"], "a test")
@@ -655,7 +667,20 @@ class Export(unittest.TestCase):
                     cli.remember(c)
                     cli.add_cut(c, side["source_start"], side["source_start"] + 2)
                     cli.save(proj / "a.nip.json", c)
-                    cli.finalize(proj)
+                    cli.finalize(proj, sort={"mode": "action", "tags": ["throwing"]})
+                    info = d / "final" / "Unused" / folder / "_info"
+                    self.assertEqual({cli.load(f)["reusable"] for f in info.glob("*.json")}, {True})
+                    cli.finalize(proj)  # an update keeps the sorting
+                    self.assertEqual([(m["reusable"], "throwing" in m["tags"]) for m in map(cli.load, info.glob("*.json"))], [(True, True)] * 2)
+                    spoke = cli.load(proj / "a.nip.json")  # what's said while filming is that video's alone
+                    cli.save(proj / "a.nip.json", {**spoke, "edit": {**spoke["edit"], "reusable": False, "video_tags": ["talking head"]}})
+                    cli.finalize(proj, sort={"mode": "action", "tags": []})
+                    labels = {m["source"]: m for m in map(cli.load, info.glob("*.json"))}
+                    self.assertEqual((labels["a.mp4"]["spoken"], labels["b.mp4"]["spoken"], "talking head" in labels["a.mp4"]["tags"], "talking head" in labels["b.mp4"]["tags"]), (True, False, True, False))
+                    cli.save(proj / "a.nip.json", spoke)
+                    for f in info.glob("*.json"):
+                        m = cli.load(f)
+                        cli.save(f, {**m, "spoken": False, "tags": [t for t in m["tags"] if t != "talking head"]})
                     self.assertLess(cli.probe(d / "final" / "Unused" / folder / "02 the goodbit.mp4")[0], long - 1)
                     self.assertEqual(sorted(f.name for f in (d / "final" / "Unused" / folder).iterdir()), got)
                     self.assertEqual(cli.load(proj / "a.nip.json").get("undo"), None)
@@ -677,6 +702,9 @@ class Export(unittest.TestCase):
                     self.assertGreater(len(get(f"/final/{q(folder)}/{q('02 the goodbit.preview.mp4')}").read()), 500)
                     post = lambda u, b: urllib.request.urlopen(urllib.request.Request(base + u, data=json.dumps(b).encode()))
                     self.assertEqual(json.loads(post(f"/api/clip/{q(folder)}/{q('02 the goodbit')}", {"tags": [" Curve ", ""]}).read())["tags"], ["curve"])
+                    self.assertTrue(cli.load(info / "02 the goodbit.json")["reusable"])  # tags alone leave it
+                    post(f"/api/clip/{q(folder)}/{q('02 the goodbit')}", {"tags": ["curve"], "reusable": False})
+                    self.assertIs(cli.load(info / "02 the goodbit.json")["reusable"], False)
                     # picked clips: copied in the order picked, into a new folder, never over an old one
                     picks = {"name": "My/ video", "clips": [{"folder": folder, "file": "02 the goodbit.mp4"}, {"folder": folder, "file": "01 b.mp4"}]}
                     self.assertEqual(json.loads(post("/api/handoff", picks).read())["folder"], "My video")
@@ -702,7 +730,7 @@ class Export(unittest.TestCase):
                         with self.assertRaises(urllib.error.HTTPError):
                             bad()
                     server.shutdown()
-                    self.assertEqual(sorted(f.name for f in (d / "bin").iterdir()), [folder, f"{folder} 2"])
+                    self.assertEqual(sorted(f.name for f in (d / "bin").iterdir()), [folder, f"{folder} 2", f"{folder} 3", f"{folder} 4"])
                     # renamed, it moves to a folder of the new name with its tags; another bundle's folder is never taken
                     (d / "final" / "Unused" / "Reel (2026-01-01)").mkdir()
                     with mock.patch.object(cli, "library_folder", return_value="Reel (2026-01-01) 2"):
@@ -727,6 +755,44 @@ class Export(unittest.TestCase):
 
 
 class Robustness(unittest.TestCase):
+    def test_completing_sorts_a_bundles_clips(self):
+        from nip import brief
+        import nip.view as view
+        with tempfile.TemporaryDirectory() as d:
+            infos = Path(d)
+            def bundle():
+                for n, name, words in ((1, "Intro", ["hi", "there"]), (2, "Throw", [])):
+                    cli.save(infos / f"0{n}.json", {"name": name, "tags": ["mine"], "duration": 2, "words": [{"w": w} for w in words]})
+            got = lambda: [(c["reusable"], c["tags"]) for c in map(cli.load, sorted(infos.glob("*.json")))]
+            bundle()
+            with mock.patch.object(brief, "claude_json", side_effect=AssertionError("no Claude needed")):
+                cli.sort_clips(infos, {"mode": "talking", "tags": []})
+                self.assertEqual(got(), [(False, ["mine", "talking head"])] * 2)
+                bundle()
+                cli.sort_clips(infos, {"mode": "action", "tags": ["throwing", "mine"]})
+                self.assertEqual(got(), [(True, ["mine", "throwing"])] * 2)
+            bundle()
+            answer = {"clips": [{"clip": 2, "reusable": True, "tags": [" Throwing ", ""]}, {"clip": 1, "reusable": False, "tags": ["talking head"]}]}
+            with mock.patch.object(brief, "claude_json", return_value=answer) as ask:
+                cli.sort_clips(infos, {"mode": "custom", "tags": [], "text": "keep the throws"})
+            self.assertIn("keep the throws", ask.call_args[0][0])
+            self.assertIn('[1] name="Intro" 2.0s, 1.0 words per second, said="hi there"', ask.call_args[0][0])
+            self.assertEqual(got(), [(False, ["mine", "talking head"]), (True, ["mine", "throwing"])])  # by number, not by order
+            bundle()
+            with mock.patch.object(brief, "claude_json", return_value={"clips": answer["clips"][:1]}):
+                with self.assertRaises(RuntimeError):
+                    cli.sort_clips(infos, {"mode": "mixed", "tags": []})
+            self.assertNotIn("reusable", cli.load(infos / "01.json"))  # all or nothing
+            bundle()
+            cli.save(infos / "02.json", {**cli.load(infos / "02.json"), "reusable": True, "spoken": True})
+            cli.sort_clips(infos, {"mode": "talking", "tags": []})
+            self.assertEqual(got(), [(False, ["mine", "talking head"]), (True, ["mine"])])  # what was said while filming stands
+        self.assertIsNone(view.clean_sort(None))
+        self.assertEqual(view.clean_sort({"mode": "action", "tags": [" Gameplay ", ""]})["tags"], ["gameplay"])
+        for bad in ("mixed", {"mode": "x"}, {"mode": "custom"}, {"mode": "custom", "text": "  "}, {"mode": "action", "tags": "y"}):
+            with self.assertRaises(ValueError):
+                view.clean_sort(bad)
+
     def test_deleting_takes_the_clips_out_of_the_library(self):
         import urllib.error
         import urllib.request

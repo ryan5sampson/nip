@@ -101,6 +101,7 @@ def summary(proj):
             "stories": len(info.get("stories", [])), "modified": proj.stat().st_mtime,
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
             "said": " ".join(w["w"] for c in clips for w in c["words"])[:brief.ASSIST_SAID], "stage": cli.stage_of(info), "unsaved": bool(info.get("unsaved")),
+            "unsorted": sum(c["edit"].get("reusable") is None for c in clips),  # videos not sorted by voice while filming
             "media": [[c["source"], s["a"], s["b"] - s["a"]] for c in clips for s in c["segments"]],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}
@@ -233,6 +234,18 @@ def clean_tags(tags):
     return [t.strip().lower() for t in tags if t.strip()]
 
 
+def clean_sort(sort):
+    """How Mark Complete was told to sort the bundle; None to leave the clips' labels as they are."""
+    if sort is None:
+        return None
+    if not isinstance(sort, dict) or sort.get("mode") not in ("talking", "mixed", "action", "custom"):
+        raise ValueError("sort must say talking, mixed, action or custom")
+    text = sort.get("text", "")
+    if sort["mode"] == "custom" and not (isinstance(text, str) and 0 < len(text.strip()) <= 2000):
+        raise ValueError("say how to sort these clips")
+    return {"mode": sort["mode"], "tags": clean_tags(sort.get("tags", [])), "text": text}
+
+
 def why(e):
     if isinstance(e, FileNotFoundError) and e.filename:
         return f"Footage Flow can't find {Path(e.filename).name}."
@@ -243,12 +256,12 @@ def save_footage():
     """Complete footage in the background, so the app stays usable. New footage sits in Processing until this succeeds, and
     footage being updated in Completed drops back to Processing if it fails; either way the library stays as it was."""
     while True:
-        job, proj = JOBS.get()
+        job, proj, sort = JOBS.get()
         job["state"] = "saving"
         try:
             if not library_answers():
                 raise ValueError("Google Drive isn’t answering. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
-            job["saved"] = cli.finalize(proj, lambda step, part: job.update(step=step, part=part))
+            job["saved"] = cli.finalize(proj, lambda step, part: job.update(step=step, part=part), sort)
             job["state"] = "done"
         except Exception as e:
             traceback.print_exc()
@@ -532,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get("stage") not in cli.STAGES:
                     raise ValueError(f"stage must be one of {', '.join(cli.STAGES)}")
                 if body["stage"] == "completed":  # cuts the footage down: each kept clip becomes its own file in the library
+                    sort = clean_sort(body.get("sort"))
                     settle(proj, body.get("unmarked"))
                     with LOCK:
                         if not cli.load(proj / "project.json").get("finalized"):  # an update stays in Completed while it saves
@@ -540,7 +554,7 @@ class Handler(BaseHTTPRequestHandler):
                     job = {"project": proj.name, "title": info.get("my_description") or info.get("description") or proj.name,
                            "state": "waiting", "step": "Waiting its turn", "part": 0}
                     SAVES[:] = [j for j in SAVES if j["project"] != proj.name] + [job]
-                    JOBS.put((job, proj))
+                    JOBS.put((job, proj, sort))
                     self.send_json(job)
                 else:
                     with LOCK:
@@ -551,8 +565,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not f.is_file():
                     raise FileNotFoundError
                 tags = clean_tags(body.get("tags"))
+                if body.get("reusable") not in (True, False, None):
+                    raise ValueError("reusable must be true, false or null")
                 with LOCK:
-                    cli.save(f, {**cli.load(f), "tags": tags})
+                    m = cli.load(f)
+                    cli.save(f, {**m, "tags": tags, "reusable": body.get("reusable", m.get("reusable"))})
                 self.send_json({"tags": tags})
             elif len(p) == 3 and p[:2] == ["api", "used"]:  # move a completed bundle's folder between Unused and Used
                 proj = self.project(p[2])

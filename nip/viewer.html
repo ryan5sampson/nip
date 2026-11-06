@@ -108,7 +108,7 @@
   #pickbar { position: sticky; bottom: 0; margin-top: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--toolbar); backdrop-filter: blur(30px); box-shadow: var(--shadow); }
   #pickbar[hidden] { display: none; }
   #pickbar .grow { flex: 1; }
-  #clipsort, #clipused { font: inherit; height: 28px; color: var(--label); }
+  #clipsort, #clipused, #clipreuse { font: inherit; height: 28px; color: var(--label); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
   .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
   .tile .thumb { aspect-ratio: 3 / 4; border-radius: 8px; background: #000 center / cover no-repeat; box-shadow: 0 0 0 .5px var(--separator); transition: box-shadow .12s; }
@@ -255,6 +255,10 @@
   dialog { border: none; border-radius: 12px; padding: 18px 20px 14px; width: 340px; background: var(--window); color: var(--label); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); }
   dialog::backdrop { background: rgba(0, 0, 0, .25); }
   dialog p { color: var(--secondary); margin: 6px 0 10px; line-height: 1.4; }
+  .opt { display: flex; align-items: flex-start; gap: 7px; padding: 4px 0; cursor: pointer; }
+  .opt input { margin: 2px 0 0; flex: none; }
+  .opt small { display: block; color: var(--secondary); }
+  .sortmore { margin: 0 0 6px 21px; }
   dialog .actions-line { justify-content: flex-end; }
   .group { border-radius: 8px; background: var(--fill); }
   .group > * + * { border-top: .5px solid var(--separator); }
@@ -350,6 +354,7 @@
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
       <select id="clipsort" aria-label="Sort clips" hidden><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option><option value="short">Shortest first</option><option value="name">By name</option></select>
+      <select id="clipreuse" aria-label="Show reusable or one-off clips" hidden><option value="">All clips</option><option value="yes">Reusable</option><option value="no">One-off</option><option value="none">Not sorted</option></select>
       <select id="clipused" aria-label="Show used or unused clips" hidden><option value="">Used and unused</option><option value="no">Unused</option><option value="yes">Used</option></select>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
@@ -468,6 +473,7 @@
     <b id="cliptitle"></b>
     <small id="clipmeta" class="num"></small>
     <div class="field"><label for="cliptags">Tags</label><input type="text" id="cliptags" placeholder="Separate with commas"></div>
+    <div class="field"><label for="clipreusable">Use</label><select id="clipreusable"><option value="none">Not sorted</option><option value="yes">Reusable</option><option value="no">One-off</option></select></div>
     <p id="cliptext"></p>
     <div class="actions-line"><button type="button" class="btn" id="clippick"></button><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open Bundle</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
   </div>
@@ -485,6 +491,21 @@
   <input type="text" id="handoffname" maxlength="80" required aria-label="Name of the video" placeholder="What’s the video?" style="width:100%;margin:10px 0 4px">
   <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
+</form></dialog>
+<dialog id="sortdlg"><form method="dialog">
+  <b>Sort These Clips</b>
+  <p><span id="sortvoice"></span>You can change any clip later in the Library.</p>
+  <label class="opt"><input type="radio" name="sort" value="talking"><span>Talking head<small>No reusable footage</small></span></label>
+  <label class="opt"><input type="radio" name="sort" value="mixed" checked><span>Mixed<small>Claude keeps clips with no significant talking, or that mention throwing or gameplay</small></span></label>
+  <label class="opt"><input type="radio" name="sort" value="action"><span>All gameplay or throwing<small>Every clip is reusable, with the tags you pick</small></span></label>
+  <div class="sortmore" id="sortaction" hidden>
+    <label class="opt"><input type="checkbox" value="gameplay" checked> gameplay</label>
+    <label class="opt"><input type="checkbox" value="throwing" checked> throwing</label>
+    <input type="text" id="sorttags" aria-label="More tags" placeholder="More tags, separated with commas" style="width:100%">
+  </div>
+  <label class="opt"><input type="radio" name="sort" value="custom"><span>Custom<small>Tell Claude how to sort them</small></span></label>
+  <div class="sortmore" id="sortcustom" hidden><textarea id="sorttext" maxlength="2000" aria-label="How to sort these clips" placeholder="Keep the catches, tag them “catch”. The rest are one-offs."></textarea></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><span class="grow"></span><button type="button" class="btn" onclick="this.closest('dialog').close('skip')" title="Complete without changing how the clips are sorted">Skip</button><button class="btn default" value="ok">Complete</button></div>
 </form></dialog>
 <dialog id="rename"><form method="dialog">
   <b>Name Footage</b>
@@ -621,8 +642,10 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
   document.querySelector(`[data-clip="${clips.indexOf(c)}"]`)?.classList.toggle('chosen', chosen.has(clipKey(c)));
   drawPicks();
 }
+const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
 function drawClips(words) {  // every kept clip, across all bundles
-  const used = $('#clipused').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
+  const used = $('#clipused').value, reuse = $('#clipreuse').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
+    && (!reuse || reuseOf(c) === reuse)
     && words.every(w => [c.name, c.bundle, c.folder, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
   $('#title').textContent = tagFilter || 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
@@ -637,7 +660,7 @@ function drawClips(words) {  // every kept clip, across all bundles
   drawPicks();
 }
 $('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
-$('#clipsort').onchange = $('#clipused').onchange = drawLibrary;
+$('#clipsort').onchange = $('#clipused').onchange = $('#clipreuse').onchange = drawLibrary;
 $('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
 $('#pickexport').onclick = () => {
   $('#handoffhead').textContent = `Export ${plural(chosen.size, 'clip')}`;
@@ -669,6 +692,7 @@ function showClip(c) {
   $('#cliptitle').textContent = clipTitle(c);
   $('#clipmeta').textContent = `${c.bundle || c.project} · ${mins(c.duration)} · from ${c.source}`;
   $('#cliptags').value = c.tags.join(', ');
+  $('#clipreusable').value = reuseOf(c);
   $('#cliptext').textContent = c.text || 'No speech';
   $('#clipbundle').hidden = !projects.some(p => p.name === c.project);
   $('#clipdlg').showModal();
@@ -676,11 +700,13 @@ function showClip(c) {
 const drawClipPick = () => $('#clippick').textContent = chosen.has(clipKey(openClip)) ? 'Picked ✓' : 'Pick for a Video';
 $('#clippick').onclick = () => { togglePick(openClip); drawClipPick(); };
 $('#clipdlg').onclose = () => {
-  const c = openClip, tags = $('#cliptags').value.split(',');
+  const c = openClip, tags = $('#cliptags').value.split(','), reuse = $('#clipreusable').value;
   $('#clipvideo').removeAttribute('src');
   $('#clipvideo').load();
-  if (tags.map(t => t.trim().toLowerCase()).filter(Boolean).join() !== c.tags.join())
-    run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags})).tags; drawLibrary(); status('Tags saved'); });
+  if (tags.map(t => t.trim().toLowerCase()).filter(Boolean).join() !== c.tags.join() || reuse !== reuseOf(c)) {
+    const reusable = {yes: true, no: false, none: null}[reuse];
+    run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags, reusable})).tags; c.reusable = reusable; drawLibrary(); status('Saved'); });
+  }
 };
 $('#clipreveal').onclick = () => api('/api/reveal', {folder: openClip.folder, file: openClip.file}).catch(e => status(e.message, true));
 $('#clipbundle').onclick = () => { $('#clipdlg').close(); location.hash = '#/p/' + enc(openClip.project); };
@@ -807,7 +833,8 @@ $('#stages').ondrop = e => {
   $('#stages').querySelectorAll('.drop').forEach(x => x.classList.remove('drop'));
   const name = dragged, stage = e.target.closest('[data-stage]')?.dataset.stage;
   if (!stage || !name || projects.find(p => p.name === name)?.stage === stage) return;
-  run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage}); await watchSaves(); await loadLibrary(); status(stage === 'completed' ? 'Saving in the background' : `Moved to ${STAGES[stage][0]}`); });
+  const move = sort => run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage, sort}); await watchSaves(); await loadLibrary(); status(stage === 'completed' ? 'Saving in the background' : `Moved to ${STAGES[stage][0]}`); });
+  stage === 'completed' ? askSort(move, name) : move();
 };
 $('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; $('#search').value = ''; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
 $('#back').onclick = () => location.hash = '#/';
@@ -1374,8 +1401,8 @@ $('#stories').onclick = e => {
 };
 $('#desc').onchange = () => run($('#desc'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {description: $('#desc').value})); status('Saved'); });
 $('#tags').onchange = () => run($('#tags'), 'Saving…', async () => { show(await api('/api/project/' + enc(proj), {tags: $('#tags').value.split(',')})); status('Saved'); });
-const complete = unmarked => run($('#complete'), 'Saving…', async () => {
-  await api('/api/stage/' + enc(proj), {stage: 'completed', unmarked});
+const complete = (unmarked, sort) => run($('#complete'), 'Saving…', async () => {
+  await api('/api/stage/' + enc(proj), {stage: 'completed', unmarked, sort});
   data.unsaved = false;  // leaving mustn't save it again
   await watchSaves();
   location.hash = '#/';
@@ -1383,9 +1410,29 @@ const complete = unmarked => run($('#complete'), 'Saving…', async () => {
 });
 $('#complete').onclick = () => data.unsaved ? complete('keep') : data.stage === 'completed'
   ? run($('#complete'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Back in Processing'); })
-  : settleThen(complete);
+  : settleThen(unmarked => askSort(sort => complete(unmarked, sort), proj));
 $('#showfinal').onclick = () => api('/api/open', {what: 'finalized', project: proj}).catch(e => status(e.message, true));
 $('#startproc').onclick = () => run($('#startproc'), 'Saving…', async () => { show(await api('/api/stage/' + enc(proj), {stage: 'processing'})); status('Moved to Processing'); });
+let afterSort = null;
+function askSort(fn, name) {  // how to sort a bundle's clips, as it's completed; fn gets undefined for Skip, or if every video was sorted by voice
+  const p = projects.find(x => x.name === name);
+  if (p && !p.unsorted) return fn();
+  afterSort = fn;
+  $('#sortvoice').textContent = p && p.unsorted < p.videos ? `${p.videos - p.unsorted} of ${plural(p.videos, 'video')} already sorted by voice. This sets the rest. ` : 'Sets every clip in this bundle at once. ';
+  $('#sortdlg').returnValue = '';  // Esc and Cancel close without an answer
+  $('#sortdlg').showModal();
+}
+$('#sortdlg').onchange = () => {
+  const mode = $('#sortdlg [name=sort]:checked').value;
+  $('#sortaction').hidden = mode !== 'action';
+  $('#sortcustom').hidden = mode !== 'custom';
+  $('#sorttext').required = mode === 'custom';
+};
+$('#sortdlg').onclose = () => {
+  const how = $('#sortdlg').returnValue, mode = $('#sortdlg [name=sort]:checked').value;
+  if (how === 'skip') afterSort();
+  if (how === 'ok') afterSort({mode, text: $('#sorttext').value, tags: [...document.querySelectorAll('#sortaction :checked'), ...$('#sorttags').value.split(',').map(value => ({value}))].map(t => t.value)});
+};
 let afterSettle = null;
 function settleThen(fn) {  // ask about unmarked footage first, if there is any
   const open = data.clips.filter(c => c.unmarked.length), parts = open.flatMap(c => c.unmarked);
@@ -1632,7 +1679,7 @@ function route() {
   if (data?.unsaved && data.name !== (m && decodeURIComponent(m[1])))  // leaving edited completed footage replaces its clips in the library
     api('/api/stage/' + enc(data.name), {stage: 'completed', unmarked: 'keep'}).then(watchSaves).then(loadLibrary).catch(e => status(e.message, true));
   onClips = c;
-  $('#clipsort').hidden = $('#clipused').hidden = !c;
+  $('#clipsort').hidden = $('#clipused').hidden = $('#clipreuse').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
   $('#back').hidden = !m;

@@ -15,6 +15,7 @@ MODELS = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5"}  # Claude Co
 BRIEF_AI = ("opus", "medium")  # picking the best lines from a whole transcript is real judgement
 NOTES_AI = ("sonnet", "low")   # a note is usually one obvious cut or restore: fast and light on the plan
 ASSIST_AI = ("sonnet", "low")  # questions and small jobs on the home screen: quick matters most
+SORT_AI = ("sonnet", "medium")  # reading what a clip is about from its words
 ASSIST_SAID = 600  # characters of each clip's transcript sent to the home screen's NIP
 NOTE_WINDOW = 30.0  # seconds of transcript sent around each note, once a video is long
 NOTE_ALL_WORDS = 600  # transcripts up to this many words go whole
@@ -269,9 +270,27 @@ def apply_ops(clip, ops):
 
 # ---- the home screen: questions about the footage, finding clips, and small jobs ----
 
+SORT_MIXED = """Reusable: clips with no significant talking, and clips whose words allude to throwing or gameplay. One-off: everything else; tag those "talking head". Tag reusable clips "throwing" or "gameplay" when the words or the clip's name show it."""
+SORT_SYSTEM = """You sort a video creator's finished clips into their library, working only from each clip's name and what's said in it; you can't see the picture. The creator makes short videos about Linderball, a throwing game. A reusable clip is one they'd want again in other videos; a one-off only makes sense in the video it was filmed for. Under about 1 word per second is no significant talking. For every clip, say whether it's reusable and give any tags that fit: short, lowercase, and the same word for the same thing across clips. Follow the creator's instructions. They come first where they differ from this."""
+SORT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["clips"], "properties": {"clips": {"type": "array", "items": {
+    "type": "object", "additionalProperties": False, "required": ["clip", "reusable", "tags"],
+    "properties": {"clip": {"type": "integer"}, "reusable": {"type": "boolean"}, "tags": {"type": "array", "items": {"type": "string"}}}}}}}
+
+
+def sort_clips(clips, instructions, client=None):
+    """Claude's answer for each clip, in order: {"reusable": bool, "tags": [...]}."""
+    lines = "\n".join(f'[{i}] name="{c["name"]}" {c["duration"]:.1f}s, {len(c["words"]) / max(c["duration"], .1):.1f} words per second, said="{" ".join(w["w"] for w in c["words"])[:ASSIST_SAID]}"'
+                      for i, c in enumerate(clips, 1))
+    data = claude_json(f"<clips>\n{lines}\n</clips>\n\n<instructions>\n{instructions}\n</instructions>", SORT_SYSTEM, SORT_SCHEMA, client, SORT_AI)
+    got = {a.get("clip"): a for a in data.get("clips", []) if isinstance(a, dict)}
+    if set(got) != set(range(1, len(clips) + 1)):
+        raise RuntimeError("Claude didn't sort every clip; try again")
+    return [{"reusable": bool(got[i]["reusable"]), "tags": [str(t).strip().lower()[:40] for t in got[i]["tags"] if str(t).strip()]} for i in range(1, len(clips) + 1)]
+
+
 ASSIST_SYSTEM = """You are NIP, the assistant in Footage Flow, the creator's app for preparing raw footage for short vertical videos. You're on its home screen. Answer questions about the app and their footage, find clips, and do small jobs for them. Be brief and plain: one or two sentences, no lists unless asked.
 
-How the app works. Footage arrives in the Inbox. Their first edit moves it to Processing, where they mark what to keep or cut. Mark Complete cuts it down and saves each kept clip to the library on Google Drive, and it moves to Completed. Completed bundles sit in an Unused or Used folder; they mark one used once it's been in a video. The Library shows every kept clip, to search, tag, preview and pick; picked clips export to their own folder in Handoffs for making a video. Footage that isn't completed has no clips in the library yet.
+How the app works. Footage arrives in the Inbox. Their first edit moves it to Processing, where they mark what to keep or cut. Mark Complete cuts it down and saves each kept clip to the library on Google Drive, and it moves to Completed. Completed bundles sit in an Unused or Used folder; they mark one used once it's been in a video. Mark Complete asks how to sort the bundle, and each clip ends up reusable or one-off with tags. The Library shows every kept clip, to search, tag, preview and pick; picked clips export to their own folder in Handoffs for making a video. Footage that isn't completed has no clips in the library yet.
 
 You get every project and every library clip with the start of its transcript, what they're looking at, and the conversation so far.
 
@@ -314,7 +333,7 @@ def assist_prompt(message, history, view, projects, clips):
     ps = "\n".join(f'project="{p["name"]}" title="{p["description"] or ""}" stage={p["stage"]} filmed={p["filmed"]:.0f}s kept={p["kept"]:.0f}s '
                    f'tags={",".join(p["tags"])} said="{p["said"]}"' for p in projects)
     cs = "\n".join(f'[{i}] title="{c.get("name") or ""}" bundle="{c.get("bundle") or ""}" project="{c["project"]}" {c["duration"]:.1f}s '
-                   f'filmed={c.get("filmed") or "?"} used={"yes" if c.get("used") else "no"} tags={",".join(c["tags"])} said="{c["text"][:ASSIST_SAID]}"'
+                   f'filmed={c.get("filmed") or "?"} used={"yes" if c.get("used") else "no"} reusable={ {True: "yes", False: "no"}.get(c.get("reusable"), "not sorted") } tags={",".join(c["tags"])} said="{c["text"][:ASSIST_SAID]}"'
                    for i, c in enumerate(clips))
     talk = "\n".join(f'{m.get("role")}: {str(m.get("text"))[:500]}' for m in history)
     return (f"<projects>\n{ps}\n</projects>\n<clips>\n{cs}\n</clips>\n<looking_at>{view}</looking_at>\n"

@@ -539,11 +539,27 @@ def library_folder(proj, info):
     return folder
 
 
-def finalize(proj, progress=lambda step, part: None):
+def sort_clips(infos, sort):
+    """Label a bundle's clips as chosen when completing it: reusable or a one-off, plus tags, added to any they have.
+    Clips from a video sorted by voice while filming are left as they are."""
+    from nip import brief  # here, not at the top: brief imports cli
+    files = [f for f in sorted(infos.glob("*.json")) if not load(f).get("spoken")]
+    if not files:
+        return
+    clips = [load(f) for f in files]
+    if sort["mode"] in ("talking", "action"):
+        answers = [{"reusable": sort["mode"] == "action", "tags": sort["tags"] if sort["mode"] == "action" else ["talking head"]}] * len(clips)
+    else:
+        answers = brief.sort_clips(clips, brief.SORT_MIXED if sort["mode"] == "mixed" else sort["text"])
+    for f, c, a in zip(files, clips, answers):
+        save(f, {**c, "reusable": a["reusable"], "tags": list(dict.fromkeys(c["tags"] + a["tags"]))})
+
+
+def finalize(proj, progress=lambda step, part: None, sort=None):
     """Complete a project: write each kept clip of a fully decided project as its own file. _info beside them holds each clip's .json (name, tags,
     transcript with times from the start of the clip), thumbnail and preview, so editors just see the clips. It's built and
     checked locally and copied over whole, so Drive never uploads half a result. The originals aren't touched.
-    progress gets what's happening and how much of it is done, from 0 to 1."""
+    progress gets what's happening and how much of it is done, from 0 to 1. Without sort, clips keep the labels they had."""
     info = load(proj / "project.json")
     clips = [load(proj / f"{stem}.nip.json") for stem in info["clips"]]
     left = sum(len(unmarked(decisions(c))) for c in clips)
@@ -561,7 +577,7 @@ def finalize(proj, progress=lambda step, part: None):
     before = [load(f) for f in old.glob("_info/*.json")]  # tags added to clips outlive finalizing again
     try:
         for c in clips:
-            e, source = decisions(c), Path(c["source"])
+            e, source, spoken = decisions(c), Path(c["source"]), c["edit"].get("reusable")
             words = respell(c["words"], spellings)
             for s in timeline(e, c["duration"]):
                 name = clip_name(s, e)
@@ -578,13 +594,17 @@ def finalize(proj, progress=lambda step, part: None):
                 copy_clip(proj / "raw" / source, s["a"], s["b"], f)
                 preview(f, out / "_info" / f.name)
                 save((out / "_info" / f.name).with_suffix(".json"), {
-                    "name": name, "tags": was["tags"] if was else info.get("my_tags", info["tags"]), "bundle": info.get("my_description") or info["description"],
+                    "name": name, "tags": list(dict.fromkeys((was["tags"] if was else info.get("my_tags", info["tags"])) + c["edit"].get("video_tags", []))),
+                    "reusable": spoken if not was or was.get("reusable") is None else was["reusable"], "spoken": spoken is not None, "bundle": info.get("my_description") or info["description"],
                     "project": proj.name, "source": source.name, "source_start": s["a"], "source_end": s["b"],
                     "duration": round(s["b"] - s["a"], 2), "filmed": c.get("created", ""),
                     "words": [{**w, "start": round(max(w["start"] - s["a"], 0), 2), "end": round(w["end"] - s["a"], 2)}
                               for w in words if s["a"] <= (w["start"] + w["end"]) / 2 < s["b"]]})
         if not n:
             raise ValueError("nothing is kept in this project")
+        if sort:
+            progress("Sorting clips", .5)
+            sort_clips(out / "_info", sort)
         shutil.rmtree(tmp, ignore_errors=True)
         size, copied = sum(f.stat().st_size for f in out.rglob("*") if f.is_file()), 0
 

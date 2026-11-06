@@ -10,6 +10,9 @@ NIP_WINDOW = 8.0    # instruction must start within this many seconds of the wak
 NIP_GAP = 1.5       # a silence this long ends the instruction (users pause ~2s after a command)
 SILENCE = 1.0       # "NIP, cut the silence" shortens gaps longer than this
 PAD_BEFORE, PAD_AFTER = 0.1, 0.3
+ONE_OFF = r"\b(?:non|not|un) ?re ?use?able\b|\bone ?off\b"
+REUSABLE = r"\bre ?use?able\b"
+ACTION = ("gameplay", "throwing")  # footage of these is reusable; a talking head isn't
 
 
 def norm(w):
@@ -76,6 +79,19 @@ def isolated(words, i, j):
     return before and after
 
 
+def label_video(edit, text, tags):
+    """"gameplay and throwing", "non reusable": adds the tags to the list given, and notes if the whole video is reusable."""
+    text = text.replace("game play", "gameplay")
+    one_off, reusable = re.search(ONE_OFF, text), re.search(REUSABLE, text)
+    parts = re.split(r"\band\b", re.sub(f"{ONE_OFF}|{REUSABLE}", " and ", text))
+    said = [t for t in (re.sub(r"^(all|an?|the)\b", "", p.strip()).strip() for p in parts) if t]
+    tags += said
+    if one_off or "talking head" in said:
+        edit["reusable"] = False
+    elif reusable or set(said) & set(ACTION):
+        edit["reusable"] = True
+
+
 def find_events(words):
     toks = [norm(w["w"]) for w in words]
     events, i = [], 0
@@ -135,7 +151,7 @@ def build_edit(words, duration):
     Footage before the first take marker is dropped if the clip has takes, else kept (e.g. gameplay).
     """
     events = find_events(words)
-    edit = {"takes": [], "cuts": [], "markers": [], "notes": [], "description": None, "tags": [], "pending": []}
+    edit = {"takes": [], "cuts": [], "markers": [], "notes": [], "description": None, "tags": [], "video_tags": [], "reusable": None, "pending": []}
     takes = edit["takes"]
     cur = {"start": 0.0, "group": 0, "take": 0, "keep": True, "why": "no take markers", "name": None}
     last_n = 0  # last spoken take number; "scratch that, take two" must not start a new group
@@ -176,6 +192,7 @@ def build_edit(words, duration):
         else:
             text = e["text"]
             clip = re.match(r"(new clip|clip(?:ped)? (\w+))\b(.*)", text)  # "new clip x", "clip two x"
+            this = re.fullmatch(r"this (?:video|footage) is\b((?: \w+){1,4})", text)  # longer is a sentence, not a label
             last = re.search(r"\blast (\w+) seconds?\b", text)
             if not text or text == "split":  # a bare "NIP" (or "NIP split") is a divider to refer back to
                 edit["markers"].append({"t": e["end"], "label": "divider"})
@@ -191,6 +208,8 @@ def build_edit(words, duration):
                 cur = {"start": e["end"], "group": cur["group"] + 1, "take": 1, "keep": False, "why": "",
                        "name": name or None}
                 last_n, clips = 0, True
+            elif this or re.fullmatch(f"{ONE_OFF}|{REUSABLE}|gameplay|game play|throwing|talking head", text):
+                label_video(edit, this[1].strip() if this else text, edit["video_tags"])
             elif text.startswith("pause") or "silence" in text:
                 if text.startswith("pause"):
                     cur["paused"] = e["start"]
@@ -218,7 +237,7 @@ def build_edit(words, duration):
                 tag = re.sub(r"^tag that( as)?( an?| the)?\b", "", text).strip()
                 edit["markers"].append({"t": max(prev, cur["start"]), "end": e["start"], "label": tag or "tagged"})
             elif text.startswith("tag"):
-                edit["tags"].append(text[3:].strip())
+                label_video(edit, text[3:].strip(), edit["tags"])
             elif re.search(r"\b(mark|highlight|flag|clip)\b", text):
                 edit["markers"].append({"t": e["start"], "label": text})
             elif text:
