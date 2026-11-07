@@ -591,6 +591,11 @@
   <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
 </form></dialog>
+<dialog id="setupdlg"><form method="dialog">
+  <b>Welcome to Footage Flow</b>
+  <p>Everything lives in one shared folder in Google Drive, and Footage Flow works from it. Choose that folder to start. For a folder someone shared with you, add a shortcut to it in your Drive first.</p>
+  <div class="actions-line"><button type="button" class="btn default" id="setupgo">Choose Folder…</button></div>
+</form></dialog>
 <dialog id="videodlg"><form method="dialog" onsubmit="return false">
   <div class="clipstage"><video id="vplayer" controls playsinline></video></div>
   <div class="vform">
@@ -676,7 +681,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let onIdeas = false, ideaList = null, ideaSheet = '', ideaStatuses = [], ideaFilter = '', openIdea = null;
+let onIdeas = false, ideaList = null, ideaStatuses = [], ideaFilter = '', openIdea = null;
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -752,7 +757,7 @@ function drawLibrary() {
     return `<button class="nav ${k === here && !onClips && !onVideos && !onIdeas ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
   }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>
     <button class="nav ${onVideos ? 'on' : ''}" data-nav="videos" title="Finished videos, their captions, and what's been posted">${icon('play')}Videos${waiting ? `<small class="num">${waiting}</small>` : ''}</button>
-    <button class="nav ${onIdeas ? 'on' : ''}" data-nav="ideas" title="Video ideas, from your Linderball Video Ideas sheet">${icon('bulb')}Ideas</button>`;
+    <button class="nav ${onIdeas ? 'on' : ''}" data-nav="ideas" title="Video ideas, from the Ideas folder">${icon('bulb')}Ideas</button>`;
   if ($('#library').hidden) return;
   $('#cards').hidden = onClips || onVideos || onIdeas;
   $('#ideaview').hidden = !onIdeas;
@@ -771,7 +776,7 @@ function drawLibrary() {
   };
   const cards = list => list.map(p => `
     <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" ${cardLink(p)} data-name="${esc(p.name)}">
-      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>${sortBtn(clips.find(c => c.project === p.name)?.folder)}` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete: footage to the Trash (drag it back into ~/NIP/library to undo), clips out of the library" aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
+      <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>${sortBtn(clips.find(c => c.project === p.name)?.folder)}` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete this footage and its clips. Google Drive keeps them in its trash for 30 days." aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${p.stage === 'completed' ? `${mins(p.kept)} kept` : `${mins(p.filmed)} filmed`}${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${p.unsaved ? ' · Changes not saved' : ''}</small>
       <span class="tiers num"><i style="--c:var(--green)" title="Kept clips">${p.tiers.keep}</i>${p.stage === 'completed' ? '' : `<i style="--c:#fff" title="Clips not marked yet">${p.tiers.unmarked}</i><i style="--c:var(--red)" title="Cut clips">${p.tiers.cut}</i>`}</span>
@@ -822,20 +827,20 @@ function drawVideos(words) {
       <div class="vcopy">${v.captions.instagram ? `<button class="btn" data-copy="instagram">Copy Insta</button><button class="btn" data-copy="tiktok">Copy TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
     </a>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${icon('play')}<b>Nothing in ${vidShelf}</b>${vidShelf === 'Unposted' ? 'Press Add Finished Video, or put a video in the Unposted folder on Drive.' : ''}</div>`;
 }
-// ---------- video ideas: the Google Sheet is the source of truth, read each time the tab opens ----------
+// ---------- video ideas: a file each in the Ideas folder, read each time the tab opens ----------
 async function loadIdeas() {
-  try { ({ideas: ideaList, sheet: ideaSheet, statuses: ideaStatuses} = await api('/api/ideas')); } catch (e) { ideaList = ideaList || []; status(e.message, true); }
+  try { ({ideas: ideaList, statuses: ideaStatuses} = await api('/api/ideas')); } catch (e) { ideaList = ideaList || []; status(e.message, true); }
   drawLibrary();
 }
 const videoByName = name => vids.find(v => v.shelf !== 'Drafts' && v.id.split('/')[1] === name);  // a video's folder name is its link; drafts are renamed when saved, so they can't be linked
 function drawIdeas(words) {
   $('#title').textContent = 'Ideas';
-  if (!ideaList) { $('#subtitle').textContent = ''; $('#ifilters').innerHTML = ''; $('#ideacards').innerHTML = `<div class="empty">${icon('bulb')}<b>Loading Ideas…</b>From your Google Sheet.</div>`; return; }
+  if (!ideaList) { $('#subtitle').textContent = ''; $('#ifilters').innerHTML = ''; $('#ideacards').innerHTML = `<div class="empty">${icon('bulb')}<b>Loading Ideas…</b>From your Ideas folder.</div>`; return; }
   const match = i => words.every(w => [i.id, i.idea, i.notes, ...i.bundles, ...i.videos].join(' ').toLowerCase().includes(w));
   const shown = ideaList.filter(i => (!ideaFilter || i.status === ideaFilter) && match(i)), count = st => ideaList.filter(i => i.status === st).length;
   $('#subtitle').textContent = plural(shown.length, 'idea');
   $('#ifilters').innerHTML = `<div class="frow">${['', ...ideaStatuses].map(st => `<button class="chip ${st === ideaFilter ? 'on' : ''}" data-ifilter="${esc(st)}">${st === ideaFilter ? icon('check') : ''}${esc(st || 'All')} <small class="num">${st ? count(st) : ideaList.length}</small></button>`).join('')}
-    <span class="fend">${ideaSheet ? `<a class="chip" href="${esc(ideaSheet)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="Open the sheet in Google Sheets">Sheet</a>` : ''}<button class="btn default" style="height:32px;border-radius:16px" data-iact="new">New Idea</button></span></div>`;
+    <span class="fend"><button class="btn default" style="height:32px;border-radius:16px" data-iact="new">New Idea</button></span></div>`;
   const chips = i => {
     const out = [];
     if (/^https?:\/\//.test(i.link)) out.push(`<a class="chip" href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${icon('share')}Reference</a>`);
@@ -850,7 +855,7 @@ function drawIdeas(words) {
       <div class="main-col"><div class="title-line"><b>${esc(i.idea)}</b><small class="sub num">${esc(i.id)}</small></div>${i.notes ? `<span class="sub">${esc(i.notes)}</span>` : ''}${chips(i)}</div>
       <select data-istatus aria-label="Status of ${esc(i.idea)}">${ideaStatuses.map(st => `<option ${st === i.status ? 'selected' : ''}>${esc(st)}</option>`).join('')}</select>
       <button class="icon-btn" data-iedit title="Edit and link footage or videos" aria-label="Edit ${esc(i.idea)}">${icon('pencil')}</button>
-    </div>`).join('') : `<div class="empty">${icon('bulb')}<b>${ideaList.length ? 'No Matching Ideas' : 'No Ideas Yet'}</b>${ideaList.length ? '' : 'Press New Idea, or add a row to the sheet.'}</div>`;
+    </div>`).join('') : `<div class="empty">${icon('bulb')}<b>${ideaList.length ? 'No Matching Ideas' : 'No Ideas Yet'}</b>${ideaList.length ? '' : 'Press New Idea, or ask Claude to add one.'}</div>`;
 }
 async function saveIdea(id, fields) {
   await api(id ? '/api/ideas/update' : '/api/ideas/add', {id, ...fields});
@@ -872,10 +877,10 @@ function editIdea(i) {  // i is null for a new idea
 $('#ideadlg').onclose = () => {
   if ($('#ideadlg').returnValue !== 'ok') return;
   const ticked = sel => [...document.querySelectorAll(`${sel} input:checked`)].map(c => c.value);
-  run($('#ideadlg'), 'Saving to the sheet…', async () => {
+  run($('#ideadlg'), 'Saving…', async () => {
     await saveIdea(openIdea?.id, {idea: $('#ititle').value, notes: $('#inotes').value, link: $('#ilink').value, status: $('#istatus').value,
       bundles: ticked('#ibundles'), videos: ticked('#ivideos')});
-    status('Saved to the sheet');
+    status('Saved');
   });
 };
 $('#ideaview').onclick = e => {
@@ -888,7 +893,7 @@ $('#ideaview').onclick = e => {
 $('#ideaview').onchange = e => {
   const row = e.target.closest('[data-idea]');
   if (row && e.target.matches('[data-istatus]'))
-    run(e.target, 'Saving to the sheet…', async () => { await saveIdea(row.dataset.idea, {status: e.target.value}); status(`Marked ${e.target.value}`); });
+    run(e.target, 'Saving…', async () => { await saveIdea(row.dataset.idea, {status: e.target.value}); status(`Marked ${e.target.value}`); });
 };
 const copyText = async (text, name) => { await navigator.clipboard.writeText(text); status(`Copied the ${name} caption`); };
 $('#videoview').onclick = e => {
@@ -1244,7 +1249,7 @@ $('#cards').onclick = e => {
   }
   const p = projects.find(x => x.name === b.closest('[data-name]').dataset.name), name = p.description || p.name, n = clips.filter(c => c.project === p.name).length;
   if (n && !sure(name, n)) return;
-  run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status(`Moved “${name}” to the Trash${n ? ' and deleted its clips from the library' : ''}; drag it back into ~/NIP/library to undo`); });
+  run(b, 'Deleting…', async () => { await api('/api/clear/' + enc(p.name), {}); await loadLibrary(); status(`Deleted “${name}”${n ? ' and its clips' : ''}`); });
 };
 let dragged = null, bundling = [];  // drag a project onto another to bundle them into one
 $('#cards').ondragstart = e => { dragged = e.target.closest('[data-name]')?.dataset.name; };
@@ -2096,7 +2101,7 @@ async function nipDo(a, undo) {  // each goes through the same checked routes as
   }
   if (a.action === 'delete') {
     const n = clips.filter(c => c.project === a.project).length;
-    if (!confirm(`NIP wants to delete “${titleOf(a.project)}”${n ? ` and its ${plural(n, 'clip')} from the library` : ''}. Its footage goes to the Trash. Delete it?`)) return 'You kept it';
+    if (!confirm(`NIP wants to delete “${titleOf(a.project)}”${n ? ` and its ${plural(n, 'clip')} from the library` : ''}. Drive keeps it in its trash for 30 days. Delete it?`)) return 'You kept it';
     await api('/api/clear/' + enc(a.project), {});
     return `Deleted ${titleOf(a.project)}`;
   }
@@ -2203,6 +2208,7 @@ async function poll() {
   try {
     const s = await api('/api/status');
     document.body.classList.toggle('busy', !!(s.transcribing || s.fetching));
+    if (s.setup && !$('#setupdlg').open) $('#setupdlg').showModal();
     $('#inbox').innerHTML = s.transcribing
       ? `<span class="spin"></span><span><b>Transcribing</b> ${plural(s.transcribing, 'video')}…</span>`
       : s.fetching ? `<span class="spin"></span><span><b>Downloading</b> from Drive…</span>` : `${icon('tray')}<span>Inbox empty</span>`;
@@ -2218,6 +2224,14 @@ async function poll() {
     lastProcessing = s.transcribing;
   } catch (e) { $('#inbox').textContent = 'Footage Flow isn’t running'; }
 }
+$('#setupgo').onclick = e => run(e.currentTarget, 'Choose the folder in the Finder window…', async () => {
+  if (!(await api('/api/workspace', {})).chosen) return status('No folder chosen');
+  status('Opening your folder…', false, true);
+  for (;;) {  // the app restarts from the new folder
+    await new Promise(r => setTimeout(r, 1000));
+    try { if (!(await api('/api/status')).setup) return location.reload(); } catch {}
+  }
+});
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips', stage = location.hash.match(/^#\/s\/(\w+)$/)?.[1];
   if (STAGES[stage]) stageFilter = stage;

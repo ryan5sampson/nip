@@ -1,77 +1,58 @@
-"""Video ideas, kept in a Google Sheet. The sheet is the source of truth: it's read fresh each time, and only changed cells are written."""
+"""Video ideas, a small file each in the workspace's Ideas folder. Footage Flow and Claude (through its Drive connector) both work on the same files."""
 import re
 import threading
 from datetime import date
-from pathlib import Path
 
 from nip import cli
 
-SHEET = cli.SETTINGS.get("ideas_sheet", "1XgWse8mgKu2nalas3a64xjxXudVN_hXGRIkGKbsBjeY")
-KEY = Path(cli.SETTINGS.get("google_key") or cli.HOME / "google-key.json").expanduser()
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET}/edit"
-API = f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET}/values"
+FOLDER = cli.WORK / "Ideas"
 STATUSES = ("Idea", "In progress", "Complete")
-COLUMNS = {"id": "ID", "idea": "Idea", "notes": "Notes", "link": "Reference link", "status": "Status",
-           "bundles": "Footage bundles", "videos": "Videos", "added": "Date added"}
-LISTS = ("bundles", "videos")  # one name per line in the cell: a bundle's project folder, a video's folder in Videos
+TEXT = ("idea", "notes", "link")
+LISTS = ("bundles", "videos")  # a bundle's project folder, a video's folder in Videos
 WRITE = threading.Lock()  # two adds at once would both take the next ID
-_session = []
+HOW = """To add a video idea, create a new file in this folder. Footage Flow shows it the next time Ideas opens.
+
+Give it any name ending in .json, and the content type application/json, with content like:
+{"idea": "What the video is", "notes": "Optional details", "link": "Optional reference link", "status": "Idea"}
+
+Status is Idea, In progress or Complete. Leave out anything else.
+
+To change an idea, create a new file with the same "id" as the old one, containing all its fields. The newest file wins.
+"""
 
 
-def session():
-    if not _session:
-        if not KEY.exists():
-            raise ValueError(f"Video ideas need a Google key file at {KEY}. The README's Video ideas section says how to make one.")
-        from google.auth.transport.requests import AuthorizedSession  # here, not at the top: the rest of the app works without it
-        from google.oauth2 import service_account
-        _session.append(AuthorizedSession(service_account.Credentials.from_service_account_file(
-            str(KEY), scopes=["https://www.googleapis.com/auth/spreadsheets"])))
-    return _session[0]
-
-
-def call(method, url, **kw):
-    import requests
-    from google.auth.exceptions import RefreshError, TransportError
-    s = session()
-    try:
-        r = s.request(method, url, timeout=20, **kw)
-    except RefreshError:
-        raise ValueError(f"Google didn’t accept the key file at {KEY}. Make a new key for the service account and save it there.")
-    except (requests.RequestException, TransportError):
-        raise ValueError("Google Sheets isn’t answering. Check the internet connection and try again.")
-    if r.status_code in (403, 404):
-        raise ValueError(f"Footage Flow can’t open the ideas sheet. Share it with {s.credentials.service_account_email} as an editor.")
-    if not r.ok:
-        raise ValueError(f"Google Sheets said: {r.json().get('error', {}).get('message', r.reason)}")
-    return r.json()
-
-
-def parse(rows):
-    """Sheet rows to ideas, matched by header so columns can be moved around in the sheet."""
-    header = [h.strip() for h in rows[0]] if rows else []
-    missing = [c for c in COLUMNS.values() if c not in header]
-    if missing:
-        raise ValueError(f"The ideas sheet's first row needs these columns: {', '.join(missing)}")
-    col = {k: header.index(c) for k, c in COLUMNS.items()}
-    ideas = []
-    for n, row in enumerate(rows[1:], start=2):
-        cell = {k: (row[i] if i < len(row) else "").strip() for k, i in col.items()}
-        if cell["id"] or cell["idea"]:
-            ideas.append({**cell, "row": n, "status": cell["status"] or "Idea",
-                          **{k: [x.strip() for x in cell[k].splitlines() if x.strip()] for k in LISTS}})
-    return ideas, col, len(header)
+def files():
+    """Each idea and the file holding it. Claude can only add files, so a newer file with the same id replaces the old one."""
+    FOLDER.mkdir(exist_ok=True)
+    if not (FOLDER / "How to add ideas.txt").exists():
+        (FOLDER / "How to add ideas.txt").write_text(HOW)
+    found = {}
+    for f in sorted(FOLDER.glob("[!.]*.json"), key=lambda f: f.stat().st_mtime):
+        try:
+            i = cli.load(f)
+            title = str(i["idea"]).strip()
+        except (OSError, ValueError, KeyError, TypeError) as e:  # one file Drive hasn't finished syncing mustn't hide the rest
+            print(f"ideas: skipped {f.name}: {e}")
+            continue
+        key = str(i.get("id") or f.stem)
+        if key in found:
+            try:
+                found[key][1].unlink()
+            except OSError as e:
+                print(f"ideas: couldn't remove {found[key][1].name}: {e}")
+        found[key] = ({**i, "id": key, "idea": title, "notes": str(i.get("notes", "")), "link": str(i.get("link", "")), "added": str(i.get("added", "")),
+                       "status": i.get("status") if i.get("status") in STATUSES else "Idea",
+                       **{k: [str(x) for x in i.get(k) or []] for k in LISTS}}, f)
+    return found
 
 
 def read():
-    return parse(call("GET", f"{API}/A1:Z").get("values", []))  # no tab name: the first tab, whatever it's called
+    return sorted((i for i, _ in files().values()), key=lambda i: i["id"])
 
 
 def clean(body, new=False):
-    """What the page sent, checked, as the cell values to write."""
-    out = {}
-    for k in ("idea", "notes", "link"):
-        if k in body:
-            out[k] = str(body[k]).strip()[:2000]
+    """What the page sent, checked."""
+    out = {k: str(body[k]).strip()[:2000] for k in TEXT if k in body}
     if "status" in body:
         if body["status"] not in STATUSES:
             raise ValueError(f"status must be one of {', '.join(STATUSES)}")
@@ -80,38 +61,26 @@ def clean(body, new=False):
         if k in body:
             if not isinstance(body[k], list):
                 raise ValueError(f"{k} must be a list")
-            out[k] = "\n".join(dict.fromkeys(str(x).strip() for x in body[k] if str(x).strip()))
+            out[k] = list(dict.fromkeys(str(x).strip() for x in body[k] if str(x).strip()))
     if (new or "idea" in out) and not out.get("idea"):
         raise ValueError("an idea needs a title")
     return out
 
 
-def letter(i):
-    return chr(ord("A") + i)  # the sheet is read as A:Z, so a column is one letter
-
-
 def add(body):
     fields = clean(body, new=True)
     with WRITE:
-        ideas, col, width = read()
-        n = max((int(m[1]) for i in ideas if (m := re.fullmatch(r"VI-(\d+)", i["id"]))), default=0) + 1
-        fields = {"status": "Idea", **fields, "id": f"VI-{n:03d}", "added": str(date.today())}
-        row = [""] * width
-        for k, v in fields.items():
-            row[col[k]] = v
-        # RAW: an idea starting with "=" stays text, not a formula
-        call("POST", f"{API}/A1:Z:append", params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"}, json={"values": [row]})
-    return fields["id"]
+        n = max((int(m[1]) for k in files() if (m := re.fullmatch(r"VI-(\d+)", k))), default=0) + 1
+        idea = {"status": "Idea", **fields, "id": f"VI-{n:03d}", "added": str(date.today())}
+        cli.save(FOLDER / f"{idea['id']} {cli.file_name(idea['idea'])[:60]}.json", idea)
+    return idea["id"]
 
 
 def update(idea_id, body):
     fields = clean(body)
     with WRITE:
-        ideas, col, _ = read()  # find it by ID now: the sheet may have been sorted since the page loaded
-        idea = next((i for i in ideas if i["id"] == idea_id), None)
-        if not idea:
-            raise ValueError("That idea isn’t in the sheet anymore. It may have been deleted there.")
-        if fields:
-            call("POST", f"{API}:batchUpdate", json={"valueInputOption": "RAW", "data": [
-                {"range": f"{letter(col[k])}{idea['row']}", "values": [[v]]} for k, v in fields.items()]})
+        found = files().get(idea_id)
+        if not found:
+            raise ValueError("That idea isn’t there anymore. It may have been deleted.")
+        cli.save(found[1], {**found[0], **fields})
     return idea_id

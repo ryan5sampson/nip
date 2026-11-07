@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -240,7 +241,7 @@ class Commands(unittest.TestCase):
     def test_vocabulary_fixes_spellings(self):
         import nip.cli as cli
         with tempfile.TemporaryDirectory() as d, mock.patch.object(cli, "VOCABULARY", Path(d) / "v.txt"):
-            self.assertIn("Bambu Lab", cli.vocabulary()[0])  # the starting list, before there's a file
+            self.assertEqual(cli.vocabulary()[0], [])  # nothing of anyone's until they add it
             cli.VOCABULARY.write_text("# a comment\nLinderball\nLinderball.com\nBambu Lab\nNIP\n\nbamboo lab = Bambu Lab # the printers\nbamboo = Bambu\nlinear ball = Linderball\n")
             written, spellings = cli.vocabulary()
         self.assertEqual(written, ["Linderball", "Linderball.com", "Bambu Lab", "NIP", "Bambu"])
@@ -608,7 +609,7 @@ class Export(unittest.TestCase):
         import nip.cli as cli
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            with mock.patch.multiple(cli, INBOX=d / "inbox", LIBRARY=d / "lib", EXPORTS=d / "out", UNREADABLE=d / "bad"):
+            with mock.patch.multiple(cli, INBOX=d / "inbox", LIBRARY=d / "lib", STAGING=d / "stage", EXPORTS=d / "out", UNREADABLE=d / "bad"):
                 for p in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
                     p.mkdir()
                 for name in ("a", "b"):
@@ -803,7 +804,7 @@ class Robustness(unittest.TestCase):
         from nip import brief
         with tempfile.TemporaryDirectory() as t:
             d = Path(t)
-            with mock.patch.multiple(cli, HOME=d, FINAL=d / "drive" / "Library", VIDEOS=d / "drive" / "Videos", DRAFTS=d / "drafts", STYLE=d / "drive" / "Style.md", CAPTION_EDITS=d / "drive" / "Edits.json"):
+            with mock.patch.multiple(cli, HOME=d, FINAL=d / "drive" / "Library", VIDEOS=d / "drive" / "Videos", DRAFTS=d / "drive" / "Videos" / "Drafts", STYLE=d / "drive" / "Style.md", CAPTION_EDITS=d / "drive" / "Edits.json"):
                 (d / "drive").mkdir()
                 cli.STYLE.write_text("Sound like us.")
                 cut = d / "capcut.mp4"
@@ -851,6 +852,24 @@ class Robustness(unittest.TestCase):
                 self.assertEqual([v["title"] for v in cli.videos()], ["Big toss"])
                 with mock.patch.object(brief, "claude_json", return_value={"instagram": "", "tiktok": "x"}), self.assertRaises(RuntimeError):
                     brief.captions("t", "s", [])
+
+    def test_one_computer_never_touches_another_computers_footage(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, LIBRARY=d / "shared" / "Projects", STAGING=d / "stage", INBOX=d / "inbox"):
+                theirs = cli.LIBRARY / "theirs" / "raw"  # another computer's, half copied in
+                theirs.mkdir(parents=True)
+                (theirs / "v.mov").write_bytes(b"x")
+                lost = cli.new_project("lost")  # interrupted here: goes back to the inbox
+                (lost / "raw" / "w.mov").write_bytes(b"y")
+                done = cli.new_project("done")  # transcribed here, but never reached the shared folder
+                (done / "raw" / "z.mov").write_bytes(b"z")
+                cli.save(done / "project.json", {"description": "A toss", "clips": [], "tags": []})
+                cli.rescue()
+                self.assertTrue((theirs / "v.mov").exists())
+                self.assertTrue((cli.INBOX / "w.mov").exists())
+                self.assertTrue((cli.LIBRARY / "done_a-toss" / "raw" / "z.mov").exists())
+                self.assertEqual(list(cli.STAGING.iterdir()), [])
 
     def test_a_saved_bundle_sorts_without_cutting_again(self):
         import urllib.error
@@ -927,7 +946,7 @@ class Robustness(unittest.TestCase):
     def serve(self, d):
         import threading
         import nip.view as view
-        patch = mock.patch.multiple(cli, LIBRARY=d / "lib", INBOX=d / "inbox", FINAL=d / "final", HANDOFFS=d / "handoffs", INDEX=d / "index.json", TRASH=d / "bin", HOME=d)
+        patch = mock.patch.multiple(cli, LIBRARY=d / "lib", STAGING=d / "stage", INBOX=d / "inbox", FINAL=d / "final", HANDOFFS=d / "handoffs", INDEX=d / "index.json", TRASH=d / "bin", HOME=d)
         patch.start()
         self.addCleanup(patch.stop)
         server = view.ThreadingHTTPServer(("127.0.0.1", 0), view.Handler)
@@ -994,20 +1013,21 @@ class Robustness(unittest.TestCase):
     def test_saves_are_whole_and_lost_footage_returns_to_the_inbox(self):
         with tempfile.TemporaryDirectory() as t:
             d = Path(t)
-            with mock.patch.multiple(cli, LIBRARY=d / "lib", INBOX=d / "inbox"):
+            with mock.patch.multiple(cli, LIBRARY=d / "lib", STAGING=d / "stage", INBOX=d / "inbox"):
                 f = d / "a.json"
                 cli.save(f, {"a": 1})
                 with mock.patch("os.replace", side_effect=OSError("disk full")), self.assertRaises(OSError):
                     cli.save(f, {"a": 2})
                 self.assertEqual(cli.load(f), {"a": 1})  # a failed save leaves the last good one
-                (d / "lib" / "stopped" / "raw").mkdir(parents=True)
-                (d / "lib" / "stopped" / "raw" / "v.MOV").write_bytes(b"x")
-                (d / "lib" / "stopped" / "v.nip.json").write_text("{}")
+                (d / "stage" / "stopped" / "raw").mkdir(parents=True)
+                (d / "stage" / "stopped" / "raw" / "v.MOV").write_bytes(b"x")
+                (d / "stage" / "stopped" / "v.nip.json").write_text("{}")
                 (d / "lib" / "fine" / "raw").mkdir(parents=True)
                 (d / "lib" / "fine" / "project.json").write_text("{}")
                 cli.rescue()
                 self.assertTrue((d / "inbox" / "v.MOV").exists())
                 self.assertEqual([p.name for p in (d / "lib").iterdir()], ["fine"])
+                self.assertEqual(list((d / "stage").iterdir()), [])
 
     def test_nip_on_the_home_screen_is_checked(self):
         projects = [{"name": "p", "description": "Printers", "stage": "completed", "filmed": 60, "kept": 30, "tags": ["farm"], "said": "my print farm"}]
@@ -1063,7 +1083,7 @@ class Robustness(unittest.TestCase):
     def test_a_failed_swap_keeps_the_old_clips(self):
         with tempfile.TemporaryDirectory() as t:
             d = Path(t)
-            with mock.patch.multiple(cli, LIBRARY=d / "lib", FINAL=d / "final", HOME=d):
+            with mock.patch.multiple(cli, LIBRARY=d / "lib", STAGING=d / "stage", FINAL=d / "final", HOME=d):
                 proj = self.project(d)
                 c = cli.load(proj / "v.nip.json")
                 cli.add_cut(c, 0.0, 4.0, "my_keeps")
@@ -1103,51 +1123,52 @@ class Page(unittest.TestCase):
 
 
 class Ideas(unittest.TestCase):
-    """The sheet logic against a fake sheet: the Google calls themselves are only checked on the Mac."""
-    HEAD = ["ID", "Idea", "Notes", "Reference link", "Status", "Footage bundles", "Videos", "Date added"]
+    """Ideas are files, so Footage Flow and Claude's Drive connector work on the same ones."""
+    def folder(self, d):
+        patch = mock.patch.object(ideas, "FOLDER", Path(d))
+        patch.start()
+        self.addCleanup(patch.stop)
 
-    def sheet(self, rows):
-        calls = []
-
-        def call(method, url, **kw):
-            calls.append((method, url, kw))
-            return {"values": [self.HEAD, *rows]} if method == "GET" else {}
-        return mock.patch.object(ideas, "call", call), calls
-
-    def test_read_matches_columns_by_header_and_splits_links(self):
-        rows = [["Status", "ID", "Idea", "Notes", "Reference link", "Footage bundles", "Videos", "Date added"]]
-        got, _, _ = ideas.parse(rows + [["", "VI-001", "Name a throw"], ["Complete", "VI-002", "x", "", "", "a\nb", "Vid (2026-11-01)"], []])
-        self.assertEqual([(i["id"], i["status"], i["row"], i["bundles"], i["videos"]) for i in got],
-                         [("VI-001", "Idea", 2, [], []), ("VI-002", "Complete", 3, ["a", "b"], ["Vid (2026-11-01)"])])
-        with self.assertRaisesRegex(ValueError, "Videos"):
-            ideas.parse([self.HEAD[:6]])
-
-    def test_add_takes_the_next_id_and_writes_raw(self):
-        patch, calls = self.sheet([["VI-002", "a"], ["VI-009", "b"], ["", "no id"]])
-        with patch:
-            new = ideas.add({"idea": "=SUM(1)", "bundles": ["p1", "p1", " "]})
-        self.assertEqual(new, "VI-010")
-        method, url, kw = calls[-1]
-        self.assertTrue(url.endswith(":append"))
-        self.assertEqual(kw["params"]["valueInputOption"], "RAW")
-        row = kw["json"]["values"][0]
-        self.assertEqual((row[0], row[1], row[4], row[5]), ("VI-010", "=SUM(1)", "Idea", "p1"))
-        self.assertRegex(row[7], r"^\d{4}-\d\d-\d\d$")
-
-    def test_update_finds_the_row_by_id_and_writes_only_changed_cells(self):
-        patch, calls = self.sheet([["VI-001", "a"], ["VI-002", "b"]])
-        with patch:
-            ideas.update("VI-002", {"status": "In progress", "videos": ["V1", "V2"]})
-            with self.assertRaisesRegex(ValueError, "isn’t in the sheet"):
+    def test_add_and_update_write_the_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.folder(d)
+            cli.save(Path(d) / "VI-009 b.json", {"id": "VI-009", "idea": "b"})
+            new = ideas.add({"idea": "A/ toss", "bundles": ["p1", "p1", " "]})
+            self.assertEqual(new, "VI-010")
+            ideas.update(new, {"status": "In progress", "videos": ["V1"]})
+            got = {i["id"]: i for i in ideas.read()}[new]
+            self.assertEqual((got["idea"], got["status"], got["bundles"], got["videos"]), ("A/ toss", "In progress", ["p1"], ["V1"]))
+            self.assertTrue((Path(d) / "VI-010 A toss.json").exists())
+            self.assertTrue((Path(d) / "How to add ideas.txt").exists())  # what Claude reads to know the format
+            with self.assertRaisesRegex(ValueError, "isn’t there"):
                 ideas.update("VI-404", {"status": "Idea"})
-        data = calls[1][2]["json"]["data"]
-        self.assertEqual(sorted((d["range"], d["values"][0][0]) for d in data), [("E3", "In progress"), ("G3", "V1\nV2")])
+
+    def test_what_claude_adds_shows_up_and_the_newest_copy_wins(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.folder(d)
+            f = Path(d)
+            (f / "bare.json").write_text('{"idea": "From my phone"}')  # all Claude has to write
+            (f / "half.json").write_text('{"idea": ')  # still syncing
+            (f / "no title.json").write_text('{"notes": "x"}')
+            (f / "list.json").write_text('[1]')
+            (f / "Doc made by mistake.gdoc").write_text("{}")
+            got = ideas.read()
+            self.assertEqual([(i["id"], i["idea"], i["status"], i["bundles"]) for i in got], [("bare", "From my phone", "Idea", [])])
+            ideas.update("bare", {"status": "Complete"})
+            self.assertEqual(ideas.read()[0]["status"], "Complete")
+            old, new = f / "VI-001 old.json", f / "edited by Claude.json"
+            cli.save(old, {"id": "VI-001", "idea": "Old wording"})
+            cli.save(new, {"id": "VI-001", "idea": "New wording"})
+            os.utime(old, (1, 1))
+            self.assertEqual([i["idea"] for i in ideas.read() if i["id"] == "VI-001"], ["New wording"])
+            self.assertFalse(old.exists())
+            self.assertEqual(ideas.add({"idea": "next"}), "VI-002")
 
     def test_bad_input_is_refused(self):
-        for body in ({"status": "Done"}, {"idea": "  "}, {"bundles": "p1"}):
+        for body in ({"status": "Done"}, {"bundles": "x"}, {"idea": "  "}):
             with self.assertRaises(ValueError):
                 ideas.clean(body)
-        with self.assertRaisesRegex(ValueError, "title"):
+        with self.assertRaises(ValueError):
             ideas.clean({"notes": "x"}, new=True)
 
 

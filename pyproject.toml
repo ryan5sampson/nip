@@ -3,7 +3,7 @@ name = "nip"
 version = "0.1.0"
 description = "Voice-directed footage prep: transcribe, find spoken takes and commands, export clean clips."
 requires-python = ">=3.11"
-dependencies = ["mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'", "anthropic", "google-auth[requests]"]
+dependencies = ["mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'", "anthropic"]
 
 [project.scripts]
 nip = "nip.cli:run"

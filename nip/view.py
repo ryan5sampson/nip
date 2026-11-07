@@ -7,6 +7,7 @@ import queue
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -25,6 +26,7 @@ SCAN = {"thread": None}  # the library scan, one at a time
 NO_DRIVE = "Google Drive isn’t answering, so nothing was deleted. Try again in a moment."
 SAVES, JOBS = [], queue.Queue()  # footage being completed, newest last, kept until dismissed; and what's left to do, one at a time
 DOWNLOADS = Path.home() / "Downloads"
+PICK_FOLDER = 'POSIX path of (choose folder with prompt "Choose your shared Footage Flow folder in Google Drive")'
 PICK = """set picked to choose file of type {"public.movie"} with prompt "Add videos to Footage Flow" with multiple selections allowed
 set out to ""
 repeat with f in picked
@@ -384,13 +386,15 @@ class Handler(BaseHTTPRequestHandler):
             if p == [""]:
                 self.send_file(PAGE, "text/html; charset=utf-8")
             elif p == ["api", "status"]:
-                self.send_json({"inbox": str(cli.INBOX), "transcribing": STATE["transcribing"], "fetching": (cli.HOME / ".fetching").exists(),
+                self.send_json({"inbox": str(cli.DRIVE_INBOX or cli.INBOX), "transcribing": STATE["transcribing"], "fetching": (cli.HOME / ".fetching").exists(), "setup": not cli.CONFIGURED,
                                 "unreadable": sum(1 for f in cli.UNREADABLE.iterdir() if not f.name.startswith(".")) if cli.UNREADABLE.exists() else 0,
                                 "claude": "plan" if shutil.which("claude") else
                                 "api" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else ""})
             elif p == ["api", "saves"]:
                 self.send_json(SAVES)
             elif p == ["api", "projects"]:
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering. Check that it’s running on this computer, then try again.")
                 self.send_json(cards())
             elif len(p) == 3 and p[:2] == ["api", "project"]:
                 self.send_json(project_data(self.project(p[2])))
@@ -403,7 +407,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Google Drive isn’t answering, so your videos can’t be listed. Try again in a moment.")
                 self.send_json(cli.videos())
             elif p == ["api", "ideas"]:
-                self.send_json({"ideas": ideas.read()[0], "sheet": ideas.URL, "statuses": ideas.STATUSES})
+                self.send_json({"ideas": ideas.read(), "statuses": ideas.STATUSES})
             elif len(p) == 3 and p[0] in ("video", "videothumb"):
                 f = cli.video_path(f"{p[1]}/{p[2]}")
                 self.send_file(video_thumb(f), "image/jpeg") if p[0] == "videothumb" else self.send_file(cli.video_file(f), "video/mp4")
@@ -649,7 +653,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not library_answers():
                     raise ValueError(NO_DRIVE)
                 with LOCK:
-                    self.send_json({"trash": str(cli.clear(proj))})
+                    cli.clear(proj)
+                self.send_json({})
             elif p == ["api", "sort-bundle"]:  # a bundle already in the library: only its labels change, no clip is cut or copied
                 sort = clean_sort(body.get("sort") or "")
                 if any(j["state"] in ("waiting", "saving") for j in SAVES):  # a save moves bundle folders
@@ -736,6 +741,14 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(NO_DRIVE)
                 cli.delete_bundle(Path(str(body.get("folder"))).name)
                 self.send_json({})
+            elif p == ["api", "workspace"]:  # first run: point this computer at the shared folder, then start over from it
+                r = subprocess.run(["osascript", "-e", PICK_FOLDER], capture_output=True, text=True)  # Cancel exits 1 with nothing picked
+                if not r.stdout.strip():
+                    return self.send_json({"chosen": False})
+                cli.HOME.mkdir(parents=True, exist_ok=True)
+                cli.save(cli.HOME / "settings.json", {**cli.SETTINGS, "workspace": r.stdout.strip()})
+                self.send_json({"chosen": True})
+                threading.Timer(.3, lambda: os.execve(sys.executable, sys.orig_argv, {**os.environ, "NIP_RESTARTED": "1"})).start()
             elif p == ["api", "bundle"]:  # several projects become one, named by the user
                 names = body.get("projects")
                 if not isinstance(names, list) or not isinstance(body.get("name"), str):
@@ -750,8 +763,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({})
             elif p == ["api", "open"]:  # show a folder in Finder
                 if body.get("what") == "inbox":
-                    cli.INBOX.mkdir(parents=True, exist_ok=True)
-                    target = cli.INBOX
+                    target = cli.DRIVE_INBOX or cli.INBOX
+                    target.mkdir(parents=True, exist_ok=True)
                 elif body.get("what") == "vocabulary":
                     if not cli.VOCABULARY.exists():
                         cli.VOCABULARY.write_text(cli.VOCABULARY_START)
@@ -817,15 +830,18 @@ def watch_inbox():
 
 
 def serve(port=8765):
-    for d in (cli.INBOX, cli.LIBRARY, cli.EXPORTS):
-        d.mkdir(parents=True, exist_ok=True)
+    cli.INBOX.mkdir(parents=True, exist_ok=True)
+    if cli.WORK.is_dir():  # with Drive not running, making it would only confuse it
+        for d in (cli.LIBRARY, cli.EXPORTS):
+            d.mkdir(exist_ok=True)
     cli.rescue()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
     threading.Thread(target=watch_inbox, daemon=True).start()
     threading.Thread(target=watch_drive, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"Footage Flow at {url}  (watching {cli.INBOX}; Ctrl+C to stop)")
-    webbrowser.open(url)
+    if "NIP_RESTARTED" not in os.environ:  # the page is already open, waiting for this
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

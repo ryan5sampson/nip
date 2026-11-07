@@ -5,8 +5,9 @@ Voice-directed footage prep for an Apple Silicon Mac. The app is Footage Flow; N
 - `nip/commands.py`: transcript words → edit decisions (takes, cuts, markers, tags). Pure, no I/O. All voice-command rules live here.
 - `nip/cli.py`: inbox → projects → transcription (mlx-whisper) → report → finalize (kept clips to the Drive library) → handoff (picked clips to a folder) → videos (finished videos and their captions, Drafts → Unposted → Posted).
 - `nip/view.py` + `nip/viewer.html`: the local app (`nip`): inbox, review, hand edits, the clip library. Stdlib server on 127.0.0.1.
-- `nip/ideas.py`: video ideas in the "Linderball Video Ideas" Google Sheet, the source of truth (read fresh, only changed cells written), signed in with a service account key at `~/NIP/google-key.json`.
+- `nip/ideas.py`: video ideas, a JSON file each in the workspace's `Ideas` folder, so Claude's Drive connector can add them too (it can only create files, so a newer file with the same id wins).
 - `nip/brief.py`: Claude edits from a brief, working from the transcript (through the `claude` CLI on the user's Claude plan; Anthropic SDK + `ANTHROPIC_API_KEY` as fallback).
+- The workspace (`cli.WORK`, chosen on first run, a shared Google Drive folder) holds everything that matters: projects, library, videos, ideas, style guide, vocabulary. `~/NIP` is per computer: settings, caches, and footage mid-transcribing, which is published into the workspace whole. Never treat an unfinished project in the workspace as yours: it may be another computer's.
 - Footage is never modified. Each clip has a `<clip>.nip.json` with its words, voice edit decisions, and the user's hand `overrides` (kept through reparse); video is only re-encoded on export.
 - Tests: `python3 -m unittest -v` (stdlib only; the end-to-end test needs `ffmpeg`).
 

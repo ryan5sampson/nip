@@ -14,38 +14,28 @@ from pathlib import Path
 
 from nip.commands import apply_cut_edits, apply_overrides, build_edit, clip_name, drop_loops, kept_pieces, kept_ranges, made_up, norm, respell, timeline, unmarked
 
-HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()
-INBOX = Path(os.environ.get("NIP_INBOX", HOME / "inbox")).expanduser()
-LIBRARY, EXPORTS = HOME / "library", HOME / "exports"
+HOME = Path(os.environ.get("NIP_HOME", Path.home() / "NIP")).expanduser()  # this computer's own: its settings, caches and footage mid-transcribing
 SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings.json").exists() else {}
-FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "finalized").expanduser()  # kept clips, as their own files
+CONFIGURED = bool(os.environ.get("NIP_WORK") or SETTINGS.get("workspace"))
+WORK = Path(os.environ.get("NIP_WORK") or SETTINGS.get("workspace") or HOME).expanduser()  # the shared folder: everything that matters lives here, so sharing it shares the lot
+INBOX, STAGING = HOME / "inbox", HOME / "transcribing"  # footage on this computer, on its way to the workspace
+LIBRARY, EXPORTS = WORK / "Projects", WORK / "Exports"
+FINAL = WORK / "Library"  # kept clips, as their own files
 SHELVES = ("Unused", "Used")  # the library's two folders; a bundle's folder sits in one, moved by the app or by hand in Drive
-HANDOFFS = FINAL.parent / "Handoffs"  # clips picked from the library for a video, a folder each
-DRIVE_INBOX = FINAL.parent / "Inbox" if "CloudStorage" in str(FINAL) else None  # footage added on Drive, from a phone or anywhere; beside a local library it would be ~/NIP/inbox itself
-VIDEOS, DRAFTS = FINAL.parent / "Videos", HOME / "drafts"  # finished videos, a folder each; a draft stays on this Mac until it's saved
+HANDOFFS = WORK / "Handoffs"  # clips picked from the library for a video, a folder each
+DRIVE_INBOX = WORK / "Inbox" if CONFIGURED else None  # footage added to the shared folder, from a phone or anywhere
+VIDEOS = WORK / "Videos"  # finished videos, a folder each
+DRAFTS = VIDEOS / "Drafts"
 VIDEO_SHELVES = ("Drafts", "Unposted", "Posted")
-STYLE, CAPTION_EDITS = FINAL.parent / "Caption Style.md", FINAL.parent / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
+STYLE, CAPTION_EDITS = WORK / "Caption Style.md", WORK / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
-VOCABULARY = HOME / "vocabulary.txt"
+VOCABULARY = WORK / "Vocabulary.txt"
 VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
 # A word on its own helps the transcription hear it, and fixes its spelling and capitals.
 # "what it hears = how it's spelled" fixes a mistake. Changes show as soon as you reload the page.
-
-Linderball
-Linder
-Linderball.com
-Bambu Lab
-NIP
-
-linear ball = Linderball
-linderball dot com = Linderball.com
-bamboo labs = Bambu Lab
-bamboo lab = Bambu Lab
-bamboo left = Bambu Lab
-bamboo = Bambu
 """
-UNREADABLE = HOME / "unreadable"  # inbox files ffmpeg can't read are set aside here
+UNREADABLE = WORK / "Unreadable"  # inbox files ffmpeg can't read are set aside here
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"
@@ -303,9 +293,12 @@ def fetch():
 
 
 def rescue():
-    """Footage whose transcribing was interrupted (the app quit, or Whisper crashed) has no project.json, so nothing lists it. It goes back to the inbox."""
-    for p in LIBRARY.iterdir():
-        if (p / "raw").is_dir() and not (p / "project.json").exists():
+    """Footage whose transcribing here was interrupted (the app quit, or Whisper crashed) goes back to the inbox. Only this computer's own
+    staging is looked at: a project in the shared folder with no project.json yet could be another computer's."""
+    for p in STAGING.iterdir() if STAGING.exists() else []:
+        if (p / "project.json").exists():  # transcribed, but the copy to the workspace failed
+            publish(p)
+        elif (p / "raw").is_dir():
             for v in (p / "raw").iterdir():
                 if v.suffix.lower() in VIDEO:
                     move_free(v, INBOX)
@@ -313,16 +306,30 @@ def rescue():
 
 
 def new_project(name):
-    proj = free_path(name)
+    proj = free_path(name, STAGING)
     (proj / "raw").mkdir(parents=True)
     return proj
 
 
-def free_path(name):
-    p, n = LIBRARY / name, 2
+def free_path(name, root=None):
+    root = root or LIBRARY
+    p, n = root / name, 2
     while p.exists():
-        p, n = LIBRARY / f"{name}-{n}", n + 1
+        p, n = root / f"{name}-{n}", n + 1
     return p
+
+
+def publish(proj):
+    """A transcribed project goes into the shared folder whole: built beside it and renamed in, so no other computer sees half of one."""
+    info = load(proj / "project.json")
+    dest = free_path(f"{proj.name}_{slug(info['description'])}" if info["description"] else proj.name)
+    tmp = LIBRARY.parent / ".building" / proj.name
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.parent.mkdir(exist_ok=True)
+    shutil.copytree(proj, tmp, copy_function=shutil.copyfile)  # not copy2: Drive's own file ids must not come along
+    tmp.rename(dest)
+    shutil.rmtree(proj)
+    return dest
 
 
 def process(proj, vids):
@@ -343,9 +350,7 @@ def process(proj, vids):
         info["description"] = info["description"] or clip["edit"]["description"]
         info["tags"] += clip["edit"]["tags"]
     save(proj / "project.json", info)
-    if info["description"]:
-        proj = proj.rename(free_path(f"{proj.name}_{slug(info['description'])}"))
-    report(proj)
+    report(publish(proj))
 
 
 def bundle(projs, title):
@@ -362,7 +367,8 @@ def bundle(projs, title):
         c = load(p / f"{stem}.nip.json")
         return c.get("created") or probe(p / "raw" / c["source"])[1] or c["source"]
     order = sorted((filmed(p, s), s) for p, i in zip(projs, infos) for s in i["clips"])
-    dest = new_project(f"{min(p.name[:10] for p in projs)}_{slug(title)}")
+    dest = free_path(f"{min(p.name[:10] for p in projs)}_{slug(title)}")
+    (dest / "raw").mkdir(parents=True)
     info = {"description": next((i["description"] for i in infos if i["description"]), None), "my_description": title.strip(),
             "tags": sorted({t for i in infos for t in i["tags"]}),
             "my_tags": sorted({t for i in infos for t in i.get("my_tags", i["tags"])}), "clips": [s for _, s in order],
@@ -400,11 +406,10 @@ def set_stage(proj, stage):
 
 
 def clear(proj):
-    """Move a project's footage and edits to the Trash, and delete its clips from the library; its exports stay."""
+    """Delete a project's footage and edits, and its clips from the library; its exports stay."""
     folder = load(proj / "project.json").get("library_folder") or proj.name
-    dest = move_free(proj, TRASH)
+    discard(proj, proj.name)
     delete_bundle(folder)
-    return dest
 
 
 def move_free(src, folder, name=None):
