@@ -60,12 +60,15 @@
   .rail { background: var(--sidebar); backdrop-filter: blur(30px); border-right: .5px solid var(--separator); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 10px; overflow-y: auto; }
   .rail .brand { padding-bottom: 10px; color: var(--label); }
   .rail .brand svg { width: 26px; height: 26px; }
-  #stages { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  #stages { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+  /* steps that lead into each other share a tray, with a line from one to the next */
+  .navflow { display: flex; flex-direction: column; gap: 10px; padding: 3px; border-radius: 15px; background: var(--fill); }
+  .navflow .nav + .nav::before { content: ""; position: absolute; top: -10px; left: 50%; width: 2px; height: 10px; margin-left: -1px; background: var(--tertiary); }
   .nav { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 8px 0 6px; border: none; border-radius: 12px; background: none; color: var(--secondary); font-size: 11px; font-weight: 500; }
   .nav svg { width: 20px; height: 20px; }
   .nav:hover { background: var(--fill); color: var(--label); }
   .nav.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-  .nav small { position: absolute; top: 3px; right: 7px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--fill-strong); color: var(--label); font-size: 10px; line-height: 16px; }
+  .nav small { position: absolute; top: 2px; right: 2px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--fill-strong); color: var(--label); font-size: 10px; line-height: 16px; }
   .nav.on small { background: var(--accent); color: #fff; }
   body.busy [data-stage=inbox] svg { animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
@@ -137,11 +140,22 @@
   .fend { display: flex; gap: 8px; margin-left: auto; }
   .fend .seg { padding: 3px; border-radius: 16px; }
   .fend .seg button { height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; }
+  .vsteps { display: flex; align-items: center; gap: 6px; }
+  .vsteps > i { color: var(--tertiary); font-style: normal; font-size: 16px; }
+  .vtools { display: flex; gap: 2px; margin-left: auto; }
+  .vbanner { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding: 8px 8px 8px 14px; border-radius: 12px; background: color-mix(in srgb, var(--orange) 16%, var(--window)); }
+  .vbanner b { font-weight: 500; }
+  .vbanner .btn { margin-left: auto; height: 30px; border-radius: 15px; padding: 0 14px; }
+  #videocards { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 10px; }
+  #videocards .thumb { aspect-ratio: 9 / 16; }
+  #videocards .tile:hover .thumb { box-shadow: 0 0 0 2px var(--accent); }
+  .vcap { min-height: 2.7em; color: var(--secondary); font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   #videoview .pill { position: absolute; left: 6px; top: 6px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; font-weight: 600; }
   .pill.warn { background: var(--orange) !important; }
   .pill.bad { background: var(--red) !important; }
   .vcopy { display: flex; gap: 4px; }
-  .vcopy .btn { flex: 1; height: 26px; padding: 0 6px; font-size: 12px; }
+  .vcopy .btn { flex: 1; min-width: 0; height: 28px; padding: 0 6px; font-size: 12px; }
+  .vcopy svg { width: 13px; height: 13px; }
   #videodlg { width: min(1040px, 96vw); max-width: none; padding: 0; overflow: hidden; }
   #videodlg form { display: flex; height: min(88vh, 860px); }
   #vplayer { width: 100%; height: 100%; background: #000; object-fit: contain; display: block; }
@@ -152,15 +166,33 @@
   #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
   #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
   #useddlg { width: min(460px, 94vw); }
-  #ideacards { max-width: 900px; margin-bottom: 20px; }
-  #ideacards .row { align-items: center; padding: 10px 12px; }
-  #ideacards .sub { white-space: pre-wrap; }
+  #iquickform { display: flex; gap: 8px; padding: 12px 0 10px; }
+  #iquick { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border-radius: 12px; font-size: 14px; }
+  #iquickform .btn { height: 40px; padding: 0 16px; border-radius: 12px; }
+  .board { display: grid; grid-template-columns: repeat(3, minmax(230px, 1fr)); gap: 10px; height: calc(100vh - 136px); overflow-x: auto; }
+  .col { display: flex; flex-direction: column; min-height: 0; padding: 4px; border-radius: 14px; background: var(--fill); }
+  .col.drop { box-shadow: inset 0 0 0 2px var(--accent); }
+  .colhead { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 13px; font-weight: 600; }
+  .colhead small { color: var(--secondary); font-weight: 400; }
+  .colhead .colnext { margin-left: auto; color: var(--tertiary); font-size: 16px; line-height: 1; }
+  .colcards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 2px; }
+  .colempty { padding: 24px 12px; color: var(--secondary); font-size: 12px; text-align: center; }
+  .icard { position: relative; display: flex; flex-direction: column; gap: 3px; flex: none; padding: 10px 12px; border-radius: 10px; background: var(--window); box-shadow: var(--shadow); cursor: pointer; }
+  .icard:hover { box-shadow: 0 0 0 1.5px var(--accent); }
+  .icard:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+  .icard b { font-weight: 500; line-height: 1.3; }
+  .icard > span { color: var(--secondary); font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .imove { position: absolute; top: 6px; right: 6px; display: none; gap: 2px; }
+  .icard:hover .imove, .icard:focus-within .imove { display: flex; }
+  .imove button { width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px; background: var(--fill-strong); font-size: 14px; line-height: 1; }
+  .imove button:hover { background: var(--accent); color: #fff; }
   .ilinks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-  .ilinks .chip { height: 24px; padding: 0 9px; font-size: 12px; color: inherit; text-decoration: none; }
+  .ilinks .chip { max-width: 100%; height: 24px; padding: 0 9px; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: inherit; text-decoration: none; }
   .ilinks .chip.gone { opacity: .5; text-decoration: line-through; }
   .ilinks svg { width: 11px; height: 11px; }
   #ideadlg { width: min(560px, 94vw); }
-  .ipicks { max-height: 150px; overflow-y: auto; border-radius: 6px; background: var(--fill); padding: 2px 8px; }
+  .ipicks { display: flex; flex-wrap: wrap; gap: 4px; max-height: 130px; overflow-y: auto; }
+  .ipicks .chip { height: 28px; padding: 0 10px; font-size: 12px; }
   #usedlist { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
   #stylebox { width: 100%; height: 50vh; font: 12px/1.45 ui-monospace, Menlo, monospace; }
   #styledlg { width: min(720px, 94vw); }
@@ -427,6 +459,7 @@
   <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></symbol>
   <symbol id="i-list" viewBox="0 0 16 16"><path d="M5.4 3.6h8M5.4 8h8M5.4 12.4h8M2.4 3.6h.6M2.4 8h.6M2.4 12.4h.6"/></symbol>
   <symbol id="i-bulb" viewBox="0 0 16 16"><path d="M6 13.6h4M6.4 11.6h3.2M8 1.8a4.4 4.4 0 0 0-2.6 8c.6.4 1 1 1 1.8h3.2c0-.8.4-1.4 1-1.8A4.4 4.4 0 0 0 8 1.8z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.4" y="5.4" width="8" height="8" rx="1.4"/><path d="M10.6 5.4V3.8a1.2 1.2 0 0 0-1.2-1.2H3.8a1.2 1.2 0 0 0-1.2 1.2v5.6a1.2 1.2 0 0 0 1.2 1.2h1.6"/></symbol>
   <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1.6"/><path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/></symbol>
 </svg>
 
@@ -444,7 +477,7 @@
       <div class="title"><b id="title">All Footage</b><small id="subtitle" class="num"></small></div>
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
-      <button class="btn default" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg>Add Videos</button>
+      <button class="btn default" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg><span id="addlabel">Add Videos</span></button>
       <button class="icon-btn" id="niptoggle" title="NIP (E)" aria-label="Show or hide NIP"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg>NIP</button>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
@@ -463,7 +496,10 @@
       </div>
       <div class="grid" id="cards"></div><div id="clipcards" hidden></div>
       <div id="videoview" hidden><div id="vfilters"></div><div class="grid" id="videocards"></div></div>
-      <div id="ideaview" hidden><div id="ifilters"></div><div class="group" id="ideacards"></div></div>
+      <div id="ideaview" hidden>
+        <form id="iquickform" autocomplete="off"><input type="text" id="iquick" maxlength="300" aria-label="New idea" placeholder="Got an idea? Type it and press Return"><button class="btn default">Add</button></form>
+        <div class="board" id="ideaboard"></div>
+      </div>
     </div>
 
     <aside id="nipchat" aria-label="NIP">
@@ -615,10 +651,10 @@
   <div class="field" style="margin-top:10px"><label for="ititle">Idea</label><input type="text" id="ititle" maxlength="300" required placeholder="What's the video?"></div>
   <div class="field"><label for="inotes">Notes</label><textarea id="inotes" maxlength="2000"></textarea></div>
   <div class="field"><label for="ilink">Reference link</label><input type="text" id="ilink" maxlength="2000" placeholder="https://…"></div>
-  <div class="field"><label for="istatus">Status</label><select id="istatus"></select></div>
-  <div class="field"><label>Footage bundles</label><div class="ipicks" id="ibundles"></div></div>
-  <div class="field"><label>Videos</label><div class="ipicks" id="ivideos"></div></div>
-  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Save</button></div>
+  <div class="field"><label>Where it is</label><div class="seg" id="istatus" role="group" aria-label="Where it is"></div></div>
+  <div class="field"><label>Footage it uses</label><div id="ibundles" class="ipicks"></div></div>
+  <div class="field"><label>Videos it became</label><div id="ivideos" class="ipicks"></div></div>
+  <div class="actions-line"><button type="button" class="btn" id="idelete">Delete</button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="ideasave">Save</button></div>
 </form></dialog>
 <dialog id="useddlg"><form method="dialog">
   <b>File the Bundles</b>
@@ -681,7 +717,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let onIdeas = false, ideaList = null, ideaStatuses = [], ideaFilter = '', openIdea = null;
+let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null;
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -716,7 +752,7 @@ async function loadLibrary() {
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
   api('/api/videos').then(v => { vids = v; drawLibrary(); }).catch(e => onVideos && status(e.message, true));
-  if (onIdeas) loadIdeas();
+  loadIdeas();
 }
 let landed = false, saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
 const saving = s => s.state === 'waiting' || s.state === 'saving';
@@ -751,13 +787,12 @@ function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && p.stage === stageFilter);
   const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
-  const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length;
-  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => {
-    const n = projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0);
-    return `<button class="nav ${k === here && !onClips && !onVideos && !onIdeas ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
-  }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>
-    <button class="nav ${onVideos ? 'on' : ''}" data-nav="videos" title="Finished videos, their captions, and what's been posted">${icon('play')}Videos${waiting ? `<small class="num">${waiting}</small>` : ''}</button>
-    <button class="nav ${onIdeas ? 'on' : ''}" data-nav="ideas" title="Video ideas, from the Ideas folder">${icon('bulb')}Ideas</button>`;
+  const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length, open = (ideaList || []).filter(i => i.status !== 'Complete').length;
+  const nav = (attr, on, ic, name, n, title) => `<button class="nav ${on ? 'on' : ''}" ${attr} title="${esc(title)}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
+  $('#stages').innerHTML = `<div class="navflow">${nav('data-nav="ideas"', onIdeas, 'bulb', 'Ideas', open, 'What to make next')}${nav('data-nav="videos"', onVideos, 'play', 'Videos', waiting, 'Finished videos, their captions, and what’s been posted')}</div>
+    <div class="navflow">${Object.entries(STAGES).map(([k, [name, ic, hint]]) => nav(`data-stage="${k}"`, k === here && !onClips && !onVideos && !onIdeas, ic, name, projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0), hint)).join('')}</div>
+    ${nav('data-nav="clips"', onClips, 'grid', 'Library', 0, 'Every kept clip, to search, preview and select')}`;
+  $('#addlabel').textContent = onIdeas ? 'New Idea' : onVideos ? 'Add Finished Video' : 'Add Videos';
   if ($('#library').hidden) return;
   $('#cards').hidden = onClips || onVideos || onIdeas;
   $('#ideaview').hidden = !onIdeas;
@@ -814,33 +849,37 @@ const go = hash => location.hash === hash ? drawLibrary() : location.hash = hash
 const vidState = v => !v.captions.instagram && !v.captions.tiktok ? ['No captions', 'bad'] : !v.reviewed ? ['Needs review', 'warn'] : v.shelf === 'Posted' ? ['Posted', ''] : ['Ready', ''];
 const vidUrl = (kind, v) => `/${kind}/${v.id.split('/').map(enc).join('/')}`;
 function drawVideos(words) {
-  const count = s => vids.filter(v => v.shelf === s).length, missing = vids.filter(v => v.shelf === 'Unposted' && !v.captions.instagram && !v.captions.tiktok).length;
+  const count = sh => vids.filter(v => v.shelf === sh).length, unposted = vids.filter(v => v.shelf === 'Unposted');
+  const missing = unposted.filter(v => !v.captions.instagram && !v.captions.tiktok).length, review = vids.filter(v => v.shelf !== 'Posted' && (v.captions.instagram || v.captions.tiktok) && !v.reviewed).length;
   $('#title').textContent = 'Videos';
   const shown = vids.filter(v => v.shelf === vidShelf && words.every(w => [v.title, v.captions.instagram, v.captions.tiktok, ...v.sources].join(' ').toLowerCase().includes(w)));
   $('#subtitle').textContent = plural(shown.length, 'video');
-  $('#vfilters').innerHTML = `<div class="frow">${['Drafts', 'Unposted', 'Posted'].filter(s => s !== 'Drafts' || count(s)).map(s => `<button class="chip ${s === vidShelf ? 'on' : ''}" data-shelf="${s}">${s === vidShelf ? icon('check') : ''}${s} <small class="num">${count(s)}</small></button>`).join('')}
-    <span class="fend"><button class="chip" data-vact="style" title="Open the guide captions are written from">Style Guide</button><button class="chip" data-vact="improve" title="Have Claude learn from the captions you've changed">Improve Style</button><button class="chip" data-vact="folder" title="Show the Videos folder in Finder">${icon('folder')}Drive</button>${missing ? `<button class="chip" data-vact="missing">Write ${plural(missing, 'Missing Caption')}</button>` : ''}<button class="btn default" style="height:32px;border-radius:16px" data-vact="add">Add Finished Video</button></span></div>`;
-  $('#videocards').innerHTML = shown.length ? shown.map(v => { const [label, kind] = vidState(v); return `
+  const step = sh => `<button class="chip ${sh === vidShelf ? 'on' : ''}" data-shelf="${sh}">${sh} <small class="num">${count(sh)}</small></button>`;
+  const banner = missing ? `<div class="vbanner"><b>${plural(missing, 'video')} in Unposted ${missing === 1 ? 'needs' : 'need'} captions</b><button class="btn default" data-vact="missing">Write Captions</button></div>`
+    : review ? `<div class="vbanner"><b>${plural(review, 'caption')} ${review === 1 ? 'is' : 'are'} waiting for you to read</b></div>` : '';
+  $('#vfilters').innerHTML = `<div class="frow"><div class="vsteps">${step('Drafts')}<i aria-hidden="true">›</i>${step('Unposted')}<i aria-hidden="true">›</i>${step('Posted')}</div>
+    <div class="vtools"><button class="icon-btn" data-vact="style" title="Open the guide captions are written from">Style Guide</button><button class="icon-btn" data-vact="improve" title="Have Claude learn from the captions you've changed">Improve Style</button><button class="icon-btn" data-vact="folder" title="Show the Videos folder in Finder">${icon('folder')}</button></div></div>${banner}`;
+  const blank = {Drafts: 'Videos wait here for you to read their captions.', Unposted: 'Press Add Finished Video, or put a video in the Unposted folder on Drive.', Posted: 'Videos you’ve marked posted land here.'};
+  $('#videocards').innerHTML = shown.length ? shown.map(v => { const [label, kind] = vidState(v), caption = v.captions.instagram || v.captions.tiktok || ''; return `
     <a class="tile" href="#/videos" data-vid="${esc(v.id)}">
       <div class="dur"><div class="thumb" style="background-image:url('${vidUrl('videothumb', v)}')"></div><span class="pill ${kind}">${label}</span></div>
       <b>${esc(v.title)}</b>
-      <div class="vcopy">${v.captions.instagram ? `<button class="btn" data-copy="instagram">Copy Insta</button><button class="btn" data-copy="tiktok">Copy TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
-    </a>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${icon('play')}<b>Nothing in ${vidShelf}</b>${vidShelf === 'Unposted' ? 'Press Add Finished Video, or put a video in the Unposted folder on Drive.' : ''}</div>`;
+      <div class="vcap">${esc(caption)}</div>
+      <div class="vcopy">${caption ? `<button class="btn" data-copy="instagram" title="Copy the Instagram caption">${icon('copy')}Instagram</button><button class="btn" data-copy="tiktok" title="Copy the TikTok caption">${icon('copy')}TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
+    </a>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${icon('play')}<b>Nothing in ${vidShelf}</b>${blank[vidShelf]}</div>`;
 }
 // ---------- video ideas: a file each in the Ideas folder, read each time the tab opens ----------
 async function loadIdeas() {
-  try { ({ideas: ideaList, statuses: ideaStatuses} = await api('/api/ideas')); } catch (e) { ideaList = ideaList || []; status(e.message, true); }
+  try { ({ideas: ideaList, statuses: ideaStatuses} = await api('/api/ideas')); } catch (e) { ideaList = ideaList || []; if (onIdeas) status(e.message, true); }
   drawLibrary();
 }
 const videoByName = name => vids.find(v => v.shelf !== 'Drafts' && v.id.split('/')[1] === name);  // a video's folder name is its link; drafts are renamed when saved, so they can't be linked
+const COLUMNS = {Idea: 'Ideas', 'In progress': 'In Progress', Complete: 'Complete'};
 function drawIdeas(words) {
   $('#title').textContent = 'Ideas';
-  if (!ideaList) { $('#subtitle').textContent = ''; $('#ifilters').innerHTML = ''; $('#ideacards').innerHTML = `<div class="empty">${icon('bulb')}<b>Loading Ideas…</b>From your Ideas folder.</div>`; return; }
+  if (!ideaList) { $('#subtitle').textContent = ''; $('#ideaboard').innerHTML = ''; return; }
   const match = i => words.every(w => [i.id, i.idea, i.notes, ...i.bundles, ...i.videos].join(' ').toLowerCase().includes(w));
-  const shown = ideaList.filter(i => (!ideaFilter || i.status === ideaFilter) && match(i)), count = st => ideaList.filter(i => i.status === st).length;
-  $('#subtitle').textContent = plural(shown.length, 'idea');
-  $('#ifilters').innerHTML = `<div class="frow">${['', ...ideaStatuses].map(st => `<button class="chip ${st === ideaFilter ? 'on' : ''}" data-ifilter="${esc(st)}">${st === ideaFilter ? icon('check') : ''}${esc(st || 'All')} <small class="num">${st ? count(st) : ideaList.length}</small></button>`).join('')}
-    <span class="fend"><button class="btn default" style="height:32px;border-radius:16px" data-iact="new">New Idea</button></span></div>`;
+  $('#subtitle').textContent = plural(ideaList.filter(match).length, 'idea');
   const chips = i => {
     const out = [];
     if (/^https?:\/\//.test(i.link)) out.push(`<a class="chip" href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${icon('share')}Reference</a>`);
@@ -850,12 +889,14 @@ function drawIdeas(words) {
       out.push(v ? `<a class="chip" href="#/videos" data-vid="${esc(v.id)}" title="Open this video">${icon('play')}${esc(v.title)}</a>` : `<span class="chip gone" title="No finished video with this name">${icon('play')}${esc(n)}</span>`); }
     return out.length ? `<div class="ilinks">${out.join('')}</div>` : '';
   };
-  $('#ideacards').innerHTML = shown.length ? shown.map(i => `
-    <div class="row" data-idea="${esc(i.id)}">
-      <div class="main-col"><div class="title-line"><b>${esc(i.idea)}</b><small class="sub num">${esc(i.id)}</small></div>${i.notes ? `<span class="sub">${esc(i.notes)}</span>` : ''}${chips(i)}</div>
-      <select data-istatus aria-label="Status of ${esc(i.idea)}">${ideaStatuses.map(st => `<option ${st === i.status ? 'selected' : ''}>${esc(st)}</option>`).join('')}</select>
-      <button class="icon-btn" data-iedit title="Edit and link footage or videos" aria-label="Edit ${esc(i.idea)}">${icon('pencil')}</button>
-    </div>`).join('') : `<div class="empty">${icon('bulb')}<b>${ideaList.length ? 'No Matching Ideas' : 'No Ideas Yet'}</b>${ideaList.length ? '' : 'Press New Idea, or ask Claude to add one.'}</div>`;
+  const card = (i, n) => `<article class="icard" draggable="true" tabindex="0" data-idea="${esc(i.id)}"><b>${esc(i.idea)}</b>${i.notes ? `<span>${esc(i.notes)}</span>` : ''}${chips(i)}
+    <div class="imove">${n ? `<button data-to="${esc(ideaStatuses[n - 1])}" title="Move back to ${esc(COLUMNS[ideaStatuses[n - 1]])}" aria-label="Move back">‹</button>` : ''}${n < ideaStatuses.length - 1 ? `<button data-to="${esc(ideaStatuses[n + 1])}" title="Move on to ${esc(COLUMNS[ideaStatuses[n + 1]])}" aria-label="Move on">›</button>` : ''}</div></article>`;
+  const blank = {Idea: 'No ideas yet. Add one above, or ask Claude.', 'In progress': 'Drag an idea here when you start on it.', Complete: 'Finished ideas land here.'};
+  $('#ideaboard').innerHTML = ideaStatuses.map((st, n) => {
+    const list = ideaList.filter(i => i.status === st && match(i)).reverse();  // newest first, so what you just added is on top
+    return `<section class="col" data-status="${esc(st)}"><div class="colhead">${esc(COLUMNS[st] || st)} <small class="num">${list.length}</small>${n < ideaStatuses.length - 1 ? '<span class="colnext" aria-hidden="true">›</span>' : ''}</div>
+      <div class="colcards">${list.map(i => card(i, n)).join('') || `<div class="colempty">${$('#search').value ? 'Nothing matches' : blank[st] || ''}</div>`}</div></section>`;
+  }).join('');
 }
 async function saveIdea(id, fields) {
   await api(id ? '/api/ideas/update' : '/api/ideas/add', {id, ...fields});
@@ -863,48 +904,81 @@ async function saveIdea(id, fields) {
 }
 function editIdea(i) {  // i is null for a new idea
   openIdea = i;
-  $('#ideahead').textContent = i ? `Edit ${i.id}` : 'New Idea';
+  $('#ideahead').textContent = i ? 'Edit Idea' : 'New Idea';
   $('#ititle').value = i?.idea || ''; $('#inotes').value = i?.notes || ''; $('#ilink').value = i?.link || '';
-  $('#istatus').innerHTML = ideaStatuses.map(st => `<option ${st === (i?.status || 'Idea') ? 'selected' : ''}>${esc(st)}</option>`).join('');
-  const picks = (list, on) => list.length ? list.map(([value, label]) => `<label class="opt"><input type="checkbox" value="${esc(value)}" ${on.includes(value) ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('') : '<p class="hint">None yet</p>';
+  $('#istatus').innerHTML = ideaStatuses.map(st => `<button type="button" data-v="${esc(st)}">${esc(COLUMNS[st] || st)}</button>`).join('');
+  segSet($('#istatus'), i?.status || 'Idea');
+  $('#idelete').hidden = !i;
+  const picks = (list, on) => list.length ? list.map(([value, label]) => `<button type="button" class="chip ${on.includes(value) ? 'on' : ''}" data-value="${esc(value)}">${esc(label)}</button>`).join('') : '<p class="hint">None yet</p>';
   const bundles = projects.map(p => [p.name, p.description || p.name]), videos = vids.filter(v => v.shelf !== 'Drafts').map(v => [v.id.split('/')[1], `${v.title} (${v.shelf})`]);
   const keepGone = (list, on) => [...list, ...on.filter(n => !list.some(([v]) => v === n)).map(n => [n, `${n} (not found)`])];  // a link to something deleted stays until unticked
   $('#ibundles').innerHTML = picks(keepGone(bundles, i?.bundles || []), i?.bundles || []);
   $('#ivideos').innerHTML = picks(keepGone(videos, i?.videos || []), i?.videos || []);
-  $('#ideadlg').returnValue = '';
   $('#ideadlg').showModal();
 }
-$('#ideadlg').onclose = () => {
-  if ($('#ideadlg').returnValue !== 'ok') return;
-  const ticked = sel => [...document.querySelectorAll(`${sel} input:checked`)].map(c => c.value);
+$('#ideasave').onclick = () => {
+  if (!$('#ititle').reportValidity()) return;
+  $('#ideadlg').close();
+  const ticked = sel => [...document.querySelectorAll(`${sel} .chip.on`)].map(c => c.dataset.value);
   run($('#ideadlg'), 'Saving…', async () => {
-    await saveIdea(openIdea?.id, {idea: $('#ititle').value, notes: $('#inotes').value, link: $('#ilink').value, status: $('#istatus').value,
+    await saveIdea(openIdea?.id, {idea: $('#ititle').value, notes: $('#inotes').value, link: $('#ilink').value, status: segGet($('#istatus')),
       bundles: ticked('#ibundles'), videos: ticked('#ivideos')});
     status('Saved');
   });
 };
-$('#ideaview').onclick = e => {
-  const f = e.target.closest('[data-ifilter]'), row = e.target.closest('[data-idea]'), v = e.target.closest('[data-vid]');
-  if (f) { ideaFilter = f.dataset.ifilter; return drawLibrary(); }
-  if (e.target.closest('[data-iact]')) return editIdea(null);
+$('#istatus').onclick = e => { const b = e.target.closest('button'); if (b) segSet($('#istatus'), b.dataset.v); };
+$('#ibundles').onclick = $('#ivideos').onclick = e => e.target.closest('.chip')?.classList.toggle('on');
+$('#idelete').onclick = e => {
+  if (confirm(`Delete “${openIdea.idea}”?`)) run(e.currentTarget, 'Deleting…', async () => { await api('/api/ideas/delete', {id: openIdea.id}); $('#ideadlg').close(); await loadIdeas(); status('Idea deleted'); });
+};
+$('#iquickform').onsubmit = e => {
+  e.preventDefault();
+  const idea = $('#iquick').value.trim();
+  if (!idea) return;
+  $('#iquick').value = '';  // ready for the next one straight away
+  run($('#iquickform'), 'Saving…', async () => { await saveIdea(null, {idea}); status('Idea added'); });
+};
+function moveIdea(id, to) {
+  const i = ideaList.find(x => x.id === id);
+  if (!i || i.status === to) return;
+  i.status = to;  // shown at once; the next read confirms it
+  drawLibrary();
+  run($('#ideaboard'), 'Saving…', async () => { await saveIdea(id, {status: to}); status(`Moved to ${COLUMNS[to]}`); });
+}
+$('#ideaboard').onclick = e => {
+  const card = e.target.closest('[data-idea]'), to = e.target.closest('[data-to]'), v = e.target.closest('[data-vid]');
+  if (to) return moveIdea(card.dataset.idea, to.dataset.to);
   if (v) { e.preventDefault(); return showVideo(v.dataset.vid); }
-  if (row && e.target.closest('[data-iedit]')) editIdea(ideaList.find(i => i.id === row.dataset.idea));
+  if (card && !e.target.closest('a')) editIdea(ideaList.find(i => i.id === card.dataset.idea));
 };
-$('#ideaview').onchange = e => {
-  const row = e.target.closest('[data-idea]');
-  if (row && e.target.matches('[data-istatus]'))
-    run(e.target, 'Saving…', async () => { await saveIdea(row.dataset.idea, {status: e.target.value}); status(`Marked ${e.target.value}`); });
+$('#ideaboard').onkeydown = e => { if (e.key === 'Enter' && e.target.matches('.icard')) editIdea(ideaList.find(i => i.id === e.target.dataset.idea)); };
+let draggedIdea = null;
+$('#ideaboard').ondragstart = e => { draggedIdea = e.target.closest('[data-idea]')?.dataset.idea; };
+$('#ideaboard').ondragover = e => {
+  const col = e.target.closest('.col');
+  if (!draggedIdea || !col) return;
+  e.preventDefault();
+  document.querySelectorAll('.col.drop').forEach(c => c !== col && c.classList.remove('drop'));
+  col.classList.add('drop');
 };
+$('#ideaboard').ondragend = () => { draggedIdea = null; document.querySelectorAll('.col.drop').forEach(c => c.classList.remove('drop')); };
+$('#ideaboard').ondrop = e => {
+  e.preventDefault();
+  const to = e.target.closest('.col')?.dataset.status, id = draggedIdea;
+  draggedIdea = null;
+  document.querySelectorAll('.col.drop').forEach(c => c.classList.remove('drop'));
+  if (id && to) moveIdea(id, to);
+};
+const addFinished = () => run($('#addvideos'), 'Pick your finished videos in the Finder window…', async () => {
+  const r = await api('/api/videos/add', {});
+  await watchSaves();
+  status(r.added ? `Writing captions for ${plural(r.added, 'video')}; the corner shows when they’re ready` : 'No videos added');
+});
 const copyText = async (text, name) => { await navigator.clipboard.writeText(text); status(`Copied the ${name} caption`); };
 $('#videoview').onclick = e => {
   const shelf = e.target.closest('[data-shelf]'), act = e.target.closest('[data-vact]')?.dataset.vact, card = e.target.closest('[data-vid]');
   if (shelf) { vidShelf = shelf.dataset.shelf; return drawLibrary(); }
   if (act === 'style' || act === 'folder') return api('/api/open', {what: act === 'style' ? 'style' : 'videos'}).catch(err => status(err.message, true));
-  if (act === 'add') return run(e.target, 'Pick your finished videos in the Finder window…', async () => {
-    const r = await api('/api/videos/add', {});
-    await watchSaves();
-    status(r.added ? `Writing captions for ${plural(r.added, 'video')}; the corner shows when they’re ready` : 'No videos added');
-  });
   if (act === 'missing') return run(e.target, 'Starting…', async () => { await api('/api/videos/caption-missing', {}); await watchSaves(); status('Writing captions; the corner shows when they’re ready'); });
   if (act === 'improve') return run(e.target, 'Claude is reading your edits…', async () => {
     const r = await api('/api/style/improve', {});
@@ -2178,7 +2252,7 @@ drawChat();
 
 // ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
 $('#vocabulary').onclick = () => api('/api/open', {what: 'vocabulary'}).catch(e => status(e.message, true));
-$('#addvideos').onclick = () => run($('#addvideos'), 'Pick videos in the Finder window…', async () => {
+$('#addvideos').onclick = () => onIdeas ? editIdea(null) : onVideos ? addFinished() : run($('#addvideos'), 'Pick videos in the Finder window…', async () => {
   const r = await api('/api/add', {});
   status(r.added.length ? `Moved ${plural(r.added.length, 'video')} into the inbox; each appears once it’s transcribed` : 'No videos added');
   poll();

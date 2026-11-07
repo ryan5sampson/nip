@@ -723,6 +723,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({})
             elif p == ["api", "ideas", "add"]:
                 self.send_json({"id": ideas.add(body)})
+            elif p == ["api", "ideas", "delete"]:
+                ideas.delete(str(body.get("id", "")))
+                self.send_json({})
             elif p == ["api", "ideas", "update"]:
                 self.send_json({"id": ideas.update(str(body.get("id", "")), body)})
             elif p == ["api", "style", "improve"]:  # a proposal for the user to read; saving it is a separate step

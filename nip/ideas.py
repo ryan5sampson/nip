@@ -84,3 +84,11 @@ def update(idea_id, body):
             raise ValueError("That idea isn’t there anymore. It may have been deleted.")
         cli.save(found[1], {**found[0], **fields})
     return idea_id
+
+
+def delete(idea_id):
+    with WRITE:
+        found = files().get(idea_id)
+        if not found:
+            raise ValueError("That idea isn’t there anymore. It may have been deleted.")
+        found[1].unlink()

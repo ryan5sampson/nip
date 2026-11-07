@@ -1142,6 +1142,10 @@ class Ideas(unittest.TestCase):
             self.assertTrue((Path(d) / "How to add ideas.txt").exists())  # what Claude reads to know the format
             with self.assertRaisesRegex(ValueError, "isn’t there"):
                 ideas.update("VI-404", {"status": "Idea"})
+            ideas.delete(new)
+            self.assertEqual([i["id"] for i in ideas.read()], ["VI-009"])
+            with self.assertRaisesRegex(ValueError, "isn’t there"):
+                ideas.delete(new)
 
     def test_what_claude_adds_shows_up_and_the_newest_copy_wins(self):
         with tempfile.TemporaryDirectory() as d:
