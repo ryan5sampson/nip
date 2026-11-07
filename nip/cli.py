@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import date
 from pathlib import Path
@@ -21,6 +22,9 @@ FINAL = Path(os.environ.get("NIP_FINAL") or SETTINGS.get("library") or HOME / "f
 SHELVES = ("Unused", "Used")  # the library's two folders; a bundle's folder sits in one, moved by the app or by hand in Drive
 HANDOFFS = FINAL.parent / "Handoffs"  # clips picked from the library for a video, a folder each
 DRIVE_INBOX = FINAL.parent / "Inbox" if "CloudStorage" in str(FINAL) else None  # footage added on Drive, from a phone or anywhere; beside a local library it would be ~/NIP/inbox itself
+VIDEOS, DRAFTS = FINAL.parent / "Videos", HOME / "drafts"  # finished videos, a folder each; a draft stays on this Mac until it's saved
+VIDEO_SHELVES = ("Drafts", "Unposted", "Posted")
+STYLE, CAPTION_EDITS = FINAL.parent / "Caption Style.md", FINAL.parent / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = HOME / "vocabulary.txt"
@@ -227,13 +231,17 @@ def readable(path):
         return False
 
 
+WHISPER = threading.Lock()  # the inbox and captions both transcribe; the model runs one at a time
+
+
 def transcribe(path):
     try:
         import mlx_whisper
     except ImportError:
         raise RuntimeError("mlx-whisper isn't installed. It needs an Apple Silicon Mac: pip install -e .")  # not sys.exit: it would silently end the app's inbox thread
-    r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,  # the prompt biases it to the user's words
-                               initial_prompt=f"{', '.join(vocabulary()[0])}. {PROMPT}", condition_on_previous_text=False)
+    with WHISPER:
+        r = mlx_whisper.transcribe(str(path), path_or_hf_repo=MODEL, word_timestamps=True,  # the prompt biases it to the user's words
+                                   initial_prompt=f"{', '.join(vocabulary()[0])}. {PROMPT}", condition_on_previous_text=False)
     words, noise = [], []
     for s in r["segments"]:
         seg = [{"w": w["word"].strip(), "start": round(w["start"], 2), "end": round(w["end"], 2), "p": round(w["probability"], 2)}
@@ -696,6 +704,145 @@ def export_story(proj, story):
             f.unlink()
     print(f"done: {final}")
     return final
+
+
+def video_root(shelf):
+    return DRAFTS if shelf == "Drafts" else VIDEOS / shelf
+
+
+def video_id(p):
+    return f"{next(s for s in VIDEO_SHELVES if video_root(s) == p.parent)}/{p.name}"
+
+
+def video_path(vid):
+    shelf, _, name = str(vid).partition("/")
+    if shelf not in VIDEO_SHELVES or not name or name != Path(name).name or name.startswith("."):
+        raise ValueError("that isn't one of your videos")
+    p = video_root(shelf) / name
+    if not p.exists():
+        raise ValueError("that video isn't there anymore")
+    return p
+
+
+def video_file(p):
+    return p if p.is_file() else next((f for f in sorted(p.iterdir()) if f.suffix.lower() in VIDEO), None)
+
+
+def video_info(p):
+    f = p / "_info" / "video.json"
+    return load(f) if p.is_dir() and f.exists() else {}
+
+
+def videos():
+    """Every finished video. A video dropped straight into Unposted in Drive counts, with or without a folder of its own."""
+    if FINAL.parent.is_dir():
+        for s in VIDEO_SHELVES[1:]:
+            (VIDEOS / s).mkdir(parents=True, exist_ok=True)
+    out = []
+    for shelf in VIDEO_SHELVES:
+        for p in sorted(video_root(shelf).glob("[!.]*")):
+            f = video_file(p) if p.is_dir() or p.suffix.lower() in VIDEO else None
+            if not f:
+                continue
+            try:  # one file Drive hasn't finished syncing mustn't hide the rest
+                info = video_info(p)
+            except (OSError, ValueError) as e:
+                print(f"videos: skipped {p.name}: {e}")
+                info = {}
+            out.append({"id": f"{shelf}/{p.name}", "shelf": shelf, "file": f.name, "title": info.get("title") or (p.name if p.is_dir() else p.stem),
+                        "captions": info.get("captions", {}), "sources": info.get("sources", []), "reviewed": bool(info.get("reviewed")),
+                        "said": info.get("said", ""), "when": f.stat().st_mtime})
+    return sorted(out, key=lambda v: v["when"], reverse=True)
+
+
+def own_folder(p):
+    """A loose video gets a folder, so its captions can sit beside it."""
+    if p.is_dir():
+        return p
+    folder, n = p.parent / p.stem, 2
+    while folder.exists():
+        folder, n = p.parent / f"{p.stem} {n}", n + 1
+    folder.mkdir()
+    p.rename(folder / p.name)
+    return folder
+
+
+def update_video(p, **changes):
+    info = {**video_info(p), **changes}
+    (p / "_info").mkdir(exist_ok=True)
+    save(p / "_info" / "video.json", info)
+    caps = info.get("captions") or {}
+    if caps:  # for anyone working from the folder in Drive
+        (p / "Captions.txt").write_text(f"{info.get('title') or p.name}\n\nINSTAGRAM\n{caps.get('instagram', '')}\n\nTIKTOK\n{caps.get('tiktok', '')}\n")
+    return info
+
+
+def new_draft(title, src, sources=(), move=False):
+    """A finished video waiting for review, in a folder here on this Mac."""
+    name = file_name(title) or "Video"
+    p, n = DRAFTS / name, 2
+    while p.exists():
+        p, n = DRAFTS / f"{name} {n}", n + 1
+    p.mkdir(parents=True)
+    dest = p / f"{name}{Path(src).suffix}"
+    shutil.move(src, dest) if move else shutil.copyfile(src, dest)
+    update_video(p, title=title, sources=list(sources))
+    return p
+
+
+def caption_video(p, note="", progress=lambda step, part: None):
+    """Draft a video's captions from what's said in it. They wait for the user to read them."""
+    from nip import brief  # here, not at the top: brief imports cli
+    p = own_folder(p)
+    info = video_info(p)
+    if "said" not in info:
+        progress("Transcribing", .3)
+        info = update_video(p, said=" ".join(w["w"] for w in transcribe(video_file(p))[0]))
+    progress("Writing captions", .7)
+    caps = brief.captions(info.get("title") or p.name, info["said"], info.get("sources", []), note, info.get("captions"))
+    update_video(p, captions=caps, drafted=caps, reviewed=False)
+    return {"id": video_id(p)}
+
+
+def save_video(vid, title, captions, sources):
+    """The user has read it. What they changed teaches later drafts, and a draft goes to Unposted on Drive, whole or not at all."""
+    p = own_folder(video_path(vid))
+    drafted = video_info(p).get("drafted") or {}
+    changed = [{"platform": k, "drafted": drafted[k], "final": captions.get(k, "")} for k in drafted if drafted[k] != captions.get(k, "")]
+    if changed:
+        was = load(CAPTION_EDITS) if CAPTION_EDITS.exists() else []
+        save(CAPTION_EDITS, (was + changed)[-50:])
+    update_video(p, title=title, captions=captions, sources=sources, reviewed=True, drafted=captions)
+    if p.parent != DRAFTS:
+        return video_id(p)
+    root, name = VIDEOS / "Unposted", file_name(title) or p.name
+    f = video_file(p)
+    f.rename(p / f"{name}{f.suffix}")
+    root.mkdir(parents=True, exist_ok=True)
+    tmp = root / f".{p.name}.building"
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        shutil.copytree(p, tmp, copy_function=shutil.copyfile)  # not copy2: Drive's own file ids must not come along
+        dest = move_free(tmp, root, f"{name} ({date.today()})")
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    shutil.rmtree(p)
+    return video_id(dest)
+
+
+def move_video(vid, shelf):
+    if shelf not in VIDEO_SHELVES[1:]:
+        raise ValueError("a video is Unposted or Posted")
+    p = own_folder(video_path(vid))
+    if p.parent == DRAFTS:
+        raise ValueError("Save this draft first")
+    return video_id(p) if p.parent == VIDEOS / shelf else video_id(move_free(p, VIDEOS / shelf))
+
+
+def delete_video(vid):
+    p = own_folder(video_path(vid))
+    shutil.rmtree(p) if p.parent == DRAFTS else discard(p)
 
 
 def find(name):

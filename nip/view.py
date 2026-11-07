@@ -1,5 +1,6 @@
 """nip view: the local NIP app. Inbox, review and adjust takes, Claude edits, the clip library. Also keeps ingesting the inbox."""
 import copy
+import hashlib
 import json
 import os
 import queue
@@ -32,11 +33,14 @@ end repeat
 out"""
 
 
+def picked():
+    r = subprocess.run(["osascript", "-e", PICK], capture_output=True, text=True)  # Cancel exits 1 with nothing picked
+    return [v for v in map(Path, r.stdout.splitlines()) if v.suffix.lower() in cli.VIDEO and v.is_file()]
+
+
 def pick_videos():
     """The macOS file picker; the videos picked move into the inbox."""
-    r = subprocess.run(["osascript", "-e", PICK], capture_output=True, text=True)  # Cancel exits 1 with nothing picked
-    vids = [Path(l) for l in r.stdout.splitlines() if Path(l).suffix.lower() in cli.VIDEO]
-    return [cli.move_free(v, cli.INBOX).name for v in vids if v.is_file()]
+    return [cli.move_free(v, cli.INBOX).name for v in picked()]
 
 
 def upload(handler, name):
@@ -257,21 +261,49 @@ def save_footage():
     """Complete footage in the background, so the app stays usable. New footage sits in Processing until this succeeds, and
     footage being updated in Completed drops back to Processing if it fails; either way the library stays as it was."""
     while True:
-        job, proj, sort = JOBS.get()
+        job, work, failed = JOBS.get()
         job["state"] = "saving"
         try:
             if not library_answers():
                 raise ValueError("Google Drive isn’t answering. If your Mac asked to let Footage Flow access Google Drive, allow it, then try again.")
-            job["saved"] = cli.finalize(proj, lambda step, part: job.update(step=step, part=part), sort)
+            job["saved"] = work()
             job["state"] = "done"
         except Exception as e:
             traceback.print_exc()
-            with LOCK:
-                cli.set_stage(proj, "processing")
+            failed()
             job.update(state="failed", error=why(e))
 
 
 threading.Thread(target=save_footage, daemon=True).start()
+
+
+def video_job(key, title, work):
+    """Rendering and writing captions takes a minute, so it runs in the background, in the same corner panel as saves."""
+    job = {"project": f"video:{key}", "title": title, "state": "waiting", "step": "Waiting its turn", "part": 0, "video": True}
+    SAVES[:] = [j for j in SAVES if j["project"] != job["project"]] + [job]
+    JOBS.put((job, lambda: work(lambda step, part: job.update(step=step, part=part)), lambda: None))
+    return job
+
+
+def video_thumb(p):
+    """A frame from a finished video, kept on this Mac so nothing extra lands in the Drive folder."""
+    f = cli.video_file(p)
+    out = cli.HOME / "video-thumbs" / f"{hashlib.md5(f'{f}{f.stat().st_mtime}'.encode()).hexdigest()}.jpg"
+    if not out.exists():
+        out.parent.mkdir(exist_ok=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "1", "-i", str(f), "-frames:v", "1", "-vf", "scale=360:-2", str(out)], check=True)
+    return out
+
+
+def caption_fields(body):
+    """What the review screen saves, checked."""
+    caps = {k: body.get(k) for k in ("instagram", "tiktok")}
+    title, sources = body.get("title"), body.get("sources", [])
+    if not isinstance(title, str) or not title.strip() or not all(isinstance(c, str) and len(c) <= 4000 for c in caps.values()):
+        raise ValueError("a video needs a title, and captions of up to 4000 characters")
+    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
+        raise ValueError("sources must be a list of bundles")
+    return title.strip(), caps, sources
 
 
 def thumbnail(proj):
@@ -366,6 +398,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(thumbnail(self.project(p[1])), "image/jpeg")
             elif p == ["api", "clips"]:
                 self.send_json(final_clips())
+            elif p == ["api", "videos"]:
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so your videos can’t be listed. Try again in a moment.")
+                self.send_json(cli.videos())
+            elif len(p) == 3 and p[0] in ("video", "videothumb"):
+                f = cli.video_path(f"{p[1]}/{p[2]}")
+                self.send_file(video_thumb(f), "image/jpeg") if p[0] == "videothumb" else self.send_file(cli.video_file(f), "video/mp4")
             elif len(p) == 3 and p[0] == "final":
                 f = final_file(p[1], p[2], info=True)
                 self.send_file(f, "image/jpeg" if f.suffix == ".jpg" else "video/mp4")
@@ -555,7 +594,11 @@ class Handler(BaseHTTPRequestHandler):
                     job = {"project": proj.name, "title": info.get("my_description") or info.get("description") or proj.name,
                            "state": "waiting", "step": "Waiting its turn", "part": 0}
                     SAVES[:] = [j for j in SAVES if j["project"] != proj.name] + [job]
-                    JOBS.put((job, proj, sort))
+
+                    def failed():
+                        with LOCK:
+                            cli.set_stage(proj, "processing")
+                    JOBS.put((job, lambda: cli.finalize(proj, lambda step, part: job.update(step=step, part=part), sort), failed))
                     self.send_json(job)
                 else:
                     with LOCK:
@@ -588,7 +631,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(history, list) or not all(isinstance(m, dict) for m in history):
                     raise ValueError("history must be a list of messages")
                 try:
-                    self.send_json(brief.assist(text.strip(), history[-10:], str(body.get("view", "")), cards(), final_clips()))
+                    self.send_json(brief.assist(text.strip(), history[-10:], str(body.get("view", "")), cards(), final_clips(), cli.videos() if library_answers() else []))
                 except RuntimeError as e:
                     raise ValueError(str(e))
             elif p == ["api", "handoff"]:  # library clips copied to a folder of their own, to make a video with
@@ -616,6 +659,72 @@ class Handler(BaseHTTPRequestHandler):
                     raise FileNotFoundError
                 cli.sort_clips(infos, sort)
                 self.send_json({})
+            elif p == ["api", "used-bundle"]:  # filing a bundle after saving a video made from it, its project here or not
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so nothing moved. Try again in a moment.")
+                cli.set_used(Path(str(body.get("folder"))).name, bool(body.get("used")))
+                self.send_json({})
+            elif p == ["api", "videos", "from-edit"]:  # an edit made here, rendered and captioned
+                proj = self.project(str(body.get("project", "")))
+                info = cli.load(proj / "project.json")
+                story = next((s for s in info.get("stories", []) if s["id"] == body.get("story")), None)
+                if story is None:
+                    raise FileNotFoundError
+
+                def work(progress):
+                    progress("Rendering", .1)
+                    p = cli.new_draft(story["title"], cli.export_story(proj, story), [info["library_folder"]] if info.get("library_folder") else [], move=True)
+                    return cli.caption_video(p, "", progress)
+                self.send_json(video_job(f"{proj.name}/{story['id']}", story["title"], work))
+            elif p == ["api", "videos", "add"]:  # finished in CapCut, and given to Footage Flow to caption
+                jobs = []
+                for v in picked():
+                    d = cli.new_draft(v.stem, v)
+                    jobs.append(video_job(d.name, v.stem, lambda progress, d=d: cli.caption_video(d, "", progress)))
+                self.send_json({"added": len(jobs)})
+            elif p == ["api", "videos", "caption"]:  # draft or redraft one video's captions in its folder
+                v = cli.video_path(body.get("id"))
+                note = str(body.get("note", ""))[:500]
+                self.send_json(video_job(v.name, v.stem, lambda progress: cli.caption_video(v, note, progress)))
+            elif p == ["api", "videos", "caption-missing"]:
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering. Try again in a moment.")
+                todo = [v for v in cli.videos() if v["shelf"] == "Unposted" and not v["captions"]]
+                for v in todo:
+                    f = cli.video_path(v["id"])
+                    video_job(f.name, v["title"], lambda progress, f=f: cli.caption_video(f, "", progress))
+                self.send_json({"added": len(todo)})
+            elif p == ["api", "videos", "redraft"]:  # new wording for the review screen; nothing is saved
+                v = cli.video_path(body.get("id"))
+                info = cli.video_info(v)
+                caps = {k: str(body.get(k, "")) for k in ("instagram", "tiktok")}
+                try:
+                    self.send_json(brief.captions(str(body.get("title") or v.name), info.get("said", ""), info.get("sources", []), str(body.get("note", ""))[:500], caps))
+                except RuntimeError as e:
+                    raise ValueError(str(e))
+            elif p == ["api", "videos", "save"]:
+                if not library_answers():
+                    raise ValueError("Google Drive isn’t answering, so nothing was saved. Try again in a moment.")
+                title, caps, sources = caption_fields(body)
+                self.send_json({"id": cli.save_video(body.get("id"), title, caps, sources)})
+            elif p == ["api", "videos", "move"]:
+                self.send_json({"id": cli.move_video(body.get("id"), body.get("shelf"))})
+            elif p == ["api", "videos", "delete"]:
+                if not library_answers():
+                    raise ValueError(NO_DRIVE)
+                cli.delete_video(body.get("id"))
+                self.send_json({})
+            elif p == ["api", "style", "improve"]:  # a proposal for the user to read; saving it is a separate step
+                try:
+                    self.send_json({**brief.improve_style(), "current": cli.STYLE.read_text() if cli.STYLE.exists() else ""})
+                except RuntimeError as e:
+                    raise ValueError(str(e))
+            elif p == ["api", "style"]:
+                text = body.get("guide")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("the style guide can't be empty")
+                cli.STYLE.write_text(text)
+                self.send_json({})
             elif p == ["api", "clear-bundle"]:  # a bundle in the library whose project is already gone
                 if not library_answers():
                     raise ValueError(NO_DRIVE)
@@ -641,6 +750,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not cli.VOCABULARY.exists():
                         cli.VOCABULARY.write_text(cli.VOCABULARY_START)
                     target = cli.VOCABULARY
+                elif body.get("what") == "style" and cli.STYLE.exists():
+                    target = cli.STYLE
+                elif body.get("what") == "videos":
+                    target = cli.VIDEOS
                 elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():
                     target = cli.UNREADABLE
                 elif body.get("what") == "finalized":

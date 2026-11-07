@@ -799,6 +799,59 @@ class Robustness(unittest.TestCase):
             with self.assertRaises(ValueError):
                 view.clean_sort(bad)
 
+    def test_finished_videos_from_draft_to_posted(self):
+        from nip import brief
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, HOME=d, FINAL=d / "drive" / "Library", VIDEOS=d / "drive" / "Videos", DRAFTS=d / "drafts", STYLE=d / "drive" / "Style.md", CAPTION_EDITS=d / "drive" / "Edits.json"):
+                (d / "drive").mkdir()
+                cli.STYLE.write_text("Sound like us.")
+                cut = d / "capcut.mp4"
+                cut.write_bytes(b"video")
+                draft = cli.new_draft("Big/ toss", cut)
+                self.assertTrue(cut.exists())  # the user's export stays where it was
+                answer = {"instagram": "Toss it! #linderball", "tiktok": "linderball toss #linderball"}
+                with mock.patch.object(cli, "transcribe", return_value=([{"w": "toss"}], [])) as heard, mock.patch.object(brief, "claude_json", return_value=answer) as ask:
+                    vid = cli.caption_video(draft)["id"]
+                    cli.caption_video(draft, "shorter")
+                heard.assert_called_once()  # transcribed once, redrafted from that
+                self.assertIn("Sound like us.", ask.call_args[0][0])
+                self.assertIn("shorter", ask.call_args[0][0])
+                listed = {v["id"]: v for v in cli.videos()}
+                self.assertEqual((listed[vid]["shelf"], listed[vid]["reviewed"], listed[vid]["captions"]["tiktok"]), ("Drafts", False, answer["tiktok"]))
+                self.assertFalse(list((d / "drive" / "Videos" / "Unposted").iterdir()))  # nothing on Drive until it's saved
+                vid = cli.save_video(vid, "Big toss", {**answer, "instagram": "Mine"}, ["Bundle (2026)"])
+                p = cli.video_path(vid)
+                self.assertEqual(vid.split("/")[0], "Unposted")
+                self.assertFalse(draft.exists())
+                self.assertEqual(sorted(f.name for f in p.iterdir()), ["Big toss.mp4", "Captions.txt", "_info"])
+                self.assertIn("INSTAGRAM\nMine", (p / "Captions.txt").read_text())
+                self.assertEqual(cli.load(cli.CAPTION_EDITS), [{"platform": "instagram", "drafted": answer["instagram"], "final": "Mine"}])  # what teaches later drafts
+                cli.save_video(vid, "Big toss", {**answer, "instagram": "Mine"}, [])
+                self.assertEqual(len(cli.load(cli.CAPTION_EDITS)), 1)  # saving again isn't another lesson
+                with mock.patch.object(brief, "claude_json", return_value=answer) as ask:
+                    brief.captions("t", "s", [])
+                self.assertIn('they made it "Mine"', ask.call_args[0][0])
+                # dropped into Unposted by hand: found, then given a folder when captioned
+                loose = cli.VIDEOS / "Unposted" / "From phone.MOV"
+                loose.write_bytes(b"video")
+                (cli.VIDEOS / "Unposted" / "notes.txt").write_text("x")
+                self.assertEqual({v["title"]: bool(v["captions"]) for v in cli.videos()}, {"From phone": False, "Big toss": True})
+                with mock.patch.object(cli, "transcribe", return_value=([], [])), mock.patch.object(brief, "claude_json", return_value=answer):
+                    got = cli.caption_video(loose)["id"]
+                self.assertEqual(got, "Unposted/From phone")
+                self.assertTrue((cli.video_path(got) / "From phone.MOV").exists())
+                self.assertEqual(cli.move_video(vid, "Posted").split("/")[0], "Posted")
+                for bad in ("Unposted/..", "Unposted/", "Library/x", "../x", "Unposted/.hidden", None):
+                    with self.assertRaises(ValueError):
+                        cli.video_path(bad)
+                with self.assertRaises(ValueError):
+                    cli.move_video(got, "Drafts")
+                cli.delete_video(got)
+                self.assertEqual([v["title"] for v in cli.videos()], ["Big toss"])
+                with mock.patch.object(brief, "claude_json", return_value={"instagram": "", "tiktok": "x"}), self.assertRaises(RuntimeError):
+                    brief.captions("t", "s", [])
+
     def test_a_saved_bundle_sorts_without_cutting_again(self):
         import urllib.error
         import urllib.request

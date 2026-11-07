@@ -126,7 +126,7 @@
   #pickbar[hidden] { display: none; }
   #pickbar .grow { flex: 1; }
   #tagpicks { display: flex; flex-wrap: wrap; gap: 0 14px; margin-bottom: 6px; }
-  #filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; }
+  #filters, .frow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; }
   .chip { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border: .5px solid var(--control-edge); border-radius: 16px; background: none; font-size: 13px; white-space: nowrap; }
   .chip:hover { background: var(--fill); }
   .chip.on { border-color: transparent; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 500; }
@@ -137,6 +137,24 @@
   .fend { display: flex; gap: 8px; margin-left: auto; }
   .fend .seg { padding: 3px; border-radius: 16px; }
   .fend .seg button { height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; }
+  #videoview .pill { position: absolute; left: 6px; top: 6px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; font-weight: 600; }
+  .pill.warn { background: var(--orange) !important; }
+  .pill.bad { background: var(--red) !important; }
+  .vcopy { display: flex; gap: 4px; }
+  .vcopy .btn { flex: 1; height: 26px; padding: 0 6px; font-size: 12px; }
+  #videodlg { width: min(1040px, 96vw); max-width: none; padding: 0; overflow: hidden; }
+  #videodlg form { display: flex; height: min(88vh, 860px); }
+  #vplayer { width: 100%; height: 100%; background: #000; object-fit: contain; display: block; }
+  .vform { flex: 1; min-width: 320px; max-width: 460px; display: flex; flex-direction: column; gap: 8px; padding: 18px; overflow-y: auto; }
+  .vform textarea { flex: 1; min-height: 110px; }
+  .vlabel { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; }
+  .vlabel small { margin-left: auto; color: var(--secondary); font-weight: 400; }
+  #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
+  #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
+  #useddlg { width: min(460px, 94vw); }
+  #usedlist { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+  #stylebox { width: 100%; height: 50vh; font: 12px/1.45 ui-monospace, Menlo, monospace; }
+  #styledlg { width: min(720px, 94vw); }
   .bundle { padding-top: 14px; }
   .bhead { display: flex; align-items: center; gap: 8px; min-height: 30px; padding-bottom: 6px; }
   .bhead b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -434,6 +452,7 @@
         <div id="inboxbar" hidden><div class="inbox" id="inbox"></div></div>
       </div>
       <div class="grid" id="cards"></div><div id="clipcards" hidden></div>
+      <div id="videoview" hidden><div id="vfilters"></div><div class="grid" id="videocards"></div></div>
     </div>
 
     <aside id="nipchat" aria-label="NIP">
@@ -561,6 +580,32 @@
   <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
 </form></dialog>
+<dialog id="videodlg"><form method="dialog" onsubmit="return false">
+  <div class="clipstage"><video id="vplayer" controls playsinline></video></div>
+  <div class="vform">
+    <input type="text" id="vtitle" aria-label="Video title" placeholder="Title" maxlength="120" style="font-size:15px;font-weight:600">
+    <div class="vlabel">Instagram<small id="vigcount" class="num"></small><button type="button" class="icon-btn small" data-copyfrom="vig" title="Copy">Copy</button></div>
+    <textarea id="vig" aria-label="Instagram caption" maxlength="2200"></textarea>
+    <div class="vlabel">TikTok<small id="vttcount" class="num"></small><button type="button" class="icon-btn small" data-copyfrom="vtt" title="Copy">Copy</button></div>
+    <textarea id="vtt" aria-label="TikTok caption" maxlength="4000"></textarea>
+    <div style="display:flex;gap:6px"><input type="text" id="vnote" style="flex:1;min-width:0" aria-label="What to change" placeholder="Tell Claude what to change, or what the video shows"><button type="button" class="btn" id="vredraft">Redraft</button></div>
+    <div class="vlabel">Made from</div>
+    <div id="vsources"></div>
+    <div class="actions-line" style="flex-wrap:wrap"><button type="button" class="btn" id="vdelete">Delete</button><button type="button" class="btn" id="vmove"></button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="vsave"></button></div>
+  </div>
+</form></dialog>
+<dialog id="useddlg"><form method="dialog">
+  <b>File the Bundles</b>
+  <p>This video is saved. Should the footage it came from stay ready to use again?</p>
+  <div id="usedlist"></div>
+  <div class="actions-line"><button type="button" class="btn default" id="useddone">Done</button></div>
+</form></dialog>
+<dialog id="styledlg"><form method="dialog">
+  <b>Improve the Style Guide</b>
+  <p id="stylesummary"></p>
+  <textarea id="stylebox" aria-label="Proposed style guide"></textarea>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Keep the Current One</button><button class="btn default" value="ok">Save This Guide</button></div>
+</form></dialog>
 <dialog id="tagdlg"><form method="dialog">
   <b id="taghead"></b>
   <p>Tick to add a tag to all of them, untick to remove it. A dash means only some have it, and they stay that way.</p>
@@ -610,7 +655,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', data = null, proj = '', clipIdx = 0;
+let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -643,15 +688,17 @@ async function loadLibrary() {
   landed = true;
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
+  api('/api/videos').then(v => { vids = v; drawLibrary(); }).catch(e => onVideos && status(e.message, true));
 }
 let landed = false, saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
 const saving = s => s.state === 'waiting' || s.state === 'saving';
 function drawSaves() {
   $('#saves').hidden = !saves.length;
   $('#saves').innerHTML = saves.map(s => `<div class="save ${s.state}">
-    <a href="#/p/${enc(s.project)}">${esc(s.title)}</a>
+    <a href="${s.video ? '#/videos' : '#/p/' + enc(s.project)}">${esc(s.title)}</a>
     ${saving(s) ? '' : `<button class="icon-btn small" data-dismiss="${esc(s.project)}" title="Dismiss" aria-label="Dismiss">✕</button>`}
     ${saving(s) ? `<progress value="${s.part}" aria-label="Saving ${esc(s.title)}"></progress><small>${esc(s.step)}…</small>`
+      : s.video ? (s.state === 'done' ? `<small>Captions are ready. <a href="#/videos" data-vid="${esc(s.saved.id)}">Review them</a></small>` : `<small>No captions yet. ${esc(s.error)}</small>`)
       : s.state === 'done' ? `<small>Saved ${plural(s.saved.clips, 'clip')} to the library, ${(s.saved.bytes / 1e9).toFixed(2)} GB${s.saved.skipped ? `. Left out ${plural(s.saved.skipped, 'sliver')} under half a second` : ''}. <a href="#/clips" data-bundle="${esc(s.saved.folder.split('/').pop())}">See clips</a></small>`
       : `<small>Not saved. It stays in Processing. ${esc(s.error)}</small>`}
   </div>`).join('');
@@ -665,7 +712,8 @@ async function watchSaves() {  // every second while something's saving
   if (saves.some(saving)) saveTimer = setTimeout(watchSaves, 1000);
 }
 $('#saves').onclick = e => {
-  const link = e.target.closest('[data-bundle]'), b = e.target.closest('[data-dismiss]');
+  const link = e.target.closest('[data-bundle]'), b = e.target.closest('[data-dismiss]'), v = e.target.closest('[data-vid]');
+  if (v) { e.preventDefault(); showVideo(v.dataset.vid); }
   if (link) { e.preventDefault(); showBundle(link.dataset.bundle); }
   if (b) api('/api/saves/' + enc(b.dataset.dismiss), {}).then(watchSaves).catch(err => status(err.message, true));
 };
@@ -675,17 +723,20 @@ function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && p.stage === stageFilter);
   const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
-  const here = data ? data.stage : stageFilter;
+  const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length;
   $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => {
     const n = projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0);
-    return `<button class="nav ${k === here && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
-  }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>`;
+    return `<button class="nav ${k === here && !onClips && !onVideos ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
+  }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>
+    <button class="nav ${onVideos ? 'on' : ''}" data-nav="videos" title="Finished videos, their captions, and what's been posted">${icon('play')}Videos${waiting ? `<small class="num">${waiting}</small>` : ''}</button>`;
   if ($('#library').hidden) return;
-  $('#cards').hidden = onClips;
+  $('#cards').hidden = onClips || onVideos;
   $('#clipcards').hidden = !onClips;
+  $('#videoview').hidden = !onVideos;
   $('#pickbar').hidden = !onClips || !chosen.size;
-  $('#inboxbar').hidden = onClips || stageFilter !== 'inbox';
+  $('#inboxbar').hidden = onClips || onVideos || stageFilter !== 'inbox';
   if (onClips) return drawClips(words);
+  if (onVideos) return drawVideos(words);
   $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cardLink = p => {  // finished footage opens on its clips; anything else opens to edit
@@ -729,6 +780,110 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
 const sortBtn = folder => folder ? `<button class="srt" data-folder="${esc(folder)}" title="Sort these clips" aria-label="Sort these clips">${icon('tag')}</button>` : '';
 const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
 const go = hash => location.hash === hash ? drawLibrary() : location.hash = hash;
+const vidState = v => !v.captions.instagram && !v.captions.tiktok ? ['No captions', 'bad'] : !v.reviewed ? ['Needs review', 'warn'] : v.shelf === 'Posted' ? ['Posted', ''] : ['Ready', ''];
+const vidUrl = (kind, v) => `/${kind}/${v.id.split('/').map(enc).join('/')}`;
+function drawVideos(words) {
+  const count = s => vids.filter(v => v.shelf === s).length, missing = vids.filter(v => v.shelf === 'Unposted' && !v.captions.instagram && !v.captions.tiktok).length;
+  $('#title').textContent = 'Videos';
+  const shown = vids.filter(v => v.shelf === vidShelf && words.every(w => [v.title, v.captions.instagram, v.captions.tiktok, ...v.sources].join(' ').toLowerCase().includes(w)));
+  $('#subtitle').textContent = plural(shown.length, 'video');
+  $('#vfilters').innerHTML = `<div class="frow">${['Drafts', 'Unposted', 'Posted'].filter(s => s !== 'Drafts' || count(s)).map(s => `<button class="chip ${s === vidShelf ? 'on' : ''}" data-shelf="${s}">${s === vidShelf ? icon('check') : ''}${s} <small class="num">${count(s)}</small></button>`).join('')}
+    <span class="fend"><button class="chip" data-vact="style" title="Open the guide captions are written from">Style Guide</button><button class="chip" data-vact="improve" title="Have Claude learn from the captions you've changed">Improve Style</button><button class="chip" data-vact="folder" title="Show the Videos folder in Finder">${icon('folder')}Drive</button>${missing ? `<button class="chip" data-vact="missing">Write ${plural(missing, 'Missing Caption')}</button>` : ''}<button class="btn default" style="height:32px;border-radius:16px" data-vact="add">Add Finished Video</button></span></div>`;
+  $('#videocards').innerHTML = shown.length ? shown.map(v => { const [label, kind] = vidState(v); return `
+    <a class="tile" href="#/videos" data-vid="${esc(v.id)}">
+      <div class="dur"><div class="thumb" style="background-image:url('${vidUrl('videothumb', v)}')"></div><span class="pill ${kind}">${label}</span></div>
+      <b>${esc(v.title)}</b>
+      <div class="vcopy">${v.captions.instagram ? `<button class="btn" data-copy="instagram">Copy Insta</button><button class="btn" data-copy="tiktok">Copy TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
+    </a>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${icon('play')}<b>Nothing in ${vidShelf}</b>${vidShelf === 'Unposted' ? 'Press Add Finished Video, or put a video in the Unposted folder on Drive.' : ''}</div>`;
+}
+const copyText = async (text, name) => { await navigator.clipboard.writeText(text); status(`Copied the ${name} caption`); };
+$('#videoview').onclick = e => {
+  const shelf = e.target.closest('[data-shelf]'), act = e.target.closest('[data-vact]')?.dataset.vact, card = e.target.closest('[data-vid]');
+  if (shelf) { vidShelf = shelf.dataset.shelf; return drawLibrary(); }
+  if (act === 'style' || act === 'folder') return api('/api/open', {what: act === 'style' ? 'style' : 'videos'}).catch(err => status(err.message, true));
+  if (act === 'add') return run(e.target, 'Pick your finished videos in the Finder window…', async () => {
+    const r = await api('/api/videos/add', {});
+    await watchSaves();
+    status(r.added ? `Writing captions for ${plural(r.added, 'video')}; the corner shows when they’re ready` : 'No videos added');
+  });
+  if (act === 'missing') return run(e.target, 'Starting…', async () => { await api('/api/videos/caption-missing', {}); await watchSaves(); status('Writing captions; the corner shows when they’re ready'); });
+  if (act === 'improve') return run(e.target, 'Claude is reading your edits…', async () => {
+    const r = await api('/api/style/improve', {});
+    $('#stylesummary').textContent = r.summary;
+    $('#stylebox').value = r.guide;
+    $('#styledlg').returnValue = '';
+    $('#styledlg').showModal();
+    status('');
+  });
+  if (!card) return;
+  e.preventDefault();
+  const v = vids.find(x => x.id === card.dataset.vid), copy = e.target.closest('[data-copy]')?.dataset.copy;
+  if (copy) return copyText(v.captions[copy], copy === 'tiktok' ? 'TikTok' : 'Instagram').catch(err => status(err.message, true));
+  if (e.target.closest('[data-write]')) return run(e.target, 'Starting…', async () => { await api('/api/videos/caption', {id: v.id}); await watchSaves(); status('Writing captions; the corner shows when they’re ready'); });
+  showVideo(v.id);
+};
+$('#styledlg').onclose = () => $('#styledlg').returnValue && api('/api/style', {guide: $('#stylebox').value}).then(() => status('Style guide saved')).catch(e => status(e.message, true));
+function vidCounts() { $('#vigcount').textContent = $('#vig').value.length; $('#vttcount').textContent = $('#vtt').value.length; }
+$('#vig').oninput = $('#vtt').oninput = vidCounts;
+function showVideo(id) {  // the review screen: nothing reaches Drive until it's saved
+  const v = openVid = vids.find(x => x.id === id);
+  if (!v) return api('/api/videos').then(list => { vids = list; if (vids.some(x => x.id === id)) showVideo(id); });
+  vidShelf = v.shelf;
+  go('#/videos');
+  $('#vplayer').src = vidUrl('video', v);
+  $('#vtitle').value = v.title;
+  $('#vig').value = v.captions.instagram || '';
+  $('#vtt').value = v.captions.tiktok || '';
+  $('#vnote').value = '';
+  vidCounts();
+  const bundles = [...new Set([...clips.map(c => c.folder), ...v.sources])];
+  $('#vsources').innerHTML = bundles.map(f => `<button type="button" class="chip ${v.sources.includes(f) ? 'on' : ''}" data-source="${esc(f)}">${esc(f)}</button>`).join('');
+  $('#vsave').textContent = v.shelf === 'Drafts' ? 'Save to Unposted' : 'Save';
+  $('#vmove').hidden = v.shelf === 'Drafts';
+  $('#vmove').textContent = v.shelf === 'Posted' ? 'Move to Unposted' : 'Mark Posted';
+  $('#videodlg').showModal();
+}
+$('#videodlg').onclose = () => { $('#vplayer').removeAttribute('src'); $('#vplayer').load(); };
+$('#vsources').onclick = e => e.target.closest('[data-source]')?.classList.toggle('on');
+$('#videodlg').addEventListener('click', e => { const b = e.target.closest('[data-copyfrom]'); if (b) copyText($('#' + b.dataset.copyfrom).value, b.dataset.copyfrom === 'vtt' ? 'TikTok' : 'Instagram').catch(err => status(err.message, true)); });
+$('#vredraft').onclick = e => run(e.currentTarget, 'Claude is redrafting…', async () => {
+  const r = await api('/api/videos/redraft', {id: openVid.id, title: $('#vtitle').value, note: $('#vnote').value, instagram: $('#vig').value, tiktok: $('#vtt').value});
+  $('#vig').value = r.instagram;
+  $('#vtt').value = r.tiktok;
+  vidCounts();
+  status('Redrafted; nothing is saved yet');
+});
+$('#vsave').onclick = e => run(e.currentTarget, 'Saving to Drive…', async () => {
+  const v = openVid, sources = [...$('#vsources').querySelectorAll('.on')].map(b => b.dataset.source);
+  await api('/api/videos/save', {id: v.id, title: $('#vtitle').value, instagram: $('#vig').value, tiktok: $('#vtt').value, sources});
+  $('#videodlg').close();
+  if (v.shelf === 'Drafts') vidShelf = 'Unposted';
+  await loadLibrary();
+  status('Saved');
+  if (v.shelf === 'Drafts') askBundles(sources);
+});
+function askBundles(sources) {  // filing the footage a new video came from
+  const open = sources.filter(f => clips.some(c => c.folder === f && !c.used));
+  if (!open.length) return;
+  $('#usedlist').innerHTML = open.map(f => `<div data-folder="${esc(f)}"><div style="margin-bottom:4px">${esc(f)}</div><div class="seg"><button type="button" class="on" data-v="no">Keep as Unused</button><button type="button" data-v="yes">Move to Used</button></div></div>`).join('');
+  $('#useddlg').showModal();
+}
+$('#usedlist').onclick = e => { const b = e.target.closest('button'); if (b) segSet(b.parentElement, b.dataset.v); };
+$('#useddone').onclick = () => {
+  $('#useddlg').close();
+  const moves = [...$('#usedlist').children].filter(d => segGet(d.querySelector('.seg')) === 'yes').map(d => d.dataset.folder);
+  if (moves.length) run($('#cards'), 'Moving…', async () => { for (const folder of moves) await api('/api/used-bundle', {folder, used: true}); await loadLibrary(); status(`Moved ${plural(moves.length, 'bundle')} to Used`); });
+};
+$('#vmove').onclick = e => run(e.currentTarget, 'Moving…', async () => {
+  const shelf = openVid.shelf === 'Posted' ? 'Unposted' : 'Posted';
+  await api('/api/videos/move', {id: openVid.id, shelf});
+  $('#videodlg').close();
+  await loadLibrary();
+  status(`Moved to ${shelf}`);
+});
+$('#vdelete').onclick = e => {
+  if (confirm(`Delete “${openVid.title}” and its captions? On Drive it stays in the trash for 30 days.`)) run(e.currentTarget, 'Deleting…', async () => { await api('/api/videos/delete', {id: openVid.id}); $('#videodlg').close(); await loadLibrary(); status('Deleted'); });
+};
 const clipView = {reuse: '', used: '', sort: 'new', mode: 'grid', moreTags: false};
 try { clipView.mode = localStorage.getItem('clipmode') || 'grid'; } catch {}
 const CAMERAS = {iphone: 'iPhone', 'meta glasses': 'Meta Glasses'};
@@ -1041,7 +1196,7 @@ $('#stages').ondrop = e => {
 $('#stages').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.nav) return go('#/clips');
+  if (b.dataset.nav) return go('#/' + b.dataset.nav);
   $('#search').value = '';
   go('#/s/' + b.dataset.stage);
 };
@@ -1138,7 +1293,8 @@ function show(d, idx = clipIdx) {
       </div>
       <div class="acts">
         <button class="icon-btn small" data-act="play" title="Play this edit">${icon('play', true)}</button>
-        <button class="icon-btn small" data-act="export" title="Export as one video">${icon('share')}</button>
+        <button class="icon-btn small" data-act="export" title="Export as one video, to take into CapCut">${icon('share')}</button>
+        <button class="icon-btn small" data-act="video" title="Save as a finished video and draft its captions">${icon('check')}</button>
         <button class="icon-btn small" data-act="delete" title="Delete this edit">${icon('trash')}</button>
       </div>
     </div>`;
@@ -1600,6 +1756,11 @@ $('#stories').onclick = e => {
     const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
     playList(list);
   }
+  if (b.dataset.act === 'video') run(b, 'Saving…', async () => {
+    await api('/api/videos/from-edit', {project: proj, story: s.id});
+    await watchSaves();
+    status('Rendering it and writing captions; the corner shows when it’s ready');
+  });
   if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () => {
     const r = await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'});
     status(`Exported to ${r.done}`);
@@ -1790,6 +1951,16 @@ const sortOf = t => t === 'skip' ? undefined : t === 'talking head' ? {mode: 'ta
 async function nipDo(a, undo) {  // each goes through the same checked routes as the buttons; undo keeps how clips were before NIP changed them
   const picks = a.clips.map(clipOf).filter(Boolean), split = a.text.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
   const label = async (tags, reusable) => { for (const c of picks) { undo.has(c) || undo.set(c, {tags: c.tags, reusable: c.reusable ?? null}); await relabel(c, tags(c), reusable); } };
+  if (a.action === 'caption_videos') {
+    const r = await api('/api/videos/caption-missing', {});
+    await watchSaves();
+    return r.added ? `Writing captions for ${plural(r.added, 'video')}; progress is in the corner` : 'Every video in Unposted already has captions';
+  }
+  if (a.action === 'rewrite_caption') { await api('/api/videos/caption', {id: a.video, note: a.text}); await watchSaves(); return 'Redrafting its captions; progress is in the corner'; }
+  if (a.action === 'mark_posted' || a.action === 'mark_unposted') {
+    await api('/api/videos/move', {id: a.video, shelf: a.action === 'mark_posted' ? 'Posted' : 'Unposted'});
+    return `Moved it to ${a.action === 'mark_posted' ? 'Posted' : 'Unposted'}`;
+  }
   if (a.action === 'filter') {
     clipView.reuse = {reusable: 'yes', 'one-off': 'no', 'not sorted': 'none', all: ''}[a.text];
     $('#search').value = '';
@@ -1960,6 +2131,7 @@ function route() {
   if (data?.unsaved && data.name !== (m && decodeURIComponent(m[1])))  // leaving edited completed footage replaces its clips in the library
     api('/api/stage/' + enc(data.name), {stage: 'completed', unmarked: 'keep'}).then(watchSaves).then(loadLibrary).catch(e => status(e.message, true));
   onClips = c;
+  onVideos = location.hash === '#/videos';
   $('#filters').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
