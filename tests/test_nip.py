@@ -970,9 +970,25 @@ class Robustness(unittest.TestCase):
         self.assertIn('said="my print farm"', sent)
         self.assertIn("you: hi", sent)
         self.assertEqual((r["clips"], r["projects"]), (["p/01 a"], ["p"]))  # only what exists
-        self.assertEqual([a["action"] for a in r["actions"]], ["pick", "mark_used"])  # no delete, no skipping Mark Complete's rules
+        self.assertEqual([a["action"] for a in r["actions"]], ["pick", "mark_used", "delete"])  # delete asks in the page; a move can't skip Mark Complete
         self.assertEqual(r["actions"][0]["clips"], ["p/01 a"])
-        self.assertIn("4 of that couldn't be done", r["reply"])
+        self.assertIn("3 of that couldn't be done", r["reply"])
+        act = lambda **k: {"action": "", "project": "", "projects": [], "video": "", "clips": [], "text": "", **k}
+        projects = [{**projects[0], "stems": ["a"]}, {**projects[0], "name": "q", "stems": ["b", "c"]}]
+        answer = {"reply": "", "clips": [], "projects": [], "actions": [
+            act(action="set_use", clips=[0], text="one-off"), act(action="set_use", clips=[0], text="maybe"), act(action="untag", clips=[0]),
+            act(action="note", project="p", text="cut it"), act(action="note", project="q", text="cut it"), act(action="note", project="q", video="c", text="cut it"),
+            act(action="bundle", projects=["p", "q", "nope"], text="Both"), act(action="bundle", projects=["p"], text="One"), act(action="complete", project="p"), act(action="unpick")]}
+        with mock.patch.object(brief, "claude_json", return_value=answer):
+            r = brief.assist("do it", [], "Library", projects, clips)
+        self.assertEqual([(a["action"], a["video"]) for a in r["actions"]], [("set_use", ""), ("note", "a"), ("note", "c"), ("bundle", ""), ("unpick", "")])
+        self.assertEqual(r["actions"][3]["projects"], ["p", "q"])
+
+    def test_nip_is_told_everything_it_can_do_and_the_page_can_do_it(self):
+        page = (Path(cli.__file__).parent / "viewer.html").read_text()
+        for name in brief.ASSIST_ACTIONS:
+            self.assertIn(f"- {name} (", brief.ASSIST_SYSTEM)
+            self.assertRegex(page, rf"a\.action === '{name}'")
 
     def test_nip_route_checks_the_message(self):
         import urllib.error

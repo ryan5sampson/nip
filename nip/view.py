@@ -102,6 +102,7 @@ def summary(proj):
             "tiers": {k: sum(len(t[k]) for t in ts) for k in ("keep", "unmarked", "cut")},
             "said": " ".join(w["w"] for c in clips for w in c["words"])[:brief.ASSIST_SAID], "stage": cli.stage_of(info), "unsaved": bool(info.get("unsaved")),
             "unsorted": sum(c["edit"].get("reusable") is None for c in clips),  # videos not sorted by voice while filming
+            "stems": info["clips"], "edits": [s["title"] for s in info.get("stories", [])],
             "media": [[c["source"], s["a"], s["b"] - s["a"]] for c in clips for s in c["segments"]],
             "search": " ".join([proj.name, desc or "", *tags, *names, *notes, *labels,
                                 *(w["w"] for c in clips for w in c["words"])]).lower()}

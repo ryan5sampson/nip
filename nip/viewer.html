@@ -684,6 +684,10 @@ function drawClips(words) {  // every kept clip, across all bundles
 $('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
 $('#clipsort').onchange = $('#clipused').onchange = $('#clipreuse').onchange = drawLibrary;
 $('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
+async function relabel(c, tags, reusable = c.reusable ?? null) {
+  c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags, reusable})).tags;
+  c.reusable = reusable;
+}
 let tagging = [];  // the selected clips, while their tags are being changed
 $('#picktags').onclick = () => {
   tagging = [...chosen.values()].map(c => clips.find(x => clipKey(x) === clipKey(c)) || c);  // the library may have reloaded since they were picked
@@ -710,9 +714,7 @@ $('#tagdlg').onclose = () => {
   run($('#picktags'), 'Saving…', async () => {
     try {
       for (const c of tagging) {
-        const reusable = reuse ? reuse === 'yes' : c.reusable;
-        c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags: [...new Set([...c.tags.filter(t => !drop.includes(t)), ...add])], reusable})).tags;
-        c.reusable = reusable;
+        await relabel(c, [...new Set([...c.tags.filter(t => !drop.includes(t)), ...add])], reuse ? reuse === 'yes' : c.reusable);
         chosen.set(clipKey(c), c);
       }
       status(`Updated ${plural(tagging.length, 'clip')}`);
@@ -1634,12 +1636,60 @@ function drawChat(thinking) {
       ${m.clips?.length ? `<div class="chatclips">${m.clips.map(clipOf).filter(Boolean).map(c => `<button type="button" data-key="${esc(clipKey(c))}" title="Play this clip"><i style="background-image:url('/final/${enc(c.folder)}/${enc(c.stem + '.jpg')}')"></i><span>${esc(clipTitle(c))}</span></button>`).join('')}</div>` : ''}
       ${(m.projects || []).map(p => `<a href="#/p/${enc(p)}">${esc(titleOf(p))}</a>`).join('')}
       ${(m.done || []).map(d => `<small class="${d.bad ? 'bad' : ''}">${esc(d.text)}</small>`).join('')}
+      ${m.undo?.size ? `<button type="button" class="btn" data-undo="${chat.indexOf(m)}">Undo</button>` : ''}
     </div>`).join('') + (thinking ? '<div class="msg"><small>NIP is thinking…</small></div>' : '');
   const log = $('#chatlog');
   log.scrollTop = log.lastElementChild.offsetTop - log.offsetTop;  // from the top of the newest message, which may be long
 }
-async function nipDo(a) {  // each goes through the same checked routes as the buttons
-  const picks = a.clips.map(clipOf).filter(Boolean);
+const sortOf = t => t === 'skip' ? undefined : t === 'talking head' ? {mode: 'talking'} : t === 'mixed' ? {mode: 'mixed'}
+  : t.startsWith('all:') ? {mode: 'action', tags: t.slice(4).split(',')} : {mode: 'custom', text: t};
+async function nipDo(a, undo) {  // each goes through the same checked routes as the buttons; undo keeps how clips were before NIP changed them
+  const picks = a.clips.map(clipOf).filter(Boolean), split = a.text.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  const label = async (tags, reusable) => { for (const c of picks) { undo.has(c) || undo.set(c, {tags: c.tags, reusable: c.reusable ?? null}); await relabel(c, tags(c), reusable); } };
+  if (a.action === 'filter') {
+    $('#clipreuse').value = {reusable: 'yes', 'one-off': 'no', 'not sorted': 'none', all: ''}[a.text];
+    $('#search').value = ''; tagFilter = null;
+    location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips';
+    return `Showing ${a.text === 'all' ? 'all' : a.text} clips`;
+  }
+  if (a.action === 'unpick') {
+    picks.length ? picks.forEach(c => chosen.delete(clipKey(c))) : chosen.clear();
+    drawLibrary();
+    return picks.length ? `Deselected ${plural(picks.length, 'clip')}` : 'Deselected every clip';
+  }
+  if (a.action === 'reveal') { await api('/api/reveal', {folder: picks[0].folder, file: picks[0].file}); return `Showed ${clipTitle(picks[0])} in Finder`; }
+  if (a.action === 'untag') { await label(c => c.tags.filter(t => !split.includes(t))); return `Removed ${split.join(', ')} from ${plural(picks.length, 'clip')}`; }
+  if (a.action === 'set_use') {
+    await label(c => c.tags, {reusable: true, 'one-off': false, 'not sorted': null}[a.text]);
+    return `Marked ${plural(picks.length, 'clip')} ${a.text}`;
+  }
+  if (a.action === 'sort') {
+    const folder = clips.find(c => c.project === a.project)?.folder;
+    if (!folder) throw new Error(`${titleOf(a.project)} has no clips in the library`);
+    await api('/api/sort-bundle', {folder, sort: sortOf(a.text)});
+    return `Sorted ${titleOf(a.project)}`;
+  }
+  if (a.action === 'bundle') { await api('/api/bundle', {projects: a.projects, name: a.text}); return `Bundled ${plural(a.projects.length, 'project')} as “${a.text}”`; }
+  if (a.action === 'note') {
+    const r = await api(`/api/notes/${enc(a.project)}/${enc(a.video)}`, {action: 'add', text: a.text, apply: true});
+    if (r.unsaved) await api('/api/stage/' + enc(a.project), {stage: 'completed', unmarked: 'keep'});  // nobody's in the editor to leave it, which is what saves it
+    return r.clips.find(c => c.stem === a.video)?.edit_notes?.at(-1)?.result || `Changed ${a.video}`;
+  }
+  if (a.action === 'make_edit') {
+    const r = await api('/api/brief/' + enc(a.project), {brief: a.text});
+    return `Made the edit “${r.stories.at(-1).title}” in ${titleOf(a.project)}`;
+  }
+  if (a.action === 'export_edit') {
+    const s = (await api('/api/project/' + enc(a.project))).stories.find(x => x.title === a.text);
+    if (!s) throw new Error(`${titleOf(a.project)} has no edit called “${a.text}”`);
+    return `Exported to ${(await api(`/api/story/${enc(a.project)}/${s.id}`, {action: 'export'})).done}`;
+  }
+  if (a.action === 'delete') {
+    const n = clips.filter(c => c.project === a.project).length;
+    if (!confirm(`NIP wants to delete “${titleOf(a.project)}”${n ? ` and its ${plural(n, 'clip')} from the library` : ''}. Its footage goes to the Trash. Delete it?`)) return 'You kept it';
+    await api('/api/clear/' + enc(a.project), {});
+    return `Deleted ${titleOf(a.project)}`;
+  }
   if (a.action === 'open') { location.hash = '#/p/' + enc(a.project); return `Opened ${titleOf(a.project)}`; }
   if (a.action === 'search') { $('#search').value = a.text; tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; return `Searched the Library for “${a.text}”`; }
   if (a.action === 'pick') { picks.forEach(c => chosen.set(clipKey(c), c)); return `Picked ${plural(picks.length, 'clip')}`; }
@@ -1650,12 +1700,9 @@ async function nipDo(a) {  // each goes through the same checked routes as the b
   }
   if (a.action === 'mark_used' || a.action === 'mark_unused') { await api('/api/used/' + enc(a.project), {used: a.action === 'mark_used'}); return `Moved ${titleOf(a.project)} to ${a.action === 'mark_used' ? 'Used' : 'Unused'}`; }
   if (a.action === 'rename') { await api('/api/project/' + enc(a.project), {description: a.text}); return `Renamed it “${a.text}”`; }
-  if (a.action === 'tag') {
-    for (const c of picks) c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags: [...new Set([...c.tags, ...a.text.split(',')])]})).tags;
-    return `Tagged ${plural(picks.length, 'clip')}`;
-  }
+  if (a.action === 'tag') { await label(c => [...new Set([...c.tags, ...split])]); return `Tagged ${plural(picks.length, 'clip')}`; }
   if (a.action === 'move') { await api('/api/stage/' + enc(a.project), {stage: a.text}); return `Moved ${titleOf(a.project)} to ${STAGES[a.text][0]}`; }
-  if (a.action === 'complete') { await api('/api/stage/' + enc(a.project), {stage: 'completed'}); return `Saving ${titleOf(a.project)}; progress is in the corner`; }
+  if (a.action === 'complete') { await api('/api/stage/' + enc(a.project), {stage: 'completed', unmarked: 'keep', sort: sortOf(a.text)}); return `Saving ${titleOf(a.project)}; progress is in the corner`; }
   throw new Error(`I don’t know how to ${a.action}`);
 }
 $('#chatform').onsubmit = async e => {
@@ -1669,11 +1716,11 @@ $('#chatform').onsubmit = async e => {
   drawChat(true);
   try {
     const r = await api('/api/nip', {message: text, history, view: onClips ? 'Library' : STAGES[stageFilter][0]});
-    const m = {...r, role: 'nip', text: r.reply, done: []};
+    const m = {...r, role: 'nip', text: r.reply, done: [], undo: new Map()};
     chat.push(m);
     drawChat();
     for (const a of r.actions) {
-      try { m.done.push({text: await nipDo(a)}); } catch (err) { m.done.push({text: err.message, bad: true}); }
+      try { m.done.push({text: await nipDo(a, m.undo)}); } catch (err) { m.done.push({text: err.message, bad: true}); }
       drawChat();
     }
     if (r.actions.length) { await loadLibrary(); watchSaves(); }
@@ -1685,7 +1732,20 @@ $('#chatin').onkeydown = e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#chatform').requestSubmit(); }
   else if (e.key === 'Escape') $('#chatin').blur();
 };
-$('#chatlog').onclick = e => { const c = clipOf(e.target.closest('[data-key]')?.dataset.key); if (c) showClip(c); };
+$('#chatlog').onclick = e => {
+  const b = e.target.closest('[data-undo]'), c = clipOf(e.target.closest('[data-key]')?.dataset.key);
+  if (c) showClip(c);
+  if (!b) return;
+  const m = chat[+b.dataset.undo];
+  run(b, 'Undoing…', async () => {
+    for (const [clip, was] of m.undo) await relabel(clip, was.tags, was.reusable);
+    m.done.push({text: `Put ${plural(m.undo.size, 'clip')} back`});
+    m.undo.clear();
+    await loadLibrary();
+    drawChat();
+    status('Undone');
+  });
+};
 document.addEventListener('keydown', e => {
   if (e.key !== 'e' || !$('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
   e.preventDefault();
