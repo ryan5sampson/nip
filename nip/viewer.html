@@ -152,6 +152,15 @@
   #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
   #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
   #useddlg { width: min(460px, 94vw); }
+  #ideacards { max-width: 900px; margin-bottom: 20px; }
+  #ideacards .row { align-items: center; padding: 10px 12px; }
+  #ideacards .sub { white-space: pre-wrap; }
+  .ilinks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .ilinks .chip { height: 24px; padding: 0 9px; font-size: 12px; color: inherit; text-decoration: none; }
+  .ilinks .chip.gone { opacity: .5; text-decoration: line-through; }
+  .ilinks svg { width: 11px; height: 11px; }
+  #ideadlg { width: min(560px, 94vw); }
+  .ipicks { max-height: 150px; overflow-y: auto; border-radius: 6px; background: var(--fill); padding: 2px 8px; }
   #usedlist { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
   #stylebox { width: 100%; height: 50vh; font: 12px/1.45 ui-monospace, Menlo, monospace; }
   #styledlg { width: min(720px, 94vw); }
@@ -417,6 +426,7 @@
   <symbol id="i-out" viewBox="0 0 16 16"><path d="M9 2.6h2.6v10.8H9M2.4 8h5M5.2 5.6 7.4 8l-2.2 2.4"/></symbol>
   <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></symbol>
   <symbol id="i-list" viewBox="0 0 16 16"><path d="M5.4 3.6h8M5.4 8h8M5.4 12.4h8M2.4 3.6h.6M2.4 8h.6M2.4 12.4h.6"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 16 16"><path d="M6 13.6h4M6.4 11.6h3.2M8 1.8a4.4 4.4 0 0 0-2.6 8c.6.4 1 1 1 1.8h3.2c0-.8.4-1.4 1-1.8A4.4 4.4 0 0 0 8 1.8z"/></symbol>
   <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1.6"/><path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/></symbol>
 </svg>
 
@@ -453,6 +463,7 @@
       </div>
       <div class="grid" id="cards"></div><div id="clipcards" hidden></div>
       <div id="videoview" hidden><div id="vfilters"></div><div class="grid" id="videocards"></div></div>
+      <div id="ideaview" hidden><div id="ifilters"></div><div class="group" id="ideacards"></div></div>
     </div>
 
     <aside id="nipchat" aria-label="NIP">
@@ -594,6 +605,16 @@
     <div class="actions-line" style="flex-wrap:wrap"><button type="button" class="btn" id="vdelete">Delete</button><button type="button" class="btn" id="vmove"></button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="vsave"></button></div>
   </div>
 </form></dialog>
+<dialog id="ideadlg"><form method="dialog">
+  <b id="ideahead"></b>
+  <div class="field" style="margin-top:10px"><label for="ititle">Idea</label><input type="text" id="ititle" maxlength="300" required placeholder="What's the video?"></div>
+  <div class="field"><label for="inotes">Notes</label><textarea id="inotes" maxlength="2000"></textarea></div>
+  <div class="field"><label for="ilink">Reference link</label><input type="text" id="ilink" maxlength="2000" placeholder="https://…"></div>
+  <div class="field"><label for="istatus">Status</label><select id="istatus"></select></div>
+  <div class="field"><label>Footage bundles</label><div class="ipicks" id="ibundles"></div></div>
+  <div class="field"><label>Videos</label><div class="ipicks" id="ivideos"></div></div>
+  <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Save</button></div>
+</form></dialog>
 <dialog id="useddlg"><form method="dialog">
   <b>File the Bundles</b>
   <p>This video is saved. Should the footage it came from stay ready to use again?</p>
@@ -655,6 +676,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+let onIdeas = false, ideaList = null, ideaSheet = '', ideaStatuses = [], ideaFilter = '', openIdea = null;
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -689,6 +711,7 @@ async function loadLibrary() {
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
   api('/api/videos').then(v => { vids = v; drawLibrary(); }).catch(e => onVideos && status(e.message, true));
+  if (onIdeas) loadIdeas();
 }
 let landed = false, saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
 const saving = s => s.state === 'waiting' || s.state === 'saving';
@@ -726,17 +749,20 @@ function drawLibrary() {
   const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length;
   $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => {
     const n = projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0);
-    return `<button class="nav ${k === here && !onClips && !onVideos ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
+    return `<button class="nav ${k === here && !onClips && !onVideos && !onIdeas ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
   }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>
-    <button class="nav ${onVideos ? 'on' : ''}" data-nav="videos" title="Finished videos, their captions, and what's been posted">${icon('play')}Videos${waiting ? `<small class="num">${waiting}</small>` : ''}</button>`;
+    <button class="nav ${onVideos ? 'on' : ''}" data-nav="videos" title="Finished videos, their captions, and what's been posted">${icon('play')}Videos${waiting ? `<small class="num">${waiting}</small>` : ''}</button>
+    <button class="nav ${onIdeas ? 'on' : ''}" data-nav="ideas" title="Video ideas, from your Linderball Video Ideas sheet">${icon('bulb')}Ideas</button>`;
   if ($('#library').hidden) return;
-  $('#cards').hidden = onClips || onVideos;
+  $('#cards').hidden = onClips || onVideos || onIdeas;
+  $('#ideaview').hidden = !onIdeas;
   $('#clipcards').hidden = !onClips;
   $('#videoview').hidden = !onVideos;
   $('#pickbar').hidden = !onClips || !chosen.size;
-  $('#inboxbar').hidden = onClips || onVideos || stageFilter !== 'inbox';
+  $('#inboxbar').hidden = onClips || onVideos || onIdeas || stageFilter !== 'inbox';
   if (onClips) return drawClips(words);
   if (onVideos) return drawVideos(words);
+  if (onIdeas) return drawIdeas(words);
   $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cardLink = p => {  // finished footage opens on its clips; anything else opens to edit
@@ -796,6 +822,74 @@ function drawVideos(words) {
       <div class="vcopy">${v.captions.instagram ? `<button class="btn" data-copy="instagram">Copy Insta</button><button class="btn" data-copy="tiktok">Copy TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
     </a>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${icon('play')}<b>Nothing in ${vidShelf}</b>${vidShelf === 'Unposted' ? 'Press Add Finished Video, or put a video in the Unposted folder on Drive.' : ''}</div>`;
 }
+// ---------- video ideas: the Google Sheet is the source of truth, read each time the tab opens ----------
+async function loadIdeas() {
+  try { ({ideas: ideaList, sheet: ideaSheet, statuses: ideaStatuses} = await api('/api/ideas')); } catch (e) { ideaList = ideaList || []; status(e.message, true); }
+  drawLibrary();
+}
+const videoByName = name => vids.find(v => v.shelf !== 'Drafts' && v.id.split('/')[1] === name);  // a video's folder name is its link; drafts are renamed when saved, so they can't be linked
+function drawIdeas(words) {
+  $('#title').textContent = 'Ideas';
+  if (!ideaList) { $('#subtitle').textContent = ''; $('#ifilters').innerHTML = ''; $('#ideacards').innerHTML = `<div class="empty">${icon('bulb')}<b>Loading Ideas…</b>From your Google Sheet.</div>`; return; }
+  const match = i => words.every(w => [i.id, i.idea, i.notes, ...i.bundles, ...i.videos].join(' ').toLowerCase().includes(w));
+  const shown = ideaList.filter(i => (!ideaFilter || i.status === ideaFilter) && match(i)), count = st => ideaList.filter(i => i.status === st).length;
+  $('#subtitle').textContent = plural(shown.length, 'idea');
+  $('#ifilters').innerHTML = `<div class="frow">${['', ...ideaStatuses].map(st => `<button class="chip ${st === ideaFilter ? 'on' : ''}" data-ifilter="${esc(st)}">${st === ideaFilter ? icon('check') : ''}${esc(st || 'All')} <small class="num">${st ? count(st) : ideaList.length}</small></button>`).join('')}
+    <span class="fend">${ideaSheet ? `<a class="chip" href="${esc(ideaSheet)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="Open the sheet in Google Sheets">Sheet</a>` : ''}<button class="btn default" style="height:32px;border-radius:16px" data-iact="new">New Idea</button></span></div>`;
+  const chips = i => {
+    const out = [];
+    if (/^https?:\/\//.test(i.link)) out.push(`<a class="chip" href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${icon('share')}Reference</a>`);
+    for (const b of i.bundles) { const p = projects.find(x => x.name === b);
+      out.push(p ? `<a class="chip" href="#/p/${enc(b)}" title="Open this footage">${icon('film')}${esc(p.description || b)}</a>` : `<span class="chip gone" title="No footage with this name here">${icon('film')}${esc(b)}</span>`); }
+    for (const n of i.videos) { const v = videoByName(n);
+      out.push(v ? `<a class="chip" href="#/videos" data-vid="${esc(v.id)}" title="Open this video">${icon('play')}${esc(v.title)}</a>` : `<span class="chip gone" title="No finished video with this name">${icon('play')}${esc(n)}</span>`); }
+    return out.length ? `<div class="ilinks">${out.join('')}</div>` : '';
+  };
+  $('#ideacards').innerHTML = shown.length ? shown.map(i => `
+    <div class="row" data-idea="${esc(i.id)}">
+      <div class="main-col"><div class="title-line"><b>${esc(i.idea)}</b><small class="sub num">${esc(i.id)}</small></div>${i.notes ? `<span class="sub">${esc(i.notes)}</span>` : ''}${chips(i)}</div>
+      <select data-istatus aria-label="Status of ${esc(i.idea)}">${ideaStatuses.map(st => `<option ${st === i.status ? 'selected' : ''}>${esc(st)}</option>`).join('')}</select>
+      <button class="icon-btn" data-iedit title="Edit and link footage or videos" aria-label="Edit ${esc(i.idea)}">${icon('pencil')}</button>
+    </div>`).join('') : `<div class="empty">${icon('bulb')}<b>${ideaList.length ? 'No Matching Ideas' : 'No Ideas Yet'}</b>${ideaList.length ? '' : 'Press New Idea, or add a row to the sheet.'}</div>`;
+}
+async function saveIdea(id, fields) {
+  await api(id ? '/api/ideas/update' : '/api/ideas/add', {id, ...fields});
+  await loadIdeas();
+}
+function editIdea(i) {  // i is null for a new idea
+  openIdea = i;
+  $('#ideahead').textContent = i ? `Edit ${i.id}` : 'New Idea';
+  $('#ititle').value = i?.idea || ''; $('#inotes').value = i?.notes || ''; $('#ilink').value = i?.link || '';
+  $('#istatus').innerHTML = ideaStatuses.map(st => `<option ${st === (i?.status || 'Idea') ? 'selected' : ''}>${esc(st)}</option>`).join('');
+  const picks = (list, on) => list.length ? list.map(([value, label]) => `<label class="opt"><input type="checkbox" value="${esc(value)}" ${on.includes(value) ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('') : '<p class="hint">None yet</p>';
+  const bundles = projects.map(p => [p.name, p.description || p.name]), videos = vids.filter(v => v.shelf !== 'Drafts').map(v => [v.id.split('/')[1], `${v.title} (${v.shelf})`]);
+  const keepGone = (list, on) => [...list, ...on.filter(n => !list.some(([v]) => v === n)).map(n => [n, `${n} (not found)`])];  // a link to something deleted stays until unticked
+  $('#ibundles').innerHTML = picks(keepGone(bundles, i?.bundles || []), i?.bundles || []);
+  $('#ivideos').innerHTML = picks(keepGone(videos, i?.videos || []), i?.videos || []);
+  $('#ideadlg').returnValue = '';
+  $('#ideadlg').showModal();
+}
+$('#ideadlg').onclose = () => {
+  if ($('#ideadlg').returnValue !== 'ok') return;
+  const ticked = sel => [...document.querySelectorAll(`${sel} input:checked`)].map(c => c.value);
+  run($('#ideadlg'), 'Saving to the sheet…', async () => {
+    await saveIdea(openIdea?.id, {idea: $('#ititle').value, notes: $('#inotes').value, link: $('#ilink').value, status: $('#istatus').value,
+      bundles: ticked('#ibundles'), videos: ticked('#ivideos')});
+    status('Saved to the sheet');
+  });
+};
+$('#ideaview').onclick = e => {
+  const f = e.target.closest('[data-ifilter]'), row = e.target.closest('[data-idea]'), v = e.target.closest('[data-vid]');
+  if (f) { ideaFilter = f.dataset.ifilter; return drawLibrary(); }
+  if (e.target.closest('[data-iact]')) return editIdea(null);
+  if (v) { e.preventDefault(); return showVideo(v.dataset.vid); }
+  if (row && e.target.closest('[data-iedit]')) editIdea(ideaList.find(i => i.id === row.dataset.idea));
+};
+$('#ideaview').onchange = e => {
+  const row = e.target.closest('[data-idea]');
+  if (row && e.target.matches('[data-istatus]'))
+    run(e.target, 'Saving to the sheet…', async () => { await saveIdea(row.dataset.idea, {status: e.target.value}); status(`Marked ${e.target.value}`); });
+};
 const copyText = async (text, name) => { await navigator.clipboard.writeText(text); status(`Copied the ${name} caption`); };
 $('#videoview').onclick = e => {
   const shelf = e.target.closest('[data-shelf]'), act = e.target.closest('[data-vact]')?.dataset.vact, card = e.target.closest('[data-vid]');
@@ -2132,6 +2226,7 @@ function route() {
     api('/api/stage/' + enc(data.name), {stage: 'completed', unmarked: 'keep'}).then(watchSaves).then(loadLibrary).catch(e => status(e.message, true));
   onClips = c;
   onVideos = location.hash === '#/videos';
+  onIdeas = location.hash === '#/ideas';
   $('#filters').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;

@@ -74,6 +74,29 @@ The terminal commands still work: `nip ingest` once, `nip watch` to keep checkin
 
 **Videos.** Finished videos live on Drive in `Footage Flow/Videos`, in `Unposted` and `Posted`, a folder each with the video, a `Captions.txt` to copy from, and `_info`. **Videos** in the rail shows them. There are three ways in: **Add Finished Video** for an export from CapCut (you pick the file and it's copied in); putting the video in `Unposted` on Drive yourself, then pressing **Write Captions**, or **Write Missing Captions** for all of them, or telling NIP; and the check button on an edit made here. New videos wait in **Drafts** on this Mac until you read them: the review screen shows the video, its title and both captions, with a box to tell Claude what to change, and the bundles it was made from. **Save to Unposted** copies it to Drive, then asks whether each bundle stays Unused or moves to Used. Captions written for a video already on Drive sit in its folder marked **Needs review**. Once it's up, **Mark Posted**. Moving a folder by hand in Drive counts too.
 
+**Video ideas.** **Ideas** in the rail lists your video ideas from the *Linderball Video Ideas* Google Sheet, which stays the source of truth: the tab reads it fresh each time you open it, and every change is written straight back. Add one with **New Idea**, change an idea's status (Idea, In progress, Complete) from its menu, and click its pencil to edit it and link the footage bundles and finished videos it became. In the sheet, the **Footage bundles** and **Videos** cells hold one name per line: a bundle's folder name in `~/NIP/library`, and a video's folder name in `Footage Flow/Videos`. Only videos saved to Drive can be linked, since drafts are renamed when they're saved. A link to something that's been deleted shows struck through. Edit the sheet by hand whenever you like, as long as the first row keeps its column names and each idea keeps its ID; columns can be in any order. **Sheet** opens it in Google Sheets.
+
+Footage Flow signs in to Google Sheets with a service account: a Google identity just for this app, which can only open sheets you share with it. Set it up once:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), signed in with the Google account that owns the sheet, and create a project named *Footage Flow*.
+2. Open [the Google Sheets API page](https://console.cloud.google.com/apis/library/sheets.googleapis.com) for that project and click **Enable**.
+3. Go to **IAM & Admin** > **Service Accounts** and click **Create service account**. Name it `footage-flow`, then click **Done**. It needs no roles.
+4. Click the new service account, open **Keys**, and click **Add key** > **Create new key** > **JSON**. A key file downloads.
+5. Move it into place and make it readable only by you:
+
+   ```bash
+   mv ~/Downloads/footage-flow-*.json ~/NIP/google-key.json && chmod 600 ~/NIP/google-key.json
+   ```
+
+6. Copy the service account's email (it ends in `iam.gserviceaccount.com`). Open the sheet, click **Share**, paste the email, choose **Editor**, untick **Notify people**, and click **Share**.
+7. Install the new dependency and restart Footage Flow:
+
+   ```bash
+   .venv/bin/pip install -e .
+   ```
+
+Treat the key file like a password: anyone with it can edit the sheet. If it leaks, delete the key in the service account's **Keys** tab and make a new one. To use a different sheet, set `ideas_sheet` in `~/NIP/settings.json` to its ID (the long part of its URL); to keep the key elsewhere, set `google_key` to its path.
+
 **Caption style.** Captions follow `Footage Flow/Caption Style.md` (**Style Guide** in Videos opens it), and your latest changes to drafts go in as examples, kept in `Caption Edits.json`. **Improve Style** has Claude read those changes and propose a new guide; nothing changes until you save it. Claude works from what's said and the title, and can't see the video, so for a video with no speech, tell it what's in the review screen's box.
 
 **Your words.** **Words** at the bottom of the rail opens `~/NIP/vocabulary.txt`: one word or name per line, or `what it hears = how it's spelled` for a mistake (`bamboo lab = Bambu Lab`). The words bias Whisper on new footage, and the spellings apply to every transcript, old ones too, as soon as you reload; saved transcripts stay as Whisper heard them.

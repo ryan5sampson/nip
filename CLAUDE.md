@@ -5,6 +5,7 @@ Voice-directed footage prep for an Apple Silicon Mac. The app is Footage Flow; N
 - `nip/commands.py`: transcript words → edit decisions (takes, cuts, markers, tags). Pure, no I/O. All voice-command rules live here.
 - `nip/cli.py`: inbox → projects → transcription (mlx-whisper) → report → finalize (kept clips to the Drive library) → handoff (picked clips to a folder) → videos (finished videos and their captions, Drafts → Unposted → Posted).
 - `nip/view.py` + `nip/viewer.html`: the local app (`nip`): inbox, review, hand edits, the clip library. Stdlib server on 127.0.0.1.
+- `nip/ideas.py`: video ideas in the "Linderball Video Ideas" Google Sheet, the source of truth (read fresh, only changed cells written), signed in with a service account key at `~/NIP/google-key.json`.
 - `nip/brief.py`: Claude edits from a brief, working from the transcript (through the `claude` CLI on the user's Claude plan; Anthropic SDK + `ANTHROPIC_API_KEY` as fallback).
 - Footage is never modified. Each clip has a `<clip>.nip.json` with its words, voice edit decisions, and the user's hand `overrides` (kept through reparse); video is only re-encoded on export.
 - Tests: `python3 -m unittest -v` (stdlib only; the end-to-end test needs `ffmpeg`).
