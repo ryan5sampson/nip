@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nip import brief, cli
+from nip import brief, cli, ideas
 from nip.commands import apply_cut_edits, apply_overrides, build_edit, drop_loops, kept_ranges, made_up, respell, silences, timeline, unmarked
 
 
@@ -1100,6 +1100,55 @@ class Page(unittest.TestCase):
             f.write_text(f"new Function({json.dumps(src)}); 'ok'")
             r = subprocess.run(["osascript", "-l", "JavaScript", str(f)], capture_output=True, text=True)
         self.assertEqual((r.stdout.strip(), r.stderr), ("ok", ""))
+
+
+class Ideas(unittest.TestCase):
+    """The sheet logic against a fake sheet: the Google calls themselves are only checked on the Mac."""
+    HEAD = ["ID", "Idea", "Notes", "Reference link", "Status", "Footage bundles", "Videos", "Date added"]
+
+    def sheet(self, rows):
+        calls = []
+
+        def call(method, url, **kw):
+            calls.append((method, url, kw))
+            return {"values": [self.HEAD, *rows]} if method == "GET" else {}
+        return mock.patch.object(ideas, "call", call), calls
+
+    def test_read_matches_columns_by_header_and_splits_links(self):
+        rows = [["Status", "ID", "Idea", "Notes", "Reference link", "Footage bundles", "Videos", "Date added"]]
+        got, _, _ = ideas.parse(rows + [["", "VI-001", "Name a throw"], ["Complete", "VI-002", "x", "", "", "a\nb", "Vid (2026-11-01)"], []])
+        self.assertEqual([(i["id"], i["status"], i["row"], i["bundles"], i["videos"]) for i in got],
+                         [("VI-001", "Idea", 2, [], []), ("VI-002", "Complete", 3, ["a", "b"], ["Vid (2026-11-01)"])])
+        with self.assertRaisesRegex(ValueError, "Videos"):
+            ideas.parse([self.HEAD[:6]])
+
+    def test_add_takes_the_next_id_and_writes_raw(self):
+        patch, calls = self.sheet([["VI-002", "a"], ["VI-009", "b"], ["", "no id"]])
+        with patch:
+            new = ideas.add({"idea": "=SUM(1)", "bundles": ["p1", "p1", " "]})
+        self.assertEqual(new, "VI-010")
+        method, url, kw = calls[-1]
+        self.assertTrue(url.endswith(":append"))
+        self.assertEqual(kw["params"]["valueInputOption"], "RAW")
+        row = kw["json"]["values"][0]
+        self.assertEqual((row[0], row[1], row[4], row[5]), ("VI-010", "=SUM(1)", "Idea", "p1"))
+        self.assertRegex(row[7], r"^\d{4}-\d\d-\d\d$")
+
+    def test_update_finds_the_row_by_id_and_writes_only_changed_cells(self):
+        patch, calls = self.sheet([["VI-001", "a"], ["VI-002", "b"]])
+        with patch:
+            ideas.update("VI-002", {"status": "In progress", "videos": ["V1", "V2"]})
+            with self.assertRaisesRegex(ValueError, "isn’t in the sheet"):
+                ideas.update("VI-404", {"status": "Idea"})
+        data = calls[1][2]["json"]["data"]
+        self.assertEqual(sorted((d["range"], d["values"][0][0]) for d in data), [("E3", "In progress"), ("G3", "V1\nV2")])
+
+    def test_bad_input_is_refused(self):
+        for body in ({"status": "Done"}, {"idea": "  "}, {"bundles": "p1"}):
+            with self.assertRaises(ValueError):
+                ideas.clean(body)
+        with self.assertRaisesRegex(ValueError, "title"):
+            ideas.clean({"notes": "x"}, new=True)
 
 
 if __name__ == "__main__":

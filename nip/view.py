@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from nip import brief, cli
+from nip import brief, cli, ideas
 from nip.commands import kept_ranges, respell, tiers, timeline, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
@@ -402,6 +402,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not library_answers():
                     raise ValueError("Google Drive isn’t answering, so your videos can’t be listed. Try again in a moment.")
                 self.send_json(cli.videos())
+            elif p == ["api", "ideas"]:
+                self.send_json({"ideas": ideas.read()[0], "sheet": ideas.URL, "statuses": ideas.STATUSES})
             elif len(p) == 3 and p[0] in ("video", "videothumb"):
                 f = cli.video_path(f"{p[1]}/{p[2]}")
                 self.send_file(video_thumb(f), "image/jpeg") if p[0] == "videothumb" else self.send_file(cli.video_file(f), "video/mp4")
@@ -714,6 +716,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(NO_DRIVE)
                 cli.delete_video(body.get("id"))
                 self.send_json({})
+            elif p == ["api", "ideas", "add"]:
+                self.send_json({"id": ideas.add(body)})
+            elif p == ["api", "ideas", "update"]:
+                self.send_json({"id": ideas.update(str(body.get("id", "")), body)})
             elif p == ["api", "style", "improve"]:  # a proposal for the user to read; saving it is a separate step
                 try:
                     self.send_json({**brief.improve_style(), "current": cli.STYLE.read_text() if cli.STYLE.exists() else ""})
