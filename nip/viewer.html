@@ -55,26 +55,33 @@
   .seg button.on { background: var(--seg-on); box-shadow: var(--shadow); }
 
   /* window */
-  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; }  /* rows stay window height, so the library and sidebar scroll */
-  .sidebar { background: var(--sidebar); backdrop-filter: blur(30px); border-right: .5px solid var(--separator); display: flex; flex-direction: column; padding: 14px 10px 10px; overflow-y: auto; }
-  .brand { display: flex; align-items: center; gap: 7px; padding: 0 8px 2px; font-size: 14px; font-weight: 700; }
-  .sidebar h3 { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 14px 8px 4px; }
-  .sidebar h3:first-child { margin-top: 2px; }
-  .item { display: flex; align-items: center; gap: 7px; width: 100%; height: 28px; padding: 0 8px; border: none; border-radius: 6px; background: none; text-align: left; }
-  .item svg { color: var(--accent); }
-  .item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item small { color: var(--secondary); font-size: 12px; }
-  .item.on { background: var(--fill-strong); }
-  .sidebar .spacer { flex: 1; }
-  .inbox { display: flex; align-items: center; gap: 7px; padding: 8px; border-top: .5px solid var(--separator); margin-top: 8px; color: var(--secondary); font-size: 12px; }
+  .app { display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; }  /* rows stay window height, so the library scrolls */
+  /* the rail: the same four places in the same order everywhere, footage moving top to bottom through them */
+  .rail { background: var(--sidebar); backdrop-filter: blur(30px); border-right: .5px solid var(--separator); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 10px; overflow-y: auto; }
+  .rail .brand { padding-bottom: 10px; color: var(--label); }
+  .rail .brand svg { width: 26px; height: 26px; }
+  #stages { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .nav { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 8px 0 6px; border: none; border-radius: 12px; background: none; color: var(--secondary); font-size: 11px; font-weight: 500; }
+  .nav svg { width: 20px; height: 20px; }
+  .nav:hover { background: var(--fill); color: var(--label); }
+  .nav.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .nav small { position: absolute; top: 3px; right: 7px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--fill-strong); color: var(--label); font-size: 10px; line-height: 16px; }
+  .nav.on small { background: var(--accent); color: #fff; }
+  body.busy [data-stage=inbox] svg { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { body.busy [data-stage=inbox] svg { animation: none; } }
+  .rail .spacer { flex: 1; }
+  #inboxbar { display: flex; align-items: center; gap: 10px; padding-top: 12px; }
+  .inbox { display: flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 12px; }
   .inbox b { color: var(--label); font-weight: 500; }
   .inbox .spin { width: 12px; height: 12px; border: 1.5px solid var(--tertiary); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
   body.dropping::after { content: "Drop videos to add them to the inbox"; position: fixed; inset: 10px; z-index: 100; display: grid; place-items: center; border: 3px dashed var(--accent); border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--label); font-size: 20px; font-weight: 600; pointer-events: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .main { display: grid; grid-template-rows: 52px minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) 320px; min-width: 0; }
+  .main { display: grid; grid-template-rows: 60px minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  body.nip-open:not(.editing) .main { grid-template-columns: minmax(0, 1fr) 320px; }
   .main > .toolbar, #project { grid-column: 1 / -1; }
-  #nipchat { display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; border-left: .5px solid var(--separator); background: var(--window); }
-  body.editing #nipchat { display: none; }
+  #nipchat { display: none; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; border-left: .5px solid var(--separator); background: var(--window); }
+  body.nip-open:not(.editing) #nipchat { display: flex; }
   #chatlog { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
   .msg { display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
   .msg p { margin: 0; white-space: pre-wrap; }
@@ -88,29 +95,79 @@
   .chatclips span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   #chatform { display: flex; gap: 6px; align-items: flex-end; }
   #chatin { flex: 1; min-width: 0; resize: none; }
-  body:not(.editing) #saves { right: 336px; }
-  @media (max-width: 900px) {
-    .main { grid-template-columns: minmax(0, 1fr); }
-    #nipchat { display: none; }
-    body:not(.editing) #saves { right: 16px; }
+  body.nip-open:not(.editing) #saves { right: 336px; }
+  @media (max-width: 900px) {  /* too narrow to sit beside the footage, so NIP slides over it */
+    body.nip-open:not(.editing) .main { grid-template-columns: minmax(0, 1fr); }
+    #nipchat { position: fixed; z-index: 15; top: 60px; right: 0; bottom: 0; width: 320px; }
+    body.nip-open:not(.editing) #saves { right: 16px; }
   }
-  .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--toolbar); backdrop-filter: blur(30px); border-bottom: .5px solid var(--separator); min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--window); border-bottom: .5px solid var(--separator); min-width: 0; }
   .toolbar .title { display: flex; flex-direction: column; min-width: 0; margin: 0 6px; }
   .toolbar .title b { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .toolbar .title small { font-size: 11px; color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .toolbar .grow { flex: 1; }
-  .search { position: relative; width: 240px; max-width: 40vw; }
-  .search svg { position: absolute; left: 7px; top: 6px; width: 14px; height: 14px; color: var(--secondary); }
-  .search input { width: 100%; padding-left: 26px; border-radius: 7px; background: var(--fill-strong); box-shadow: none; }
+  body:not(.editing) .toolbar .grow { display: none; }
+  body:not(.editing) .toolbar .title { width: 110px; flex: none; }
+  body.editing #niptoggle, body.editing #addvideos { display: none; }
+  #niptoggle.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  #niptoggle svg.mark { width: 18px; height: 18px; }
+  #addvideos { height: 36px; padding: 0 14px; border-radius: 18px; }
+  .search { position: relative; flex: 1; min-width: 0; max-width: 720px; margin: 0 auto; }
+  .search svg { position: absolute; left: 14px; top: 11px; width: 16px; height: 16px; color: var(--secondary); }
+  .search input { width: 100%; height: 38px; padding-left: 38px; border-radius: 19px; font-size: 14px; background: var(--fill-strong); box-shadow: none; }
+  .search input:focus { background: var(--field); box-shadow: inset 0 0 0 .5px var(--control-edge), var(--shadow); }
 
   /* library */
-  #library { overflow-y: auto; padding: 20px 24px 40px; }
-  #pickbar { position: sticky; bottom: 0; margin-top: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--toolbar); backdrop-filter: blur(30px); box-shadow: var(--shadow); }
+  #library { overflow-y: auto; padding: 0 16px 40px; }
+  #libtop { position: sticky; top: 0; z-index: 5; background: var(--window); }
+  #pickbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 10px 6px 6px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 16%, var(--window)); }
+  #pickbar .btn { height: 30px; border-radius: 15px; padding: 0 13px; }
+  #picktext { font-weight: 600; }
   #pickbar[hidden] { display: none; }
   #pickbar .grow { flex: 1; }
   #tagpicks { display: flex; flex-wrap: wrap; gap: 0 14px; margin-bottom: 6px; }
-  #clipsort, #clipused, #clipreuse { font: inherit; height: 28px; color: var(--label); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 22px 18px; }
+  #filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border: .5px solid var(--control-edge); border-radius: 16px; background: none; font-size: 13px; white-space: nowrap; }
+  .chip:hover { background: var(--fill); }
+  .chip.on { border-color: transparent; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 500; }
+  .chip small { color: var(--secondary); font-size: 12px; }
+  .chip.on small { color: inherit; }
+  .chip svg { width: 13px; height: 13px; stroke-width: 2; }
+  .fsep { width: .5px; height: 20px; margin: 0 4px; background: var(--separator); }
+  .fend { display: flex; gap: 8px; margin-left: auto; }
+  .fend .seg { padding: 3px; border-radius: 16px; }
+  .fend .seg button { height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; }
+  .bundle { padding-top: 14px; }
+  .bhead { display: flex; align-items: center; gap: 8px; min-height: 30px; padding-bottom: 6px; }
+  .bhead b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bhead small { color: var(--secondary); white-space: nowrap; }
+  .bhead a { margin-left: auto; color: var(--accent); text-decoration: none; white-space: nowrap; font-size: 12px; }
+  .selall { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; flex: none; border: 1.5px solid var(--tertiary); border-radius: 50%; background: none; color: transparent; }
+  .selall svg { width: 13px; height: 13px; stroke-width: 2.2; }
+  .selall:hover { border-color: var(--accent); color: var(--accent); }
+  .selall.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; }
+  .photos .tile { gap: 0; border-radius: 6px; }
+  .photos .tile .thumb { border-radius: 6px; box-shadow: none; }
+  .photos .tile:hover .thumb { box-shadow: none; }
+  .photos .tile.chosen .dur { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: 6px; }
+  .cap { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; padding: 24px 42px 7px 8px; border-radius: 0 0 6px 6px; background: linear-gradient(transparent, rgba(0, 0, 0, .62)); color: #fff; font-size: 12px; font-weight: 500; line-height: 1.25; pointer-events: none; }
+  .cap span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .photos .tile .dur i { z-index: 2; bottom: 8px; }
+  .rows { display: flex; flex-direction: column; }
+  .crow, .crowhead { display: grid; grid-template-columns: 26px 40px minmax(0, 2fr) minmax(0, 1.4fr) 52px 84px 76px minmax(0, 1.2fr); align-items: center; gap: 10px; padding: 5px 8px; }
+  .crowhead { color: var(--secondary); font-size: 11px; font-weight: 600; border-bottom: .5px solid var(--separator); }
+  .crow { color: inherit; text-decoration: none; border-bottom: .5px solid var(--separator); }
+  .crow:hover { background: var(--fill); }
+  .crow.chosen { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .crow .thumb { width: 40px; height: 54px; border-radius: 4px; background: #000 center / cover no-repeat; }
+  .crow b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crow small { color: var(--secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crow .sel { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1.5px solid var(--tertiary); border-radius: 50%; background: none; color: transparent; }
+  .crow .sel svg { width: 13px; height: 13px; stroke-width: 2.2; }
+  .crow.chosen .sel { border-color: var(--accent); background: var(--accent); color: #fff; }
+  @media (max-width: 1000px) { .crow, .crowhead { grid-template-columns: 26px 40px minmax(0, 2fr) minmax(0, 1.4fr) 52px; } .crow > :nth-child(n+6), .crowhead > :nth-child(n+6) { display: none; } }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 18px 12px; padding-top: 14px; }
   .tile { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 6px; border-radius: 10px; }
   .tile .thumb { aspect-ratio: 3 / 4; border-radius: 8px; background: #000 center / cover no-repeat; box-shadow: 0 0 0 .5px var(--separator); transition: box-shadow .12s; }
   .tile:hover .thumb, .tile:focus-visible .thumb { box-shadow: 0 0 0 3px var(--accent); }
@@ -125,8 +182,6 @@
 
   /* project */
   /* the editor: transcript | vertical video | NIP, over an editing deck (controls, timeline, the open clip) */
-  body.editing .sidebar { display: none; }
-  body.editing .app { grid-template-columns: minmax(0, 1fr); }
   #project { display: grid; grid-template-columns: minmax(220px, 1fr) min(calc((100vh - 210px) * 9 / 16), 44vw) minmax(290px, 380px); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   .viewer { grid-column: 2; grid-row: 1; min-height: 0; background: #000; }
   .viewer video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
@@ -215,14 +270,19 @@
   #transcript { width: min(560px, 90vw); }
   #transcripttext { max-height: 60vh; overflow-y: auto; margin: 8px 0 12px; line-height: 1.5; }
   #transcripttext h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 600; color: var(--secondary); }
-  #stages .item.drop { background: var(--accent); color: #fff; }
-  #stages .item.drop svg { color: #fff; }
+  #stages .nav.drop { background: var(--accent); color: #fff; }
   .chips { display: flex; flex-wrap: wrap; gap: 3px; }
   .chips i { font-style: normal; font-size: 10px; line-height: 1.6; padding: 0 6px; border-radius: 8px; background: var(--fill-strong); color: var(--secondary); }
-  #clipdlg { width: min(780px, 94vw); padding: 14px; }
-  #clipdlg form { display: flex; gap: 16px; height: min(72vh, 680px); }
-  #clipvideo { height: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 8px; flex: none; max-width: 50%; object-fit: contain; }
-  .clipinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  #clipdlg { width: min(1040px, 96vw); max-width: none; padding: 0; overflow: hidden; }
+  #clipdlg form { display: flex; height: min(88vh, 860px); }
+  .clipstage { position: relative; flex: 1.5; min-width: 0; background: #000; }
+  .clipstage button { position: absolute; top: 50%; translate: 0 -50%; width: 40px; height: 40px; padding: 0; border: none; border-radius: 50%; background: rgba(255, 255, 255, .14); color: #fff; font-size: 20px; line-height: 1; }
+  .clipstage button:hover { background: rgba(255, 255, 255, .28); }
+  #clipprev { left: 10px; }
+  #clipnext { right: 10px; }
+  #clipvideo { width: 100%; height: 100%; background: #000; object-fit: contain; display: block; }
+  .clipinfo { flex: 1; min-width: 280px; max-width: 380px; display: flex; flex-direction: column; gap: 6px; padding: 18px; }
+  .clipinfo .actions-line { flex-wrap: wrap; }
   .clipinfo > b { font-size: 15px; font-weight: 600; }
   .clipinfo > small { color: var(--secondary); font-size: 11px; }
   .clipinfo .field { margin: 6px 0 0; }
@@ -255,7 +315,7 @@
   kbd { display: inline-block; margin-left: 5px; padding: 2px 4px; border-radius: 4px; font: 600 10px/1 -apple-system, sans-serif; color: inherit; opacity: .8; background: color-mix(in srgb, currentColor 14%, transparent); box-shadow: inset 0 0 0 .5px color-mix(in srgb, currentColor 35%, transparent); }
   #keys h4 svg.mark { width: 14px; height: 14px; margin-right: 3px; vertical-align: -3px; }
   #back svg.mark { width: 18px; height: 18px; }
-  #keys { position: fixed; left: 12px; top: 64px; max-height: calc(100vh - 280px) !important;  /* over the transcript: NIP owns the right, the timeline the bottom */ z-index: 50; width: 300px; max-height: 70vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--window); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); font-size: 12px; }
+  #keys { position: fixed; left: 88px; top: 64px; max-height: calc(100vh - 280px) !important;  /* over the transcript: NIP owns the right, the timeline the bottom */ z-index: 50; width: 300px; max-height: 70vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: var(--window); box-shadow: 0 10px 40px rgba(0, 0, 0, .3), 0 0 0 .5px var(--separator); font-size: 12px; }
   #keys h4 { margin: 10px 0 4px; font-size: 11px; font-weight: 600; color: var(--secondary); }
   #keys dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin: 0; }
   #keys dt { text-align: right; white-space: nowrap; }
@@ -311,11 +371,6 @@
   #status.show { opacity: 1; transform: translate(-50%, 0); }
   #status.err { background: rgba(160, 30, 26, .92); }
 
-  @media (max-width: 720px) {
-    .app { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
-    .search { width: 160px; }
-  }
 </style>
 </head>
 <body>
@@ -342,42 +397,44 @@
   <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.6 3.2 2.6 6.2l3 3M2.6 6.2h7.2a3.8 3.8 0 0 1 0 7.6H7"/></symbol>
   <symbol id="i-in" viewBox="0 0 16 16"><path d="M7 2.6H4.4v10.8H7M8.6 8h5M11.4 5.6 13.6 8l-2.2 2.4"/></symbol>
   <symbol id="i-out" viewBox="0 0 16 16"><path d="M9 2.6h2.6v10.8H9M2.4 8h5M5.2 5.6 7.4 8l-2.2 2.4"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></symbol>
+  <symbol id="i-list" viewBox="0 0 16 16"><path d="M5.4 3.6h8M5.4 8h8M5.4 12.4h8M2.4 3.6h.6M2.4 8h.6M2.4 12.4h.6"/></symbol>
   <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1.6"/><path d="M5 2v12M11 2v12M2 5.5h3M2 10.5h3M11 5.5h3M11 10.5h3"/></symbol>
 </svg>
 
 <div class="app">
-  <aside class="sidebar" aria-label="Sidebar">
-    <div class="brand"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg>Footage Flow</div>
-    <h3>Workflow</h3>
+  <nav class="rail" aria-label="Sections">
+    <div class="brand" title="Footage Flow"><svg class="mark" aria-hidden="true"><use href="#logo"/></svg></div>
     <div id="stages"></div>
-    <h3>Library</h3>
-    <button class="item" id="clipsnav" title="Search, preview and pick from every kept clip"><svg class="i"><use href="#i-film"/></svg><span>All Clips</span><small id="clipcount" class="num"></small></button>
-    <div id="taglist"></div>
     <div class="spacer"></div>
-    <button class="item" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg><span>Add Videos…</span></button>
-    <button class="item" id="vocabulary" title="Names and words the transcript should spell your way. Opens the list in TextEdit."><svg class="i"><use href="#i-text"/></svg><span>Vocabulary…</span></button>
-    <div class="inbox" id="inbox"></div>
-  </aside>
+    <button class="nav" id="vocabulary" title="Names and words the transcript should spell your way. Opens the list in TextEdit."><svg class="i"><use href="#i-text"/></svg>Words</button>
+  </nav>
 
   <div class="main">
     <div class="toolbar">
-      <button class="icon-btn" id="back" title="Back to Library" aria-label="Back to Library" hidden><svg class="i"><use href="#i-back"/></svg><svg class="mark" aria-hidden="true"><use href="#logo"/></svg></button>
+      <button class="icon-btn" id="back" title="Back" aria-label="Back" hidden><svg class="i"><use href="#i-back"/></svg></button>
       <div class="title"><b id="title">All Footage</b><small id="subtitle" class="num"></small></div>
       <div class="grow"></div>
       <div class="search" id="searchwrap"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Search" aria-label="Search descriptions, tags, notes and everything said"></div>
-      <select id="clipsort" aria-label="Sort clips" hidden><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option><option value="short">Shortest first</option><option value="name">By name</option></select>
-      <select id="clipreuse" aria-label="Show reusable or one-off clips" hidden><option value="">All clips</option><option value="yes">Reusable</option><option value="no">One-off</option><option value="none">Not sorted</option></select>
-      <select id="clipused" aria-label="Show used or unused clips" hidden><option value="">Used and unused</option><option value="no">Unused</option><option value="yes">Used</option></select>
+      <button class="btn default" id="addvideos" title="Pick videos in Finder; they move into the inbox. Or drop videos anywhere on this window."><svg class="i"><use href="#i-plus"/></svg>Add Videos</button>
+      <button class="icon-btn" id="niptoggle" title="NIP (E)" aria-label="Show or hide NIP"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg>NIP</button>
       <span id="projtools" hidden style="display:flex;align-items:center;gap:2px">
         <button class="btn" id="detailsbtn" title="Name, tags, export options and reset" style="margin-right:4px">Details</button>
         <button class="btn" id="startproc" title="Move it to Processing" style="margin-right:6px" hidden><svg class="i"><use href="#i-film"/></svg>Start Processing</button>
         <button class="btn" id="complete" ><svg class="i"><use href="#i-check"/></svg>Mark Complete</button>
+        <button class="btn" id="viewclips" title="See this footage's clips in the Library" hidden style="margin-left:4px"><svg class="i"><use href="#i-grid"/></svg>View Clips</button>
         <button class="icon-btn" id="showfinal" title="Show its clips in Finder" hidden><svg class="i"><use href="#i-folder"/></svg></button>
       </span>
     </div>
 
-    <div id="library" hidden><div class="grid" id="cards"></div><div class="grid" id="clipcards" hidden></div>
-      <div id="pickbar" hidden><span id="picktext" class="num"></span><span class="grow"></span><button class="btn" id="pickclear">Clear</button><button class="btn" id="picktags"><svg class="i"><use href="#i-tag"/></svg>Tags…</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div></div>
+    <div id="library" hidden>
+      <div id="libtop">
+        <div id="pickbar" hidden><button class="icon-btn" id="pickclear" title="Clear selection" aria-label="Clear selection">✕</button><span id="picktext" class="num"></span><span class="grow" style="flex:1"></span><button class="btn" id="pickreusable">Reusable</button><button class="btn" id="pickoneoff">One-off</button><button class="btn" id="picktags"><svg class="i"><use href="#i-tag"/></svg>Tags…</button><button class="btn default" id="pickexport"><svg class="i"><use href="#i-share"/></svg>Export…</button></div>
+        <div id="filters" hidden></div>
+        <div id="inboxbar" hidden><div class="inbox" id="inbox"></div></div>
+      </div>
+      <div class="grid" id="cards"></div><div id="clipcards" hidden></div>
+    </div>
 
     <aside id="nipchat" aria-label="NIP">
       <div class="niphead"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg><b>NIP</b><span class="hint">Press <kbd>E</kbd></span></div>
@@ -480,14 +537,14 @@
     <dt><kbd>?</kbd></dt><dd>Show or hide these shortcuts</dd></dl>
 </aside>
 <dialog id="clipdlg"><form method="dialog">
-  <video id="clipvideo" controls playsinline></video>
+  <div class="clipstage"><video id="clipvideo" controls playsinline autoplay></video><button type="button" id="clipprev" title="Previous clip (←)" aria-label="Previous clip">‹</button><button type="button" id="clipnext" title="Next clip (→)" aria-label="Next clip">›</button></div>
   <div class="clipinfo">
     <b id="cliptitle"></b>
     <small id="clipmeta" class="num"></small>
     <div class="field"><label for="cliptags">Tags</label><input type="text" id="cliptags" placeholder="Separate with commas"></div>
-    <div class="field"><label for="clipreusable">Use</label><select id="clipreusable"><option value="none">Not sorted</option><option value="yes">Reusable</option><option value="no">One-off</option></select></div>
+    <div class="seg" id="clipreusable" role="group" aria-label="Use"><button type="button" data-v="yes">Reusable</button><button type="button" data-v="no">One-off</button><button type="button" data-v="none">Not sorted</button></div>
     <p id="cliptext"></p>
-    <div class="actions-line"><button type="button" class="btn" id="clippick"></button><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open Bundle</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
+    <div class="actions-line"><button type="button" class="btn" id="clippick"></button><button type="button" class="btn" id="clipreveal" title="Select this clip’s file in Finder, to drag it into an editor">Show in Finder</button><button type="button" class="btn" id="clipbundle">Open in Editor</button><span class="grow"></span><button class="btn default" value="">Done</button></div>
   </div>
 </form></dialog>
 <dialog id="details"><form method="dialog">
@@ -509,7 +566,7 @@
   <p>Tick to add a tag to all of them, untick to remove it. A dash means only some have it, and they stay that way.</p>
   <div id="tagpicks"></div>
   <input type="text" id="tagnew" aria-label="New tags" placeholder="New tags, separated with commas" style="width:100%">
-  <div class="field" style="margin-top:8px"><label for="tagreuse">Use</label><select id="tagreuse"><option value="">Leave as they are</option><option value="yes">Reusable</option><option value="no">One-off</option></select></div>
+  <div class="seg" id="tagreuse" role="group" aria-label="Use" style="margin-top:10px"><button type="button" data-v="">Leave as is</button><button type="button" data-v="yes">Reusable</button><button type="button" data-v="no">One-off</button></div>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Apply</button></div>
 </form></dialog>
 <dialog id="sortdlg"><form method="dialog">
@@ -553,7 +610,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = null, stageFilter = 'inbox', data = null, proj = '', clipIdx = 0;
+let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
 async function api(path, body) {
@@ -582,10 +639,12 @@ const STAGES = {inbox: ['Inbox', 'tray', 'New footage, not started yet. Hover to
   processing: ['Processing', 'film', 'Being worked on. Drag a card here, or click Start Processing in it.'], completed: ['Completed', 'check', 'Cut down, with its kept clips saved to the library. Drag a card here, or click Mark Complete in it.']};
 async function loadLibrary() {
   try { projects = await api('/api/projects'); } catch (e) { return status(e.message, true); }
+  if (!landed && !location.hash) location.hash = ['inbox', 'processing'].filter(k => projects.some(p => p.stage === k)).map(k => '#/s/' + k)[0] || '#/clips';  // open on what needs doing, else the Library
+  landed = true;
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
 }
-let saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
+let landed = false, saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
 const saving = s => s.state === 'waiting' || s.state === 'saving';
 function drawSaves() {
   $('#saves').hidden = !saves.length;
@@ -593,7 +652,7 @@ function drawSaves() {
     <a href="#/p/${enc(s.project)}">${esc(s.title)}</a>
     ${saving(s) ? '' : `<button class="icon-btn small" data-dismiss="${esc(s.project)}" title="Dismiss" aria-label="Dismiss">✕</button>`}
     ${saving(s) ? `<progress value="${s.part}" aria-label="Saving ${esc(s.title)}"></progress><small>${esc(s.step)}…</small>`
-      : s.state === 'done' ? `<small>Saved ${plural(s.saved.clips, 'clip')} to the library, ${(s.saved.bytes / 1e9).toFixed(2)} GB${s.saved.skipped ? `. Left out ${plural(s.saved.skipped, 'sliver')} under half a second` : ''}</small>`
+      : s.state === 'done' ? `<small>Saved ${plural(s.saved.clips, 'clip')} to the library, ${(s.saved.bytes / 1e9).toFixed(2)} GB${s.saved.skipped ? `. Left out ${plural(s.saved.skipped, 'sliver')} under half a second` : ''}. <a href="#/clips" data-bundle="${esc(s.saved.folder.split('/').pop())}">See clips</a></small>`
       : `<small>Not saved. It stays in Processing. ${esc(s.error)}</small>`}
   </div>`).join('');
 }
@@ -606,31 +665,35 @@ async function watchSaves() {  // every second while something's saving
   if (saves.some(saving)) saveTimer = setTimeout(watchSaves, 1000);
 }
 $('#saves').onclick = e => {
-  const b = e.target.closest('[data-dismiss]');
+  const link = e.target.closest('[data-bundle]'), b = e.target.closest('[data-dismiss]');
+  if (link) { e.preventDefault(); showBundle(link.dataset.bundle); }
   if (b) api('/api/saves/' + enc(b.dataset.dismiss), {}).then(watchSaves).catch(err => status(err.message, true));
 };
 const isUsed = p => clips.some(c => c.project === p.name && c.used);  // the Drive folder it sits in decides, so moving it by hand counts too
 const loneBundles = () => Object.values(Object.groupBy(clips.filter(c => !projects.some(p => p.name === c.project)), c => c.folder));  // in the library, their project deleted here
 function drawLibrary() {
   const words = $('#search').value.toLowerCase().split(/\s+/).filter(Boolean);
-  const counts = {};
-  clips.forEach(c => c.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
-  const tags = Object.keys(counts).sort();
-  $('#taglist').innerHTML = tags.map(t => `<button class="item ${onClips && t === tagFilter ? 'on' : ''}" data-tag="${esc(t)}">${icon('tag')}<span>${esc(t)}</span><small class="num">${counts[t]}</small></button>`).join('');
-  $('#clipsnav').classList.toggle('on', onClips && !tagFilter);
-  $('#clipcount').textContent = clips.length || '';
   const shown = projects.filter(p => words.every(w => p.search.includes(w)) && p.stage === stageFilter);
   const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
-  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => `<button class="item ${k === stageFilter && !proj && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}<span>${name}</span><small class="num">${projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0) || ''}</small></button>`).join('');
+  const here = data ? data.stage : stageFilter;
+  $('#stages').innerHTML = Object.entries(STAGES).map(([k, [name, ic, hint]]) => {
+    const n = projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0);
+    return `<button class="nav ${k === here && !onClips ? 'on' : ''}" data-stage="${k}" title="${hint}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
+  }).join('') + `<button class="nav ${onClips ? 'on' : ''}" data-nav="clips" title="Every kept clip, to search, preview and select">${icon('grid')}Library</button>`;
   if ($('#library').hidden) return;
   $('#cards').hidden = onClips;
   $('#clipcards').hidden = !onClips;
   $('#pickbar').hidden = !onClips || !chosen.size;
+  $('#inboxbar').hidden = onClips || stageFilter !== 'inbox';
   if (onClips) return drawClips(words);
   $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
+  const cardLink = p => {  // finished footage opens on its clips; anything else opens to edit
+    const folder = p.stage === 'completed' && clips.find(c => c.project === p.name)?.folder;
+    return folder ? `href="#/clips" data-bundle="${esc(folder)}" title="See its clips"` : `href="#/p/${enc(p.name)}" title="Move across the picture to preview. Drag onto another to bundle them"`;
+  };
   const cards = list => list.map(p => `
-    <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" href="#/p/${enc(p.name)}" data-name="${esc(p.name)}" title="Move across the picture to preview. Drag onto another project to bundle them">
+    <a class="tile ${saves.some(s => s.project === p.name && saving(s)) ? 'saving' : ''}" ${cardLink(p)} data-name="${esc(p.name)}">
       <div class="dur"><div class="thumb" style="background-image:url('/thumb/${enc(p.name)}')"></div><i class="num">${mins(p.kept)}</i>${p.stage === 'completed' ? `<button class="use" title="Mark as ${isUsed(p) ? 'unused' : 'used'}" aria-label="Mark as ${isUsed(p) ? 'unused' : 'used'}">${icon(isUsed(p) ? 'undo' : 'check')}</button>${sortBtn(clips.find(c => c.project === p.name)?.folder)}` : ''}<button class="ren" title="Name it" aria-label="Name it"><svg class="i"><use href="#i-pencil"/></svg></button><button class="tx" title="Read what’s said in it" aria-label="Show transcript"><svg class="i"><use href="#i-text"/></svg></button><button class="del" title="Delete: footage to the Trash (drag it back into ~/NIP/library to undo), clips out of the library" aria-label="Delete"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(p.description || p.name)}</b>
       <small>${esc(p.name.slice(0, 10))} · ${p.stage === 'completed' ? `${mins(p.kept)} kept` : `${mins(p.filmed)} filmed`}${p.videos > 1 ? ` · ${p.videos} videos` : ''}${p.stories ? ` · ${plural(p.stories, 'edit')}` : ''}${p.unsaved ? ' · Changes not saved' : ''}</small>
@@ -638,13 +701,13 @@ function drawLibrary() {
     </a>`).join('');
   const shelf = (head, list) => list.length ? `<h3 class="shelf">${head}</h3>${cards(list)}` : '';
   const loneCards = lone.map(cs => `
-    <a class="tile" href="#/clips" data-name="" data-lone="${esc(cs[0].folder)}" title="Its project was deleted from Footage Flow, but its clips are still in the library. Click to see them.">
+    <a class="tile" href="#/clips" data-name="" data-lone="${esc(cs[0].folder)}" data-bundle="${esc(cs[0].folder)}" title="Its project was deleted from Footage Flow, but its clips are still in the library. Click to see them.">
       <div class="dur"><div class="thumb" style="background-image:url('/final/${enc(cs[0].folder)}/${enc(cs[0].stem + '.jpg')}')"></div>${sortBtn(cs[0].folder)}<button class="del" title="Delete these clips from the library" aria-label="Delete from the library"><svg class="i"><use href="#i-trash"/></svg></button></div>
       <b>${esc(cs[0].bundle || cs[0].folder)}</b>
       <small>${plural(cs.length, 'clip')}${cs[0].used ? ' · Used' : ''}</small>
     </a>`).join('');
   $('#cards').innerHTML = shown.length || lone.length ? (stageFilter === 'completed' ? shelf('Unused', shown.filter(p => !isUsed(p))) + shelf('Used', shown.filter(isUsed)) + (lone.length ? `<h3 class="shelf">Clips Only</h3>${loneCards}` : '') : cards(shown)) : projects.length
-    ? `<div class="empty" style="grid-column:1/-1">${icon('search')}<b>No Results</b>${$('#search').value ? `Nothing matches “${esc($('#search').value)}”.` : `Nothing is in ${STAGES[stageFilter][0]}.`}</div>`
+    ? `<div class="empty" style="grid-column:1/-1">${$('#search').value ? `${icon('search')}<b>No Results</b>Nothing matches “${esc($('#search').value)}”.` : `${icon(STAGES[stageFilter][1])}<b>Nothing in ${STAGES[stageFilter][0]}</b>${stageFilter === 'inbox' ? 'Drop videos on this window, or upload them to the Inbox folder on Drive.' : ''}`}</div>`
     : `<div class="empty" style="grid-column:1/-1">${icon('tray')}<b>No Footage Yet</b>Click Add Videos… or drop videos on this window. They’ll appear here once transcribed.</div>`;
 }
 const previewOf = c => `/final/${enc(c.folder)}/${enc(c.stem + '.preview.mp4')}`;  // small, so browsing never fetches the full clip from Drive
@@ -654,7 +717,7 @@ const SORTS = {new: (a, b) => String(b.filmed).localeCompare(a.filmed), old: (a,
   short: (a, b) => a.duration - b.duration, name: (a, b) => clipTitle(a).localeCompare(clipTitle(b))};
 function drawPicks() {
   const secs = [...chosen.values()].reduce((n, c) => n + c.duration, 0);
-  $('#picktext').textContent = `${plural(chosen.size, 'clip')} picked · ${mins(secs)}`;
+  $('#picktext').textContent = `${chosen.size} selected · ${mins(secs)}`;
   $('#pickbar').hidden = !chosen.size;
   $('#clipcards').classList.toggle('picking', chosen.size > 0);
 }
@@ -665,32 +728,91 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
 }
 const sortBtn = folder => folder ? `<button class="srt" data-folder="${esc(folder)}" title="Sort these clips" aria-label="Sort these clips">${icon('tag')}</button>` : '';
 const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
+const go = hash => location.hash === hash ? drawLibrary() : location.hash = hash;
+const clipView = {reuse: '', used: '', sort: 'new', mode: 'grid', moreTags: false};
+try { clipView.mode = localStorage.getItem('clipmode') || 'grid'; } catch {}
+const CAMERAS = {iphone: 'iPhone', 'meta glasses': 'Meta Glasses'};
+const SORT_NAMES = {new: 'Newest', old: 'Oldest', long: 'Longest', short: 'Shortest', name: 'A–Z'};
+let shownClips = [];  // the Library as filtered, in order, for stepping through in the viewer
+function showBundle(folder) {
+  $('#search').value = folder;
+  tagFilter.clear();
+  clipView.reuse = clipView.used = '';
+  go('#/clips');
+}
+function drawFilters() {  // every filter is one press: on or off, and what's on is what's shown
+  const counts = {};
+  clips.forEach(c => c.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
+  const chip = (kind, value, label, on, n) => `<button class="chip ${on ? 'on' : ''}" data-${kind}="${esc(value)}">${on ? icon('check') : ''}${esc(label)}${n === undefined ? '' : ` <small class="num">${n}</small>`}</button>`;
+  const uses = clips.reduce((n, c) => (n[reuseOf(c)]++, n), {yes: 0, no: 0, none: 0}), used = clips.filter(c => c.used).length;
+  const others = Object.keys(counts).filter(t => !CAMERAS[t]).sort((a, b) => counts[b] - counts[a]);
+  const tags = clipView.moreTags ? others : [...new Set([...others.slice(0, 8), ...others.filter(t => tagFilter.has(t))])];
+  const seg = (kind, list, on) => `<div class="seg" role="group">${list.map(([v, label]) => `<button class="${v === on ? 'on' : ''}" data-${kind}="${v}" title="${v === 'grid' ? 'Grid' : v === 'list' ? 'List' : ''}">${label}</button>`).join('')}</div>`;
+  $('#filters').innerHTML = [
+    chip('reuse', '', 'All', !clipView.reuse, clips.length), chip('reuse', 'yes', 'Reusable', clipView.reuse === 'yes', uses.yes), chip('reuse', 'no', 'One-off', clipView.reuse === 'no', uses.no),
+    uses.none ? chip('reuse', 'none', 'Not sorted', clipView.reuse === 'none', uses.none) : '', '<span class="fsep"></span>',
+    chip('used', 'no', 'Unused', clipView.used === 'no', clips.length - used), chip('used', 'yes', 'Used', clipView.used === 'yes', used), '<span class="fsep"></span>',
+    ...Object.entries(CAMERAS).filter(([t]) => counts[t]).map(([t, label]) => chip('tag', t, label, tagFilter.has(t), counts[t])),
+    `<span class="fend">${seg('sort', Object.entries(SORT_NAMES), clipView.sort)}${seg('mode', [['grid', icon('grid')], ['list', icon('list')]], clipView.mode)}</span>`,
+    '<span style="flex-basis:100%"></span>', ...tags.map(t => chip('tag', t, t, tagFilter.has(t), counts[t])),
+    others.length > 8 ? chip('more', '1', clipView.moreTags ? 'Fewer' : `${others.length - 8} more`, false) : ''].join('');
+}
+$('#filters').onclick = e => {
+  const d = e.target.closest('button')?.dataset;
+  if (!d) return;
+  if ('reuse' in d) clipView.reuse = d.reuse;
+  if ('used' in d) clipView.used = clipView.used === d.used ? '' : d.used;
+  if ('tag' in d) tagFilter.delete(d.tag) || tagFilter.add(d.tag);
+  if ('sort' in d) clipView.sort = d.sort;
+  if ('more' in d) clipView.moreTags = !clipView.moreTags;
+  if ('mode' in d) { clipView.mode = d.mode; try { localStorage.setItem('clipmode', d.mode); } catch {} }
+  drawLibrary();
+};
 function drawClips(words) {  // every kept clip, across all bundles
-  const used = $('#clipused').value, reuse = $('#clipreuse').value, shown = clips.filter(c => (!tagFilter || c.tags.includes(tagFilter)) && (!used || c.used === (used === 'yes'))
-    && (!reuse || reuseOf(c) === reuse)
-    && words.every(w => [c.name, c.bundle, c.folder, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[$('#clipsort').value]);
-  $('#title').textContent = tagFilter || 'Library';
+  drawFilters();
+  const shown = shownClips = clips.filter(c => [...tagFilter].every(t => c.tags.includes(t)) && (!clipView.used || c.used === (clipView.used === 'yes'))
+    && (!clipView.reuse || reuseOf(c) === clipView.reuse)
+    && words.every(w => [c.name, c.bundle, c.folder, c.source, c.text, ...c.tags].join(' ').toLowerCase().includes(w))).sort(SORTS[clipView.sort]);
+  $('#title').textContent = 'Library';
   $('#subtitle').textContent = plural(shown.length, 'clip');
-  const url = (c, f) => `/final/${enc(c.folder)}/${enc(f)}`;
-  $('#clipcards').innerHTML = shown.length ? shown.map(c => `
-    <a class="tile ${chosen.has(clipKey(c)) ? 'chosen' : ''}" href="#/clips" data-clip="${clips.indexOf(c)}" >
-      <div class="dur"><div class="thumb" style="background-image:url('${url(c, c.stem + '.jpg')}')"></div><i class="num">${mins(c.duration)}</i><button class="sel" title="Select for a video" aria-label="Select for a video"><span class="mark">${icon('check')}</span></button><button class="play" title="Play and see details" aria-label="Play and see details"><span>${icon('play', true)}Play</span></button></div>
-      <b>${esc(clipTitle(c))}</b>
-      <small>${esc(c.bundle || c.project)}${c.used ? ' · Used' : ''}</small>
-      <span class="chips">${c.tags.map(t => `<i>${esc(t)}</i>`).join('')}</span>
-    </a>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Complete a project and its kept clips appear here.'}</div>`;
+  const url = (c, f) => `/final/${enc(c.folder)}/${enc(f)}`, picked = c => chosen.has(clipKey(c)) ? 'chosen' : '';
+  const thumb = c => `style="background-image:url('${url(c, c.stem + '.jpg')}')"`;
+  const tile = c => `<a class="tile ${picked(c)}" href="#/clips" data-clip="${clips.indexOf(c)}">
+      <div class="dur"><div class="thumb" ${thumb(c)}></div><div class="cap"><span>${esc(clipTitle(c))}</span></div><i class="num">${mins(c.duration)}</i><button class="sel" title="Select for a video" aria-label="Select for a video"><span class="mark">${icon('check')}</span></button><button class="play" title="Play and see details" aria-label="Play and see details"><span>${icon('play', true)}Play</span></button></div>
+    </a>`;
+  const row = c => `<a class="crow ${picked(c)}" href="#/clips" data-clip="${clips.indexOf(c)}">
+      <button class="sel" title="Select for a video" aria-label="Select for a video">${icon('check')}</button><div class="thumb play" ${thumb(c)} title="Play and see details"></div>
+      <b>${esc(clipTitle(c))}</b><small>${esc(c.bundle || c.project)}</small><small class="num">${mins(c.duration)}</small><small class="num">${esc(String(c.filmed).slice(0, 10))}</small>
+      <small>${{yes: 'Reusable', no: 'One-off', none: ''}[reuseOf(c)]}</small><small>${esc(c.tags.join(', '))}</small>
+    </a>`;
+  const bundleHead = cs => `<header class="bhead"><button class="selall ${cs.every(c => chosen.has(clipKey(c))) ? 'on' : ''}" data-all="${esc(cs[0].folder)}" title="Select all ${cs.length}" aria-label="Select all">${icon('check')}</button><b>${esc(cs[0].bundle || cs[0].folder)}</b><small class="num">${esc(String(cs[0].filmed || cs[0].project).slice(0, 10))} · ${plural(cs.length, 'clip')}</small>${projects.some(p => p.name === cs[0].project) ? `<a href="#/p/${enc(cs[0].project)}">Open in Editor</a>` : ''}</header>`;
+  $('#clipcards').innerHTML = !shown.length ? `<div class="empty">${icon('film')}<b>${clips.length ? 'No Results' : 'No Clips Yet'}</b>${clips.length ? 'No clip matches that.' : 'Complete a project and its kept clips appear here.'}</div>`
+    : clipView.mode === 'list' ? `<div class="rows"><div class="crowhead"><span></span><span></span><span>Name</span><span>Bundle</span><span>Length</span><span>Filmed</span><span>Use</span><span>Tags</span></div>${shown.map(row).join('')}</div>`
+    : clipView.sort === 'new' || clipView.sort === 'old' ? Object.values(Object.groupBy(shown, c => c.folder)).map(cs => `<section class="bundle">${bundleHead(cs)}<div class="photos">${cs.map(tile).join('')}</div></section>`).join('')
+    : `<div class="photos" style="padding-top:14px">${shown.map(tile).join('')}</div>`;
   drawPicks();
 }
-$('#clipsnav').onclick = () => { tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; };
-$('#clipsort').onchange = $('#clipused').onchange = $('#clipreuse').onchange = drawLibrary;
 $('#pickclear').onclick = () => { chosen.clear(); drawLibrary(); };
+const selected = () => [...chosen.values()].map(c => clips.find(x => clipKey(x) === clipKey(c)) || c);  // the library may have reloaded since they were selected
+const markPicks = (btn, reusable) => run(btn, 'Saving…', async () => {
+  try {
+    const picks = selected();
+    for (const c of picks) { await relabel(c, c.tags, reusable); chosen.set(clipKey(c), c); }
+    status(`Marked ${plural(picks.length, 'clip')} ${reusable ? 'reusable' : 'one-off'}`);
+  } finally { drawLibrary(); }
+});
+$('#pickreusable').onclick = e => markPicks(e.currentTarget, true);
+$('#pickoneoff').onclick = e => markPicks(e.currentTarget, false);
+const segSet = (el, v) => el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+const segGet = el => el.querySelector('.on')?.dataset.v ?? '';
+$('#clipreusable').onclick = $('#tagreuse').onclick = e => { const b = e.target.closest('button'); if (b) segSet(e.currentTarget, b.dataset.v); };
 async function relabel(c, tags, reusable = c.reusable ?? null) {
   c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags, reusable})).tags;
   c.reusable = reusable;
 }
 let tagging = [];  // the selected clips, while their tags are being changed
 $('#picktags').onclick = () => {
-  tagging = [...chosen.values()].map(c => clips.find(x => clipKey(x) === clipKey(c)) || c);  // the library may have reloaded since they were picked
+  tagging = selected();
   const counts = {};
   clips.forEach(c => c.tags.forEach(t => counts[t] = (counts[t] || 0) + 1));
   const popular = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 8);
@@ -702,13 +824,14 @@ $('#picktags').onclick = () => {
     box.checked = have === tagging.length;
     box.indeterminate = have > 0 && have < tagging.length;
   });
-  $('#tagnew').value = $('#tagreuse').value = '';
+  $('#tagnew').value = '';
+  segSet($('#tagreuse'), '');
   $('#tagdlg').returnValue = '';  // Esc and Cancel close without an answer
   $('#tagdlg').showModal();
 };
 $('#tagdlg').onclose = () => {
   if (!$('#tagdlg').returnValue) return;
-  const boxes = [...$('#tagpicks').querySelectorAll('input')].filter(b => !b.indeterminate), reuse = $('#tagreuse').value;
+  const boxes = [...$('#tagpicks').querySelectorAll('input')].filter(b => !b.indeterminate), reuse = segGet($('#tagreuse'));
   const add = [...boxes.filter(b => b.checked).map(b => b.value), ...$('#tagnew').value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)];
   const drop = boxes.filter(b => !b.checked).map(b => b.value);
   run($('#picktags'), 'Saving…', async () => {
@@ -739,6 +862,12 @@ $('#clipcards').onmousemove = e => {
   if (c) scrubCard(box, e, f => f * c.duration, previewOf(c));
 };
 $('#clipcards').onclick = e => {
+  const all = e.target.closest('[data-all]');
+  if (all) {
+    const cs = shownClips.filter(c => c.folder === all.dataset.all), on = cs.every(c => chosen.has(clipKey(c)));
+    cs.forEach(c => on ? chosen.delete(clipKey(c)) : chosen.set(clipKey(c), c));
+    return drawLibrary();
+  }
   const c = clips[+e.target.closest('[data-clip]')?.dataset.clip];
   if (!c) return;
   e.preventDefault();
@@ -751,17 +880,31 @@ function showClip(c) {
   $('#cliptitle').textContent = clipTitle(c);
   $('#clipmeta').textContent = `${c.bundle || c.project} · ${mins(c.duration)} · from ${c.source}`;
   $('#cliptags').value = c.tags.join(', ');
-  $('#clipreusable').value = reuseOf(c);
+  segSet($('#clipreusable'), reuseOf(c));
   $('#cliptext').textContent = c.text || 'No speech';
   $('#clipbundle').hidden = !projects.some(p => p.name === c.project);
-  $('#clipdlg').showModal();
+  $('#clipprev').hidden = $('#clipnext').hidden = !shownClips.includes(c) || shownClips.length < 2;
+  if (!$('#clipdlg').open) $('#clipdlg').showModal();
 }
-const drawClipPick = () => $('#clippick').textContent = chosen.has(clipKey(openClip)) ? 'Picked ✓' : 'Pick for a Video';
+function stepClip(by) {
+  const next = shownClips[(shownClips.indexOf(openClip) + by + shownClips.length) % shownClips.length];
+  saveClip();
+  showClip(next);
+}
+$('#clipprev').onclick = () => stepClip(-1);
+$('#clipnext').onclick = () => stepClip(1);
+$('#clipdlg').onkeydown = e => {
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target.tagName !== 'INPUT' && !$('#clipnext').hidden) { e.preventDefault(); stepClip(e.key === 'ArrowLeft' ? -1 : 1); }
+};
+const drawClipPick = () => $('#clippick').textContent = chosen.has(clipKey(openClip)) ? 'Selected ✓' : 'Select';
 $('#clippick').onclick = () => { togglePick(openClip); drawClipPick(); };
 $('#clipdlg').onclose = () => {
-  const c = openClip, tags = $('#cliptags').value.split(','), reuse = $('#clipreusable').value;
+  saveClip();
   $('#clipvideo').removeAttribute('src');
   $('#clipvideo').load();
+};
+function saveClip() {
+  const c = openClip, tags = $('#cliptags').value.split(','), reuse = segGet($('#clipreusable'));
   if (tags.map(t => t.trim().toLowerCase()).filter(Boolean).join() !== c.tags.join() || reuse !== reuseOf(c)) {
     const reusable = {yes: true, no: false, none: null}[reuse];
     run($('#clipcards'), 'Saving…', async () => { c.tags = (await api(`/api/clip/${enc(c.folder)}/${enc(c.stem)}`, {tags, reusable})).tags; c.reusable = reusable; drawLibrary(); status('Saved'); });
@@ -791,9 +934,9 @@ $('#cards').onmouseout = $('#clipcards').onmouseout = e => {
   const box = e.target.closest('.dur');
   if (box && !box.contains(e.relatedTarget)) box.querySelectorAll('video, .scrub').forEach(x => { x.removeAttribute('src'); x.remove(); });
 };
-$('#cards').addEventListener('click', e => {  // a bundle with no project: its clips are in the Library
-  const b = e.target.closest('[data-lone]');
-  if (b && !e.target.closest('.del, .srt')) $('#search').value = b.dataset.lone;
+$('#cards').addEventListener('click', e => {  // a finished bundle opens on its clips in the Library
+  const b = e.target.closest('[data-bundle]');
+  if (b && !e.target.closest('button')) { e.preventDefault(); showBundle(b.dataset.bundle); }
 });
 let renaming = null;  // name a card from the library, without opening or bundling it
 $('#cards').addEventListener('click', e => {
@@ -881,12 +1024,6 @@ const doBundle = name => run($('#cards'), 'Bundling…', async () => {
   await loadLibrary();
   status(`Bundled as ${r.name}`);
 });
-$('#taglist').onclick = e => {
-  const b = e.target.closest('[data-tag]');
-  if (!b) return;
-  tagFilter = onClips && tagFilter === b.dataset.tag ? null : b.dataset.tag;
-  onClips ? drawLibrary() : location.hash = '#/clips';
-};
 $('#stages').ondragover = e => {  // drag a card onto any stage to move it there
   const b = e.target.closest('[data-stage]');
   $('#stages').querySelectorAll('.drop').forEach(x => x !== b && x.classList.remove('drop'));
@@ -901,8 +1038,15 @@ $('#stages').ondrop = e => {
   const move = sort => run($('#cards'), 'Saving…', async () => { await api('/api/stage/' + enc(name), {stage, sort}); await watchSaves(); await loadLibrary(); status(stage === 'completed' ? 'Saving in the background' : `Moved to ${STAGES[stage][0]}`); });
   stage === 'completed' ? askSort(move, name) : move();
 };
-$('#stages').onclick = e => { const b = e.target.closest('[data-stage]'); if (!b) return; tagFilter = null; stageFilter = b.dataset.stage; $('#search').value = ''; location.hash === '#/' || location.hash === '' ? drawLibrary() : location.hash = '#/'; };
-$('#back').onclick = () => location.hash = '#/';
+$('#stages').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.nav) return go('#/clips');
+  $('#search').value = '';
+  go('#/s/' + b.dataset.stage);
+};
+$('#back').onclick = () => location.hash = lastList;
+$('#viewclips').onclick = () => showBundle(data.library_folder || data.name);
 
 // ---------- project ----------
 const clip = () => data.clips[clipIdx];
@@ -933,7 +1077,7 @@ function show(d, idx = clipIdx) {
   $('#complete').lastChild.textContent = data.unsaved ? 'Update Library' : done ? 'Completed' : 'Mark Complete';
   $('#complete').title = data.unsaved ? 'Your changes replace its old clips in the library when you leave this video, or now if you click.'
     : done ? 'Its kept clips are in the library. Click to reopen it in Processing, with what was cut.' : 'Done going through every clip: cut it down and save each kept clip to the library. The original footage stays.';
-  $('#showfinal').hidden = !done;
+  $('#showfinal').hidden = $('#viewclips').hidden = !done;
   $('#mergebtn').hidden = $('#resetall').hidden = $('#resetall').nextElementSibling.hidden = done;  // both bring back what was cut
   $('#startproc').hidden = data.stage !== 'inbox';
   $('#undobtn').disabled = !clip().undo;
@@ -1470,7 +1614,7 @@ const complete = (unmarked, sort) => run($('#complete'), 'Saving…', async () =
   await api('/api/stage/' + enc(proj), {stage: 'completed', unmarked, sort});
   data.unsaved = false;  // leaving mustn't save it again
   await watchSaves();
-  location.hash = '#/';
+  location.hash = lastList;
   status('Saving in the background');
 });
 $('#complete').onclick = () => data.unsaved ? complete('keep') : data.stage === 'completed'
@@ -1647,9 +1791,10 @@ async function nipDo(a, undo) {  // each goes through the same checked routes as
   const picks = a.clips.map(clipOf).filter(Boolean), split = a.text.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
   const label = async (tags, reusable) => { for (const c of picks) { undo.has(c) || undo.set(c, {tags: c.tags, reusable: c.reusable ?? null}); await relabel(c, tags(c), reusable); } };
   if (a.action === 'filter') {
-    $('#clipreuse').value = {reusable: 'yes', 'one-off': 'no', 'not sorted': 'none', all: ''}[a.text];
-    $('#search').value = ''; tagFilter = null;
-    location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips';
+    clipView.reuse = {reusable: 'yes', 'one-off': 'no', 'not sorted': 'none', all: ''}[a.text];
+    $('#search').value = '';
+    tagFilter.clear();
+    go('#/clips');
     return `Showing ${a.text === 'all' ? 'all' : a.text} clips`;
   }
   if (a.action === 'unpick') {
@@ -1691,7 +1836,7 @@ async function nipDo(a, undo) {  // each goes through the same checked routes as
     return `Deleted ${titleOf(a.project)}`;
   }
   if (a.action === 'open') { location.hash = '#/p/' + enc(a.project); return `Opened ${titleOf(a.project)}`; }
-  if (a.action === 'search') { $('#search').value = a.text; tagFilter = null; location.hash === '#/clips' ? drawLibrary() : location.hash = '#/clips'; return `Searched the Library for “${a.text}”`; }
+  if (a.action === 'search') { $('#search').value = a.text; tagFilter.clear(); go('#/clips'); return `Searched the Library for “${a.text}”`; }
   if (a.action === 'pick') { picks.forEach(c => chosen.set(clipKey(c), c)); return `Picked ${plural(picks.length, 'clip')}`; }
   if (a.action === 'export') {
     const r = await api('/api/handoff', {name: a.text, clips: picks.map(c => ({folder: c.folder, file: c.file}))});
@@ -1749,8 +1894,16 @@ $('#chatlog').onclick = e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'e' || !$('#project').hidden || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
   e.preventDefault();
+  showNip(true);
   $('#chatin').focus();
 });
+function showNip(open) {
+  document.body.classList.toggle('nip-open', open);
+  $('#niptoggle').classList.toggle('on', open);
+  try { localStorage.setItem('nip', open ? 'open' : ''); } catch {}
+}
+$('#niptoggle').onclick = () => showNip(!document.body.classList.contains('nip-open'));
+try { showNip(localStorage.getItem('nip') === 'open'); } catch {}
 drawChat();
 
 // ---------- adding videos: the Finder picker moves them in; drops onto the page upload them ----------
@@ -1784,6 +1937,7 @@ addEventListener('drop', async e => {
 async function poll() {
   try {
     const s = await api('/api/status');
+    document.body.classList.toggle('busy', !!(s.transcribing || s.fetching));
     $('#inbox').innerHTML = s.transcribing
       ? `<span class="spin"></span><span><b>Transcribing</b> ${plural(s.transcribing, 'video')}…</span>`
       : s.fetching ? `<span class="spin"></span><span><b>Downloading</b> from Drive…</span>` : `${icon('tray')}<span>Inbox empty</span>`;
@@ -1791,7 +1945,7 @@ async function poll() {
     $('#openinbox').onclick = () => api('/api/open', {what: 'inbox'}).catch(e => status(e.message, true));
     $('#unreadable')?.remove();
     if (s.unreadable) {
-      $('#inbox').insertAdjacentHTML('afterend', `<button class="item" id="unreadable" title="These weren't videos ffmpeg could read (often an AirDrop that didn't finish). Show them in Finder; delete them or send them again.">${icon('folder')}<span>${plural(s.unreadable, 'file')} couldn’t be read</span></button>`);
+      $('#inbox').insertAdjacentHTML('afterend', `<button class="btn" id="unreadable" title="These weren't videos ffmpeg could read (often an AirDrop that didn't finish). Show them in Finder; delete them or send them again.">${icon('folder')}${plural(s.unreadable, 'file')} couldn’t be read</button>`);
       $('#unreadable').onclick = () => api('/api/open', {what: 'unreadable'}).catch(e => status(e.message, true));
     }
     $('#claudehint').textContent = {plan: 'Uses your Claude plan', api: 'Uses your API key'}[s.claude] || 'Needs Claude Code or an API key';
@@ -1800,11 +1954,13 @@ async function poll() {
   } catch (e) { $('#inbox').textContent = 'Footage Flow isn’t running'; }
 }
 function route() {
-  const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips';
+  const m = location.hash.match(/^#\/p\/(.+)$/), c = location.hash === '#/clips', stage = location.hash.match(/^#\/s\/(\w+)$/)?.[1];
+  if (STAGES[stage]) stageFilter = stage;
+  if (!m) lastList = location.hash || '#/';
   if (data?.unsaved && data.name !== (m && decodeURIComponent(m[1])))  // leaving edited completed footage replaces its clips in the library
     api('/api/stage/' + enc(data.name), {stage: 'completed', unmarked: 'keep'}).then(watchSaves).then(loadLibrary).catch(e => status(e.message, true));
   onClips = c;
-  $('#clipsort').hidden = $('#clipused').hidden = $('#clipreuse').hidden = !c;
+  $('#filters').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;
   $('#back').hidden = !m;
@@ -1816,7 +1972,7 @@ function route() {
   if (m) loadProject(decodeURIComponent(m[1]));
   else { proj = ''; data = null; }
   showKeys(keysOpen);  // the cheatsheet belongs to the editor
-  loadLibrary();  // the sidebar's tags and counts show on every page
+  loadLibrary();  // the rail's counts show on every page
 }
 window.onhashchange = route;
 addEventListener('focus', () => $('#project').hidden && loadLibrary());  // folders moved by hand in Drive show up on coming back
