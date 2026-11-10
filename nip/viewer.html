@@ -86,6 +86,7 @@
   #nipchat { display: none; flex-direction: column; min-height: 0; padding: 12px; gap: 10px; border-left: .5px solid var(--separator); background: var(--window); }
   body.nip-open:not(.editing) #nipchat { display: flex; }
   #chatlog { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  #chatlog > * { flex: none; }  /* a long reply scrolls; squeezed to fit, messages drew over each other */
   .msg { display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
   .msg p { margin: 0; white-space: pre-wrap; }
   .msg.you { align-self: flex-end; max-width: 85%; padding: 6px 10px; border-radius: 12px; background: var(--accent); color: #fff; }
@@ -169,23 +170,40 @@
   #iquickform { display: flex; gap: 8px; padding: 12px 0 10px; }
   #iquick { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border-radius: 12px; font-size: 14px; }
   #iquickform .btn { height: 40px; padding: 0 16px; border-radius: 12px; }
-  .board { display: grid; grid-template-columns: repeat(3, minmax(230px, 1fr)); gap: 10px; height: calc(100vh - 136px); overflow-x: auto; }
-  .col { display: flex; flex-direction: column; min-height: 0; padding: 4px; border-radius: 14px; background: var(--fill); }
-  .col.drop { box-shadow: inset 0 0 0 2px var(--accent); }
-  .colhead { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 13px; font-weight: 600; }
-  .colhead small { color: var(--secondary); font-weight: 400; }
-  .colhead .colnext { margin-left: auto; color: var(--tertiary); font-size: 16px; line-height: 1; }
-  .colcards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 2px; }
-  .colempty { padding: 24px 12px; color: var(--secondary); font-size: 12px; text-align: center; }
-  .icard { position: relative; display: flex; flex-direction: column; gap: 3px; flex: none; padding: 10px 12px; border-radius: 10px; background: var(--window); box-shadow: var(--shadow); cursor: pointer; }
-  .icard:hover { box-shadow: 0 0 0 1.5px var(--accent); }
-  .icard:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); }
-  .icard b { font-weight: 500; line-height: 1.3; }
-  .icard > span { color: var(--secondary); font-size: 12px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .imove { position: absolute; top: 6px; right: 6px; display: none; gap: 2px; }
-  .icard:hover .imove, .icard:focus-within .imove { display: flex; }
-  .imove button { width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px; background: var(--fill-strong); font-size: 14px; line-height: 1; }
-  .imove button:hover { background: var(--accent); color: #fff; }
+  /* ideas: a table like a Notion database, grouped by where each idea is */
+  .itable { overflow-x: auto; padding-bottom: 20px; }
+  .irow { display: grid; grid-template-columns: 22px minmax(200px, 2fr) minmax(220px, 2.6fr) 118px minmax(150px, 1.4fr) minmax(140px, 1.3fr) 92px 96px; align-items: start; min-width: 1068px; border-bottom: .5px solid var(--separator); }
+  .irow > div { min-width: 0; padding: 8px 8px; font-size: 13px; line-height: 1.4; }
+  .ihead { position: sticky; top: 0; z-index: 2; background: var(--window); color: var(--secondary); }
+  .ihead > div { font-size: 12px; font-weight: 500; }
+  .irow:not(.ihead):hover { background: var(--fill); }
+  .irow.drop { box-shadow: inset 0 2px 0 var(--accent); }
+  .igrip { color: var(--tertiary); cursor: grab; opacity: 0; text-align: center; user-select: none; }
+  .irow:hover .igrip { opacity: 1; }
+  .ititle { display: flex; align-items: flex-start; gap: 6px; }
+  .ititle [data-edit] { flex: 1; font-weight: 500; }
+  [data-edit] { min-width: 0; border-radius: 4px; outline: none; overflow-wrap: anywhere; cursor: text; }
+  [data-edit]:focus { box-shadow: 0 0 0 2px var(--accent); background: var(--field); }
+  [data-edit]:empty::before { content: attr(data-placeholder); color: var(--tertiary); }
+  .iopen { display: none; flex: none; height: 22px; padding: 0 8px; border: .5px solid var(--control-edge); border-radius: 6px; background: var(--window); font-size: 11px; color: var(--secondary); }
+  .irow:hover .iopen, .iopen:focus-visible { display: inline-flex; align-items: center; }
+  .spill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border: none; border-radius: 11px; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--label); }
+  .spill::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--c); }
+  .igroup { margin-top: 14px; }
+  .ghead { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 4px; border: none; background: none; font-size: 13px; font-weight: 600; }
+  .ghead i { font-style: normal; color: var(--secondary); transition: transform .12s; }
+  .igroup.shut .ghead i { transform: rotate(-90deg); }
+  .igroup.shut .irows { display: none; }
+  .ghead small { color: var(--secondary); font-weight: 400; }
+  .igroup.drop .ghead { color: var(--accent); }
+  .inew { display: block; width: 100%; min-width: 1060px; height: 34px; padding: 0 30px; border: none; border-bottom: .5px solid var(--separator); background: none; color: var(--secondary); text-align: left; }
+  .inew:hover { background: var(--fill); color: var(--label); }
+  .iref { color: var(--accent); text-decoration: none; }
+  .iadded { color: var(--secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #smenu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 10px; background: var(--window); box-shadow: 0 8px 28px rgba(0, 0, 0, .28), 0 0 0 .5px var(--separator); }
+  #smenu button { display: flex; justify-content: flex-start; border: none; background: none; padding: 4px 6px; border-radius: 6px; }
+  #smenu button:hover { background: var(--fill-strong); }
+  @media (max-width: 1100px) { .irow { grid-template-columns: 22px minmax(180px, 2fr) minmax(200px, 2.4fr) 118px minmax(140px, 1.4fr) minmax(130px, 1.3fr); min-width: 880px; } .irow > :nth-child(n+7) { display: none; } .inew { min-width: 880px; } }
   .ilinks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .ilinks .chip { max-width: 100%; height: 24px; padding: 0 9px; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: inherit; text-decoration: none; }
   .ilinks .chip.gone { opacity: .5; text-decoration: line-through; }
@@ -498,7 +516,8 @@
       <div id="videoview" hidden><div id="vfilters"></div><div class="grid" id="videocards"></div></div>
       <div id="ideaview" hidden>
         <form id="iquickform" autocomplete="off"><input type="text" id="iquick" maxlength="300" aria-label="New idea" placeholder="Got an idea? Type it and press Return"><button class="btn default">Add</button></form>
-        <div class="board" id="ideaboard"></div>
+        <div class="itable" id="ideatable"></div>
+        <div id="smenu" hidden role="menu"></div>
       </div>
     </div>
 
@@ -875,32 +894,42 @@ async function loadIdeas() {
 }
 const videoByName = name => vids.find(v => v.shelf !== 'Drafts' && v.id.split('/')[1] === name);  // a video's folder name is its link; drafts are renamed when saved, so they can't be linked
 const COLUMNS = {Idea: 'Ideas', 'In progress': 'In Progress', Complete: 'Complete'};
+const STATUS_COLOR = {Idea: 'var(--gray)', 'In progress': 'var(--accent)', Complete: 'var(--green)'};
+const shutGroups = new Set();
+try { JSON.parse(localStorage.getItem('shutGroups') || '[]').forEach(g => shutGroups.add(g)); } catch {}
 function drawIdeas(words) {
   $('#title').textContent = 'Ideas';
-  if (!ideaList) { $('#subtitle').textContent = ''; $('#ideaboard').innerHTML = ''; return; }
+  if (!ideaList) { $('#subtitle').textContent = ''; $('#ideatable').innerHTML = ''; return; }
+  if (document.activeElement?.closest?.('#ideatable [data-edit]')) return;  // never redraw under someone's typing
   const match = i => words.every(w => [i.id, i.idea, i.notes, ...i.bundles, ...i.videos].join(' ').toLowerCase().includes(w));
   $('#subtitle').textContent = plural(ideaList.filter(match).length, 'idea');
-  const chips = i => {
-    const out = [];
-    if (/^https?:\/\//.test(i.link)) out.push(`<a class="chip" href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${icon('share')}Reference</a>`);
-    for (const b of i.bundles) { const p = projects.find(x => x.name === b);
-      out.push(p ? `<a class="chip" href="#/p/${enc(b)}" title="Open this footage">${icon('film')}${esc(p.description || b)}</a>` : `<span class="chip gone" title="No footage with this name here">${icon('film')}${esc(b)}</span>`); }
-    for (const n of i.videos) { const v = videoByName(n);
-      out.push(v ? `<a class="chip" href="#/videos" data-vid="${esc(v.id)}" title="Open this video">${icon('play')}${esc(v.title)}</a>` : `<span class="chip gone" title="No finished video with this name">${icon('play')}${esc(n)}</span>`); }
-    return out.length ? `<div class="ilinks">${out.join('')}</div>` : '';
-  };
-  const card = (i, n) => `<article class="icard" draggable="true" tabindex="0" data-idea="${esc(i.id)}"><b>${esc(i.idea)}</b>${i.notes ? `<span>${esc(i.notes)}</span>` : ''}${chips(i)}
-    <div class="imove">${n ? `<button data-to="${esc(ideaStatuses[n - 1])}" title="Move back to ${esc(COLUMNS[ideaStatuses[n - 1]])}" aria-label="Move back">‹</button>` : ''}${n < ideaStatuses.length - 1 ? `<button data-to="${esc(ideaStatuses[n + 1])}" title="Move on to ${esc(COLUMNS[ideaStatuses[n + 1]])}" aria-label="Move on">›</button>` : ''}</div></article>`;
-  const blank = {Idea: 'No ideas yet. Add one above, or ask Claude.', 'In progress': 'Drag an idea here when you start on it.', Complete: 'Finished ideas land here.'};
-  $('#ideaboard').innerHTML = ideaStatuses.map((st, n) => {
-    const list = ideaList.filter(i => i.status === st && match(i)).reverse();  // newest first, so what you just added is on top
-    return `<section class="col" data-status="${esc(st)}"><div class="colhead">${esc(COLUMNS[st] || st)} <small class="num">${list.length}</small>${n < ideaStatuses.length - 1 ? '<span class="colnext" aria-hidden="true">›</span>' : ''}</div>
-      <div class="colcards">${list.map(i => card(i, n)).join('') || `<div class="colempty">${$('#search').value ? 'Nothing matches' : blank[st] || ''}</div>`}</div></section>`;
-  }).join('');
+  const links = (list, find) => `<div class="ilinks">${list.map(find).join('')}</div>`;
+  const bundle = b => { const p = projects.find(x => x.name === b);
+    return p ? `<a class="chip" href="#/p/${enc(b)}" title="Open this footage">${icon('film')}${esc(p.description || b)}</a>` : `<span class="chip gone" title="No footage with this name here">${icon('film')}${esc(b)}</span>`; };
+  const video = n => { const v = videoByName(n);
+    return v ? `<a class="chip" href="#/videos" data-vid="${esc(v.id)}" title="Open this video">${icon('play')}${esc(v.title)}</a>` : `<span class="chip gone" title="No finished video with this name">${icon('play')}${esc(n)}</span>`; };
+  const pill = st => `<button class="spill" style="--c:${STATUS_COLOR[st] || 'var(--gray)'}" data-smenu title="Change where it is">${esc(COLUMNS[st] || st)}</button>`;
+  const row = i => `<div class="irow" data-idea="${esc(i.id)}">
+      <div class="igrip" draggable="true" title="Drag to another group">⋮⋮</div>
+      <div class="ititle"><span contenteditable="plaintext-only" spellcheck="true" data-edit="idea" data-placeholder="Untitled">${esc(i.idea)}</span><button class="iopen" data-open title="See everything, and link footage and videos">Open</button></div>
+      <div contenteditable="plaintext-only" spellcheck="true" data-edit="notes" data-placeholder="Add notes">${esc(i.notes)}</div>
+      <div>${pill(i.status)}</div>
+      <div>${links(i.bundles, bundle)}</div>
+      <div>${links(i.videos, video)}</div>
+      <div>${/^https?:\/\//.test(i.link) ? `<a class="iref" href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${icon('share')} Open</a>` : ''}</div>
+      <div class="iadded">${esc(i.added)}</div>
+    </div>`;
+  $('#ideatable').innerHTML = `<div class="irow ihead"><div></div><div>Idea</div><div>Notes</div><div>Status</div><div>Footage</div><div>Videos</div><div>Reference</div><div>Added</div></div>`
+    + ideaStatuses.map(st => {
+      const list = ideaList.filter(i => i.status === st && match(i)).reverse();  // newest first, so what you just added is on top
+      return `<section class="igroup ${shutGroups.has(st) ? 'shut' : ''}" data-status="${esc(st)}"><button class="ghead" data-group="${esc(st)}"><i>▾</i><span class="spill" style="--c:${STATUS_COLOR[st] || 'var(--gray)'}">${esc(COLUMNS[st] || st)}</span><small class="num">${list.length}</small></button>
+        <div class="irows">${list.map(row).join('')}<button class="inew" data-new="${esc(st)}">+ New</button></div></section>`;
+    }).join('');
 }
 async function saveIdea(id, fields) {
-  await api(id ? '/api/ideas/update' : '/api/ideas/add', {id, ...fields});
+  const r = await api(id ? '/api/ideas/update' : '/api/ideas/add', {id, ...fields});
   await loadIdeas();
+  return r.id;
 }
 function editIdea(i) {  // i is null for a new idea
   openIdea = i;
@@ -943,30 +972,69 @@ function moveIdea(id, to) {
   if (!i || i.status === to) return;
   i.status = to;  // shown at once; the next read confirms it
   drawLibrary();
-  run($('#ideaboard'), 'Saving…', async () => { await saveIdea(id, {status: to}); status(`Moved to ${COLUMNS[to]}`); });
+  run($('#ideatable'), 'Saving…', async () => { await saveIdea(id, {status: to}); status(`Moved to ${COLUMNS[to]}`); });
 }
-$('#ideaboard').onclick = e => {
-  const card = e.target.closest('[data-idea]'), to = e.target.closest('[data-to]'), v = e.target.closest('[data-vid]');
-  if (to) return moveIdea(card.dataset.idea, to.dataset.to);
+const closeMenu = () => { $('#smenu').hidden = true; };
+$('#ideatable').onclick = e => {
+  const row = e.target.closest('[data-idea]'), id = row?.dataset.idea, v = e.target.closest('[data-vid]'), menu = e.target.closest('[data-smenu]');
+  const group = e.target.closest('[data-group]'), add = e.target.closest('[data-new]');
+  if (menu) {  // a small menu by the pill, like Notion's
+    const r = menu.getBoundingClientRect(), i = ideaList.find(x => x.id === id);
+    $('#smenu').innerHTML = ideaStatuses.map(st => `<button data-to="${esc(st)}" ${st === i.status ? 'aria-current="true"' : ''}><span class="spill" style="--c:${STATUS_COLOR[st]}">${esc(COLUMNS[st])}</span></button>`).join('');
+    $('#smenu').dataset.idea = id;
+    Object.assign($('#smenu').style, {left: `${r.left}px`, top: `${Math.min(r.bottom + 4, innerHeight - 120)}px`});
+    $('#smenu').hidden = false;
+    return e.stopPropagation();
+  }
+  if (group) {
+    shutGroups.delete(group.dataset.group) || shutGroups.add(group.dataset.group);
+    try { localStorage.setItem('shutGroups', JSON.stringify([...shutGroups])); } catch {}
+    return drawLibrary();
+  }
+  if (add) return run(add, 'Adding…', async () => {  // a new row, its title ready to type, in this group
+    const newId = await saveIdea(null, {idea: 'Untitled', status: add.dataset.new});
+    const cell = document.querySelector(`[data-idea="${CSS.escape(newId)}"] [data-edit="idea"]`);
+    cell?.focus();
+    if (cell) getSelection().selectAllChildren(cell);
+  });
   if (v) { e.preventDefault(); return showVideo(v.dataset.vid); }
-  if (card && !e.target.closest('a')) editIdea(ideaList.find(i => i.id === card.dataset.idea));
+  if (e.target.closest('[data-open]')) editIdea(ideaList.find(i => i.id === id));
 };
-$('#ideaboard').onkeydown = e => { if (e.key === 'Enter' && e.target.matches('.icard')) editIdea(ideaList.find(i => i.id === e.target.dataset.idea)); };
+$('#smenu').onclick = e => { const b = e.target.closest('[data-to]'); if (b) moveIdea($('#smenu').dataset.idea, b.dataset.to); closeMenu(); };
+document.addEventListener('click', e => { if (!e.target.closest('#smenu')) closeMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+// edit in place: a title or note saves when you leave it; Return finishes a title, Escape puts it back
+$('#ideatable').addEventListener('keydown', e => {
+  const cell = e.target.closest?.('[data-edit]');
+  if (!cell) return;
+  const i = ideaList.find(x => x.id === cell.closest('[data-idea]').dataset.idea);
+  if (e.key === 'Escape') { cell.textContent = i[cell.dataset.edit]; cell.blur(); }
+  if (e.key === 'Enter' && cell.dataset.edit === 'idea') { e.preventDefault(); cell.blur(); }
+});
+$('#ideatable').addEventListener('focusout', e => {
+  const cell = e.target.closest?.('[data-edit]');
+  if (!cell) return;
+  const i = ideaList.find(x => x.id === cell.closest('[data-idea]').dataset.idea), key = cell.dataset.edit, text = cell.textContent.trim();
+  if (!i || text === i[key]) return;
+  if (key === 'idea' && !text) { cell.textContent = i.idea; return status('An idea needs a title', true); }
+  i[key] = text;
+  run($('#ideatable'), 'Saving…', async () => { await saveIdea(i.id, {[key]: text}); status('Saved'); });
+});
 let draggedIdea = null;
-$('#ideaboard').ondragstart = e => { draggedIdea = e.target.closest('[data-idea]')?.dataset.idea; };
-$('#ideaboard').ondragover = e => {
-  const col = e.target.closest('.col');
-  if (!draggedIdea || !col) return;
+$('#ideatable').ondragstart = e => { draggedIdea = e.target.closest('[data-idea]')?.dataset.idea; };
+$('#ideatable').ondragover = e => {
+  const g = e.target.closest('.igroup');
+  if (!draggedIdea || !g) return;
   e.preventDefault();
-  document.querySelectorAll('.col.drop').forEach(c => c !== col && c.classList.remove('drop'));
-  col.classList.add('drop');
+  document.querySelectorAll('.igroup.drop').forEach(x => x !== g && x.classList.remove('drop'));
+  g.classList.add('drop');
 };
-$('#ideaboard').ondragend = () => { draggedIdea = null; document.querySelectorAll('.col.drop').forEach(c => c.classList.remove('drop')); };
-$('#ideaboard').ondrop = e => {
+$('#ideatable').ondragend = () => { draggedIdea = null; document.querySelectorAll('.igroup.drop').forEach(x => x.classList.remove('drop')); };
+$('#ideatable').ondrop = e => {
   e.preventDefault();
-  const to = e.target.closest('.col')?.dataset.status, id = draggedIdea;
+  const to = e.target.closest('.igroup')?.dataset.status, id = draggedIdea;
   draggedIdea = null;
-  document.querySelectorAll('.col.drop').forEach(c => c.classList.remove('drop'));
+  document.querySelectorAll('.igroup.drop').forEach(x => x.classList.remove('drop'));
   if (id && to) moveIdea(id, to);
 };
 const addFinished = () => run($('#addvideos'), 'Pick your finished videos in the Finder window…', async () => {
