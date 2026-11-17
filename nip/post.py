@@ -4,7 +4,9 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
+from datetime import datetime, timedelta, timezone
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -154,7 +156,9 @@ def setup():
 
 DONE_FILE = cli.DATA / "Inbox Done.json"  # what was dealt with without a reply, shared so two people don't both look at it
 EXAMPLES, REPLY_EDITS = cli.DATA / "Reply Examples.json", cli.DATA / "Reply Edits.json"  # how the owner really replies, and what he changed in drafts
-CACHE = {"at": 0, "items": None}  # Zernio allows 60 requests a minute on the free tier, and a refresh makes up to ~25
+CACHE = {"at": 0, "items": None}  # Zernio allows 60 requests a minute on the free tier, and a refresh can make up to ~20
+CHECKING = threading.Lock()  # one check at a time: a second one waits and gets the first one's answer
+DM_DAYS = 7  # Instagram and TikTok don't allow a reply later than this, so older conversations aren't worth a request
 POSTS_LOOKED_AT, CONVERSATIONS_LOOKED_AT = 10, 10
 
 
@@ -164,12 +168,18 @@ def done_ids():
 
 def inbox(fresh=False):
     """What's waiting for a reply: comments by other people with no reply from you yet, and DMs whose last message is theirs. Newest first."""
-    if not fresh and CACHE["items"] is not None and time.time() - CACHE["at"] < 120:
-        return CACHE["items"]
+    asked = time.time()
+    with CHECKING:
+        if CACHE["items"] is not None and (CACHE["at"] >= asked or not fresh and asked - CACHE["at"] < 120):
+            return CACHE["items"]
+        return check()
+
+
+def check():
     accts = call("GET", "/accounts?status=connected")[1].get("accounts", [])
     accts = [a for a in accts if a.get("platform") in MAIN]
     items, done, seen = [], done_ids(), []
-    profiles = {a.get("profileId") for a in accts if a.get("profileId")}
+    profiles = {(p.get("_id") if isinstance(p, dict) else p) for p in (a.get("profileId") for a in accts) if p}  # Zernio sends the profile itself, or just its id
     for pid in profiles:
         for post in call("GET", f"/inbox/comments?profileId={pid}&limit={POSTS_LOOKED_AT}&sortBy=date&sortOrder=desc")[1].get("data", []):
             if not post.get("commentCount") or post.get("platform") not in MAIN:
@@ -187,16 +197,19 @@ def inbox(fresh=False):
                               "at": c.get("createdTime", ""), "url": c.get("url") or post.get("permalink", ""), "canHide": bool(c.get("canHide")),
                               "post": {"text": post.get("content", ""), "picture": post.get("picture", ""), "url": post.get("permalink", "")}, "thread": []})
     for a in accts:
+        since = (datetime.now(timezone.utc) - timedelta(days=DM_DAYS)).isoformat()
         for conv in call("GET", f"/inbox/conversations?accountId={a['_id']}&limit={CONVERSATIONS_LOOKED_AT}")[1].get("data", []):
+            if str(conv.get("updatedTime") or "9") < since[:19]:  # ISO times sort as text
+                continue
             msgs = call("GET", f"/inbox/conversations/{conv['id']}/messages?accountId={a['_id']}&limit=8&sortOrder=desc")[1].get("messages", [])
             seen += [{"kind": "dm", "platform": a["platform"], "them": msgs[k + 1].get("message", ""), "you": m.get("message", "")}
                      for k, m in enumerate(msgs[:-1]) if m.get("direction") == "outgoing" and msgs[k + 1].get("direction") == "incoming"]
             if not msgs or msgs[0].get("direction") != "incoming" or f"dm:{msgs[0]['id']}" in done:
                 continue
             items.append({"key": f"dm:{msgs[0]['id']}", "kind": "dm", "platform": a["platform"], "accountId": a["_id"], "conversationId": conv["id"],
-                          "text": msgs[0].get("message", ""), "who": conv.get("participantUsername") or conv.get("participantName") or "someone",
+                          "text": said(msgs[0]), "who": conv.get("participantUsername") or conv.get("participantName") or "someone",
                           "at": msgs[0].get("createdAt") or msgs[0].get("sentAt", ""), "url": conv.get("url", ""), "canHide": False, "post": None,
-                          "thread": [{"from": "you" if m.get("direction") == "outgoing" else "them", "text": m.get("message", "")} for m in reversed(msgs)]})
+                          "thread": [{"from": "you" if m.get("direction") == "outgoing" else "them", "text": said(m)} for m in reversed(msgs)]})
     learn(EXAMPLES, [e for e in seen if e["them"] and e["you"]])
     CACHE.update(at=time.time(), items=sorted(items, key=lambda i: i["at"], reverse=True))
     return CACHE["items"]
@@ -213,6 +226,16 @@ def learn(f, new, keep=60):
 def examples():
     """The owner's own replies, and his changes to drafts: what drafts learn from."""
     return (cli.load(EXAMPLES) if EXAMPLES.exists() else []), (cli.load(REPLY_EDITS) if REPLY_EDITS.exists() else [])
+
+
+def said(m):
+    """A DM's text, or what was sent instead: a story reply, a photo or a video has no text of its own."""
+    if (m.get("message") or "").strip():
+        return m["message"]
+    if m.get("isStoryMention"):
+        return "(mentioned you in their story)"
+    kinds = sorted({a.get("type", "attachment") for a in m.get("attachments") or [] if isinstance(a, dict)})
+    return f"(sent {' and '.join(kinds) if kinds else 'something with no text'})"
 
 
 def find(key):

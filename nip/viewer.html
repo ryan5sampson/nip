@@ -772,7 +772,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w, many = w + 's') => `${n} ${n === 1 ? w : many}`;
-let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {};
+let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {}, inboxError = '';
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -846,7 +846,7 @@ function drawLibrary() {
   const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
   const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length, open = (ideaList || []).filter(i => i.status !== 'Complete').length;
   const nav = (attr, on, ic, name, n, title) => `<button class="nav ${on ? 'on' : ''}" ${attr} title="${esc(title)}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
-  $('#stages').innerHTML = `<div class="navflow">${nav('data-nav="ideas"', onIdeas, 'bulb', 'Ideas', open, 'What to make next')}${nav('data-nav="videos"', onVideos, 'play', 'Videos', waiting, 'Finished videos, their captions, and what’s been posted')}${nav('data-nav="inbox"', onInbox, 'text', 'Inbox', (inboxItems || []).length, 'Comments and DMs waiting for a reply')}</div>
+  $('#stages').innerHTML = `<div class="navflow">${nav('data-nav="ideas"', onIdeas, 'bulb', 'Ideas', open, 'What to make next')}${nav('data-nav="videos"', onVideos, 'play', 'Videos', waiting, 'Finished videos, their captions, and what’s been posted')}${nav('data-nav="inbox"', onInbox, 'text', 'Replies', (inboxItems || []).length, 'Comments and DMs waiting for a reply')}</div>
     <div class="navflow">${Object.entries(STAGES).map(([k, [name, ic, hint]]) => nav(`data-stage="${k}"`, k === here && !onClips && !onVideos && !onIdeas && !onInbox, ic, name, projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0), hint)).join('')}</div>
     ${nav('data-nav="clips"', onClips, 'grid', 'Library', 0, 'Every kept clip, to search, preview and select')}`;
   $('#addlabel').textContent = onIdeas ? 'New Idea' : onVideos ? 'Add Finished Video' : 'Add Videos';
@@ -1102,7 +1102,7 @@ $('#fgo').onclick = e => run(e.currentTarget, 'Starting…', async () => {
 // ---------- inbox: comments and DMs, drafted in a batch, read and approved, then sent ----------
 const ago = t => { const m = (Date.now() - new Date(t)) / 6e4; return !t ? '' : m < 60 ? `${Math.max(1, Math.round(m))}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
 async function loadInbox(fresh) {
-  try { inboxItems = await api('/api/inbox', {fresh}); } catch (e) { if (onInbox) { inboxItems = inboxItems || []; status(e.message, true); } return drawLibrary(); }
+  try { inboxItems = await api('/api/inbox', {fresh}); inboxError = ''; } catch (e) { inboxError = e.message; return drawLibrary(); }
   for (const k of Object.keys(inboxState)) if (!inboxItems.some(i => i.key === k)) delete inboxState[k];
   drawLibrary();
   if (onInbox) draftInbox(inboxItems.filter(i => !inboxState[i.key]).map(i => i.key));
@@ -1121,12 +1121,13 @@ async function draftInbox(keys, note = '') {  // one Claude call for the batch
 function drawInbox() {
   if (!onInbox) return;
   if (document.activeElement?.closest?.('#iboxes')) return;  // never redraw under someone's typing
-  $('#title').textContent = 'Inbox';
+  $('#title').textContent = 'Replies';
   const list = inboxItems || [], approved = list.filter(i => inboxState[i.key]?.ok).length;
   $('#subtitle').textContent = inboxItems ? plural(list.length, 'reply', 'replies') + ' waiting' : 'Checking…';
   $('#ibar').innerHTML = `<b>${approved} approved</b><span class="grow" style="flex:1"></span><button class="btn" data-ia="refresh">Check Again</button><button class="btn" data-ia="all" ${list.length ? '' : 'disabled'}>Approve All</button><button class="btn default" data-ia="send" ${approved ? '' : 'disabled'}>Send ${approved || ''} Approved</button>`;
   const NAMES = {tiktok: 'TikTok', instagram: 'Instagram'};
-  $('#iboxes').innerHTML = !inboxItems ? `<div class="empty">${icon('text')}<b>Checking your inbox…</b></div>`
+  $('#iboxes').innerHTML = inboxError && !inboxItems ? `<div class="empty">${icon('text')}<b>Couldn’t check for replies</b>${esc(inboxError)}</div>`
+    : !inboxItems ? `<div class="empty">${icon('text')}<b>Checking for comments and DMs…</b></div>`
     : !list.length ? `<div class="empty">${icon('check')}<b>All caught up</b>No comments or DMs waiting on TikTok or Instagram.</div>`
     : list.map(i => { const st = inboxState[i.key] || {}; return `<article class="ibox ${st.ok ? 'ok' : ''}" data-key="${esc(i.key)}">
       <div class="ihd">${NAMES[i.platform] || i.platform} ${i.kind === 'dm' ? 'DM' : 'comment'} · <b>@${esc(i.who)}</b> · ${ago(i.at)}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
@@ -2561,7 +2562,7 @@ function route() {
   onVideos = location.hash === '#/videos';
   onIdeas = location.hash === '#/ideas';
   onInbox = location.hash === '#/inbox';
-  if (onInbox) loadInbox(true);
+  if (onInbox) loadInbox(false);
   $('#filters').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;

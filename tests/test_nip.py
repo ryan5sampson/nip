@@ -926,7 +926,7 @@ class Robustness(unittest.TestCase):
                 sent.append((path, body, idem))
                 return 200, {"success": True}
             if path.startswith("/accounts"):
-                return 200, {"accounts": [{"_id": "ig", "platform": "instagram", "profileId": "p1"}, {"_id": "tt", "platform": "tiktok", "profileId": "p1"}]}
+                return 200, {"accounts": [{"_id": "ig", "platform": "instagram", "profileId": {"_id": "p1", "name": "Linderball"}}, {"_id": "tt", "platform": "tiktok", "profileId": "p1"}]}  # both forms seen
             if path.startswith("/inbox/comments?"):
                 return 200, {"data": [{"id": "post1", "platform": "instagram", "accountId": "ig", "commentCount": 3, "content": "Print farm", "permalink": "u"},
                                       {"id": "post2", "platform": "tiktok", "accountId": "tt", "commentCount": 0}]}
@@ -936,9 +936,13 @@ class Robustness(unittest.TestCase):
                     {"id": "c2", "message": "So cool", "from": fan, "createdTime": "2026-11-17T09:00:00Z", "canReply": True, "replies": [{"message": "thanks!! 🙌", "from": owner}]},
                     {"id": "c3", "message": "my own note", "from": owner, "createdTime": "2026-11-17T08:00:00Z", "replies": []}]}
             if path.startswith("/inbox/conversations?accountId=ig"):
-                return 200, {"data": [{"id": "dm1", "participantUsername": "buyer"}, {"id": "dm2", "participantUsername": "old"}]}
+                return 200, {"data": [{"id": "dm1", "participantUsername": "buyer", "updatedTime": "2999-01-01T00:00:00Z"},
+                                      {"id": "dm2", "participantUsername": "old", "updatedTime": "2999-01-01T00:00:00Z"},
+                                      {"id": "dm3", "participantUsername": "ancient", "updatedTime": "2020-01-01T00:00:00Z"}]}  # too old to answer: not even looked at
             if path.startswith("/inbox/conversations?"):
                 return 200, {"data": []}
+            if path.startswith("/inbox/conversations/dm3/"):
+                raise AssertionError("a conversation too old to answer was fetched")
             if path.startswith("/inbox/conversations/dm1/"):
                 return 200, {"messages": [{"id": "m3", "direction": "incoming", "message": "Do you ship to Canada?", "createdAt": "2026-11-17T11:00:00Z"},
                                           {"id": "m2", "direction": "outgoing", "message": "yep, link in bio!"},
@@ -969,6 +973,8 @@ class Robustness(unittest.TestCase):
                 self.assertEqual(len(cli.load(post.REPLY_EDITS)), 1)  # sent as drafted: nothing to learn
                 with self.assertRaisesRegex(ValueError, "no longer waiting"):
                     post.reply("comment:c1", "again")
+                self.assertEqual(post.said({"message": "", "attachments": [{"type": "image"}]}), "(sent image)")  # a photo, not an empty message
+                self.assertEqual(post.said({"message": "", "isStoryMention": True}), "(mentioned you in their story)")
                 post.dismiss("comment:c9")
                 self.assertIn("comment:c9", post.done_ids())
 
