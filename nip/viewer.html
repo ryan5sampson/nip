@@ -166,6 +166,25 @@
   .vlabel small { margin-left: auto; color: var(--secondary); font-weight: 400; }
   #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
   #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
+  #ibar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 12px 0 10px; background: var(--window); }
+  #ibar b { font-weight: 600; }
+  #ibar .btn { height: 32px; border-radius: 16px; padding: 0 14px; }
+  #iboxes { display: flex; flex-direction: column; gap: 10px; max-width: 860px; padding-bottom: 40px; }
+  .ibox { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--fill); box-shadow: inset 0 0 0 1.5px transparent; }
+  .ibox.ok { box-shadow: inset 0 0 0 1.5px var(--green); }
+  .ibox .ihd { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--secondary); }
+  .ibox .ihd b { color: var(--label); font-size: 13px; }
+  .ibox .ihd a { margin-left: auto; color: var(--accent); text-decoration: none; }
+  .ibox .ctx { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--secondary); }
+  .ibox .ctx i { flex: none; width: 30px; height: 40px; border-radius: 4px; background: #000 center / cover no-repeat; }
+  .ibox .ctx span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ibox .thr { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--secondary); }
+  .ibox .them { font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+  .ibox textarea { min-height: 54px; font-size: 14px; }
+  .ibox .row3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .ibox .row3 input[type=text] { flex: 1; min-width: 160px; }
+  .ibox .appr { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  .ibox .err { color: var(--red); font-size: 12px; }
   .vpost { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
   .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .vpost .chip { height: 28px; padding: 0 10px; font-size: 12px; }
@@ -520,6 +539,7 @@
         <div id="inboxbar" hidden><div class="inbox" id="inbox"></div></div>
       </div>
       <div class="grid" id="cards"></div><div id="clipcards" hidden></div>
+      <div id="inboxview" hidden><div id="ibar"></div><div id="iboxes"></div></div>
       <div id="videoview" hidden><div id="vfilters"></div><div class="grid" id="videocards"></div></div>
       <div id="ideaview" hidden>
         <form id="iquickform" autocomplete="off"><input type="text" id="iquick" maxlength="300" aria-label="New idea" placeholder="Got an idea? Type it and press Return"><button class="btn default">Add</button></form>
@@ -751,8 +771,8 @@ const mmss = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}
 const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null;
+const plural = (n, w, many = w + 's') => `${n} ${n === 1 ? w : many}`;
+let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {};
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -826,20 +846,23 @@ function drawLibrary() {
   const lone = stageFilter === 'completed' ? loneBundles().filter(cs => words.every(w => cs[0].folder.toLowerCase().includes(w))) : [];
   const here = data ? data.stage : stageFilter, waiting = vids.filter(v => v.shelf !== 'Posted').length, open = (ideaList || []).filter(i => i.status !== 'Complete').length;
   const nav = (attr, on, ic, name, n, title) => `<button class="nav ${on ? 'on' : ''}" ${attr} title="${esc(title)}">${icon(ic)}${name}${n ? `<small class="num">${n}</small>` : ''}</button>`;
-  $('#stages').innerHTML = `<div class="navflow">${nav('data-nav="ideas"', onIdeas, 'bulb', 'Ideas', open, 'What to make next')}${nav('data-nav="videos"', onVideos, 'play', 'Videos', waiting, 'Finished videos, their captions, and what’s been posted')}</div>
-    <div class="navflow">${Object.entries(STAGES).map(([k, [name, ic, hint]]) => nav(`data-stage="${k}"`, k === here && !onClips && !onVideos && !onIdeas, ic, name, projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0), hint)).join('')}</div>
+  $('#stages').innerHTML = `<div class="navflow">${nav('data-nav="ideas"', onIdeas, 'bulb', 'Ideas', open, 'What to make next')}${nav('data-nav="videos"', onVideos, 'play', 'Videos', waiting, 'Finished videos, their captions, and what’s been posted')}${nav('data-nav="inbox"', onInbox, 'text', 'Inbox', (inboxItems || []).length, 'Comments and DMs waiting for a reply')}</div>
+    <div class="navflow">${Object.entries(STAGES).map(([k, [name, ic, hint]]) => nav(`data-stage="${k}"`, k === here && !onClips && !onVideos && !onIdeas && !onInbox, ic, name, projects.filter(p => p.stage === k).length + (k === 'completed' ? loneBundles().length : 0), hint)).join('')}</div>
     ${nav('data-nav="clips"', onClips, 'grid', 'Library', 0, 'Every kept clip, to search, preview and select')}`;
   $('#addlabel').textContent = onIdeas ? 'New Idea' : onVideos ? 'Add Finished Video' : 'Add Videos';
+  $('#addvideos').hidden = onInbox;
   if ($('#library').hidden) return;
-  $('#cards').hidden = onClips || onVideos || onIdeas;
+  $('#cards').hidden = onClips || onVideos || onIdeas || onInbox;
   $('#ideaview').hidden = !onIdeas;
+  $('#inboxview').hidden = !onInbox;
   $('#clipcards').hidden = !onClips;
   $('#videoview').hidden = !onVideos;
   $('#pickbar').hidden = !onClips || !chosen.size;
-  $('#inboxbar').hidden = onClips || onVideos || onIdeas || stageFilter !== 'inbox';
+  $('#inboxbar').hidden = onClips || onVideos || onIdeas || onInbox || stageFilter !== 'inbox';
   if (onClips) return drawClips(words);
   if (onVideos) return drawVideos(words);
   if (onIdeas) return drawIdeas(words);
+  if (onInbox) return drawInbox(words);
   $('#title').textContent = STAGES[stageFilter][0];
   $('#subtitle').textContent = plural(shown.length + lone.length, 'project');
   const cardLink = p => {  // finished footage opens on its clips; anything else opens to edit
@@ -1076,6 +1099,80 @@ $('#fgo').onclick = e => run(e.currentTarget, 'Starting…', async () => {
   await watchSaves();
   status('Finishing it and writing post captions; the corner shows when it’s ready');
 });
+// ---------- inbox: comments and DMs, drafted in a batch, read and approved, then sent ----------
+const ago = t => { const m = (Date.now() - new Date(t)) / 6e4; return !t ? '' : m < 60 ? `${Math.max(1, Math.round(m))}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+async function loadInbox(fresh) {
+  try { inboxItems = await api('/api/inbox', {fresh}); } catch (e) { if (onInbox) { inboxItems = inboxItems || []; status(e.message, true); } return drawLibrary(); }
+  for (const k of Object.keys(inboxState)) if (!inboxItems.some(i => i.key === k)) delete inboxState[k];
+  drawLibrary();
+  if (onInbox) draftInbox(inboxItems.filter(i => !inboxState[i.key]).map(i => i.key));
+}
+async function draftInbox(keys, note = '') {  // one Claude call for the batch
+  keys = keys.slice(0, 30);
+  if (!keys.length) return;
+  keys.forEach(k => inboxState[k] = {...inboxState[k], drafting: true});
+  drawInbox();
+  try {
+    const got = await api('/api/inbox/draft', {keys, note});
+    for (const k of keys) inboxState[k] = {...inboxState[k], drafting: false, drafted: got[k], text: got[k], ok: false};
+  } catch (e) { keys.forEach(k => inboxState[k] = {...inboxState[k], drafting: false, err: e.message}); }
+  drawInbox();
+}
+function drawInbox() {
+  if (!onInbox) return;
+  if (document.activeElement?.closest?.('#iboxes')) return;  // never redraw under someone's typing
+  $('#title').textContent = 'Inbox';
+  const list = inboxItems || [], approved = list.filter(i => inboxState[i.key]?.ok).length;
+  $('#subtitle').textContent = inboxItems ? plural(list.length, 'reply', 'replies') + ' waiting' : 'Checking…';
+  $('#ibar').innerHTML = `<b>${approved} approved</b><span class="grow" style="flex:1"></span><button class="btn" data-ia="refresh">Check Again</button><button class="btn" data-ia="all" ${list.length ? '' : 'disabled'}>Approve All</button><button class="btn default" data-ia="send" ${approved ? '' : 'disabled'}>Send ${approved || ''} Approved</button>`;
+  const NAMES = {tiktok: 'TikTok', instagram: 'Instagram'};
+  $('#iboxes').innerHTML = !inboxItems ? `<div class="empty">${icon('text')}<b>Checking your inbox…</b></div>`
+    : !list.length ? `<div class="empty">${icon('check')}<b>All caught up</b>No comments or DMs waiting on TikTok or Instagram.</div>`
+    : list.map(i => { const st = inboxState[i.key] || {}; return `<article class="ibox ${st.ok ? 'ok' : ''}" data-key="${esc(i.key)}">
+      <div class="ihd">${NAMES[i.platform] || i.platform} ${i.kind === 'dm' ? 'DM' : 'comment'} · <b>@${esc(i.who)}</b> · ${ago(i.at)}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
+      ${i.post ? `<div class="ctx">${i.post.picture ? `<i style="background-image:url('${esc(i.post.picture)}')"></i>` : ''}<span>On: ${esc(i.post.text || 'your video')}</span></div>` : ''}
+      ${i.thread.length > 1 ? `<div class="thr">${i.thread.slice(-4, -1).map(m => `<span>${m.from === 'you' ? 'You' : '@' + esc(i.who)}: ${esc(m.text)}</span>`).join('')}</div>` : ''}
+      <div class="them">${esc(i.text)}</div>
+      <textarea data-reply aria-label="Your reply to @${esc(i.who)}" maxlength="2000" placeholder="${st.drafting ? 'NIP is drafting…' : 'Write a reply'}" ${st.drafting ? 'disabled' : ''}>${esc(st.text || '')}</textarea>
+      ${st.err ? `<div class="err">${esc(st.err)}</div>` : ''}
+      <div class="row3"><label class="appr"><input type="checkbox" data-ok ${st.ok ? 'checked' : ''} ${st.text ? '' : 'disabled'}> Approve</label><input type="text" data-note placeholder="Tell NIP what to change" aria-label="What to change"><button class="btn" data-ia="redraft">Redraft</button>
+        ${i.canHide ? '<button class="btn" data-ia="hide" title="Hide this comment from everyone but its author">Hide</button>' : ''}<button class="btn" data-ia="skip" title="Leave it without a reply">Skip</button></div>
+    </article>`; }).join('');
+}
+$('#inboxview').addEventListener('input', e => {
+  const card = e.target.closest('[data-key]');
+  if (!card) return;
+  const st = inboxState[card.dataset.key] = inboxState[card.dataset.key] || {};
+  if (e.target.matches('[data-reply]')) { st.text = e.target.value; card.querySelector('[data-ok]').disabled = !st.text.trim(); }
+  if (e.target.matches('[data-ok]')) { st.ok = e.target.checked; card.classList.toggle('ok', st.ok); $('#ibar b').textContent = `${(inboxItems || []).filter(i => inboxState[i.key]?.ok).length} approved`; const n = (inboxItems || []).filter(i => inboxState[i.key]?.ok).length; const send = $('#ibar [data-ia="send"]'); send.disabled = !n; send.textContent = `Send ${n || ''} Approved`; }
+});
+$('#inboxview').addEventListener('click', e => {
+  const b = e.target.closest('[data-ia]');
+  if (!b) return;
+  const card = b.closest('[data-key]'), key = card?.dataset.key, act = b.dataset.ia;
+  if (act === 'refresh') return run(b, 'Checking…', () => loadInbox(true));
+  if (act === 'all') { (inboxItems || []).forEach(i => { const st = inboxState[i.key]; if (st?.text?.trim()) st.ok = true; }); b.blur(); return drawInbox(); }
+  if (act === 'redraft') { const note = card.querySelector('[data-note]').value; b.blur(); return draftInbox([key], note); }
+  if (act === 'skip' || act === 'hide') return run(b, act === 'hide' ? 'Hiding…' : 'Skipping…', async () => {
+    await api(`/api/inbox/${act === 'hide' ? 'hide' : 'done'}`, {key});
+    inboxItems = inboxItems.filter(i => i.key !== key); delete inboxState[key]; b.blur(); drawLibrary();
+  });
+  if (act === 'send') {
+    const ready = inboxItems.filter(i => inboxState[i.key]?.ok && inboxState[i.key].text.trim());
+    if (!confirm(`Send ${plural(ready.length, 'reply', 'replies')} as yourself on TikTok and Instagram?`)) return;
+    run(b, 'Sending…', async () => {
+      const got = await api('/api/inbox/send', {replies: ready.map(i => ({key: i.key, text: inboxState[i.key].text, drafted: inboxState[i.key].drafted || ''}))});
+      const sent = Object.entries(got).filter(([, r]) => r === 'sent').map(([k]) => k);
+      inboxItems = inboxItems.filter(i => !sent.includes(i.key));
+      sent.forEach(k => delete inboxState[k]);
+      Object.entries(got).forEach(([k, r]) => { if (r !== 'sent' && inboxState[k]) inboxState[k].err = r; });
+      b.blur(); drawLibrary();
+      status(`Sent ${plural(sent.length, 'reply', 'replies')}${sent.length < ready.length ? `; ${ready.length - sent.length} didn't go, see why on each` : ''}`, sent.length < ready.length);
+    });
+  }
+});
+setInterval(() => { if (!document.hidden && inboxItems !== null) loadInbox(false); }, 5 * 6e4);  // the badge stays current while the app is open
+api('/api/post/setup').then(s => s.connected && s.accounts.length && loadInbox(false)).catch(() => {});
 const addFinished = () => run($('#addvideos'), 'Pick your finished videos in the Finder window…', async () => {
   const r = await api('/api/videos/add', {});
   await watchSaves();
@@ -2463,6 +2560,8 @@ function route() {
   onClips = c;
   onVideos = location.hash === '#/videos';
   onIdeas = location.hash === '#/ideas';
+  onInbox = location.hash === '#/inbox';
+  if (onInbox) loadInbox(true);
   $('#filters').hidden = !c;
   $('#library').hidden = !!m;
   $('#project').hidden = !m;

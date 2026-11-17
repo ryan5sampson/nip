@@ -916,6 +916,62 @@ class Robustness(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "API key"):
                     post.call("GET", "/accounts")
 
+    def test_inbox_finds_what_needs_a_reply_and_learns_how_you_reply(self):
+        from nip import brief, post
+        sent = []
+        owner, fan = {"isOwner": True, "username": "linderball"}, {"isOwner": False, "username": "fan1"}
+
+        def zernio(method, path, body=None, idem=None):
+            if method == "POST":
+                sent.append((path, body, idem))
+                return 200, {"success": True}
+            if path.startswith("/accounts"):
+                return 200, {"accounts": [{"_id": "ig", "platform": "instagram", "profileId": "p1"}, {"_id": "tt", "platform": "tiktok", "profileId": "p1"}]}
+            if path.startswith("/inbox/comments?"):
+                return 200, {"data": [{"id": "post1", "platform": "instagram", "accountId": "ig", "commentCount": 3, "content": "Print farm", "permalink": "u"},
+                                      {"id": "post2", "platform": "tiktok", "accountId": "tt", "commentCount": 0}]}
+            if path.startswith("/inbox/comments/post1"):
+                return 200, {"comments": [
+                    {"id": "c1", "message": "Where can I buy one?", "from": fan, "createdTime": "2026-11-17T10:00:00Z", "canReply": True, "canHide": True, "replies": []},
+                    {"id": "c2", "message": "So cool", "from": fan, "createdTime": "2026-11-17T09:00:00Z", "canReply": True, "replies": [{"message": "thanks!! 🙌", "from": owner}]},
+                    {"id": "c3", "message": "my own note", "from": owner, "createdTime": "2026-11-17T08:00:00Z", "replies": []}]}
+            if path.startswith("/inbox/conversations?accountId=ig"):
+                return 200, {"data": [{"id": "dm1", "participantUsername": "buyer"}, {"id": "dm2", "participantUsername": "old"}]}
+            if path.startswith("/inbox/conversations?"):
+                return 200, {"data": []}
+            if path.startswith("/inbox/conversations/dm1/"):
+                return 200, {"messages": [{"id": "m3", "direction": "incoming", "message": "Do you ship to Canada?", "createdAt": "2026-11-17T11:00:00Z"},
+                                          {"id": "m2", "direction": "outgoing", "message": "yep, link in bio!"},
+                                          {"id": "m1", "direction": "incoming", "message": "how much?"}]}
+            return 200, {"messages": [{"id": "m9", "direction": "outgoing", "message": "you're welcome"}]}  # dm2: last word was yours
+
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(post, call=zernio, DONE_FILE=d / "done.json", EXAMPLES=d / "ex.json", REPLY_EDITS=d / "edits.json", CACHE={"at": 0, "items": None}), \
+                    mock.patch.multiple(cli, DATA=d, STYLE=d / "style.md"):
+                items = post.inbox()
+                self.assertEqual([(i["key"], i["who"]) for i in items], [("dm:m3", "buyer"), ("comment:c1", "fan1")])  # newest first; answered, yours and finished threads left out
+                self.assertEqual(items[0]["thread"][-1], {"from": "them", "text": "Do you ship to Canada?"})
+                learned = cli.load(post.EXAMPLES)
+                self.assertIn({"kind": "comment", "platform": "instagram", "them": "So cool", "you": "thanks!! 🙌"}, learned)  # your real replies
+                self.assertIn({"kind": "dm", "platform": "instagram", "them": "how much?", "you": "yep, link in bio!"}, learned)
+                answer = {"replies": [{"n": 2, "reply": "Link in bio!"}, {"n": 1, "reply": "We sure do!"}]}
+                with mock.patch.object(brief, "claude_json", return_value=answer) as ask:
+                    self.assertEqual(brief.reply_drafts(items), ["We sure do!", "Link in bio!"])  # by number, in order
+                self.assertIn('he replied "thanks!! 🙌"', ask.call_args[0][0])
+                with mock.patch.object(brief, "claude_json", return_value={"replies": answer["replies"][:1]}), self.assertRaises(RuntimeError):
+                    brief.reply_drafts(items)
+                post.reply("comment:c1", " Link in bio, ships worldwide! ", "Link in bio!")
+                self.assertEqual(sent[-1][:2], ("/inbox/comments/post1", {"accountId": "ig", "commentId": "c1", "message": "Link in bio, ships worldwide!"}))
+                self.assertEqual(cli.load(post.REPLY_EDITS), [{"them": "Where can I buy one?", "drafted": "Link in bio!", "sent": "Link in bio, ships worldwide!"}])
+                post.reply("dm:m3", "We sure do!", "We sure do!")
+                self.assertEqual(sent[-1][:2], ("/inbox/conversations/dm1/messages", {"accountId": "ig", "message": "We sure do!"}))
+                self.assertEqual(len(cli.load(post.REPLY_EDITS)), 1)  # sent as drafted: nothing to learn
+                with self.assertRaisesRegex(ValueError, "no longer waiting"):
+                    post.reply("comment:c1", "again")
+                post.dismiss("comment:c9")
+                self.assertIn("comment:c9", post.done_ids())
+
     def test_finished_videos_from_draft_to_posted(self):
         from nip import brief
         with tempfile.TemporaryDirectory() as t:

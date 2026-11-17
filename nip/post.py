@@ -1,9 +1,10 @@
-"""Posting finished videos to TikTok, Instagram and YouTube through Zernio, which has the platforms' approval to post for you.
-The key stays on this computer, never in the shared folder."""
+"""Zernio, which has the platforms' approval to act for you: posting finished videos to TikTok, Instagram and YouTube, and the inbox of
+comments and DMs to answer. The key stays on this computer, never in the shared folder."""
 import hashlib
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -149,3 +150,105 @@ def setup():
     if not (os.environ.get("ZERNIO_API_KEY") or KEY.exists() and KEY.read_text().strip()):
         return {"connected": False, "accounts": []}
     return {"connected": True, "accounts": sorted(accounts())}
+
+
+DONE_FILE = cli.DATA / "Inbox Done.json"  # what was dealt with without a reply, shared so two people don't both look at it
+EXAMPLES, REPLY_EDITS = cli.DATA / "Reply Examples.json", cli.DATA / "Reply Edits.json"  # how the owner really replies, and what he changed in drafts
+CACHE = {"at": 0, "items": None}  # Zernio allows 60 requests a minute on the free tier, and a refresh makes up to ~25
+POSTS_LOOKED_AT, CONVERSATIONS_LOOKED_AT = 10, 10
+
+
+def done_ids():
+    return set(cli.load(DONE_FILE)) if DONE_FILE.exists() else set()
+
+
+def inbox(fresh=False):
+    """What's waiting for a reply: comments by other people with no reply from you yet, and DMs whose last message is theirs. Newest first."""
+    if not fresh and CACHE["items"] is not None and time.time() - CACHE["at"] < 120:
+        return CACHE["items"]
+    accts = call("GET", "/accounts?status=connected")[1].get("accounts", [])
+    accts = [a for a in accts if a.get("platform") in MAIN]
+    items, done, seen = [], done_ids(), []
+    profiles = {a.get("profileId") for a in accts if a.get("profileId")}
+    for pid in profiles:
+        for post in call("GET", f"/inbox/comments?profileId={pid}&limit={POSTS_LOOKED_AT}&sortBy=date&sortOrder=desc")[1].get("data", []):
+            if not post.get("commentCount") or post.get("platform") not in MAIN:
+                continue
+            got = call("GET", f"/inbox/comments/{post['id']}?accountId={post['accountId']}")[1]
+            for c in got.get("comments", []):
+                mine = [r for r in c.get("replies") or [] if (r.get("from") or {}).get("isOwner")]
+                seen += [{"kind": "comment", "platform": post["platform"], "them": c.get("message", ""), "you": r.get("message", "")} for r in mine]
+                answered = bool(mine)
+                key = f"comment:{c['id']}"
+                if (c.get("from") or {}).get("isOwner") or answered or key in done or not c.get("canReply", True):
+                    continue
+                items.append({"key": key, "kind": "comment", "platform": post["platform"], "accountId": post["accountId"], "postId": post["id"],
+                              "commentId": c["id"], "text": c.get("message", ""), "who": (c.get("from") or {}).get("username") or (c.get("from") or {}).get("name") or "someone",
+                              "at": c.get("createdTime", ""), "url": c.get("url") or post.get("permalink", ""), "canHide": bool(c.get("canHide")),
+                              "post": {"text": post.get("content", ""), "picture": post.get("picture", ""), "url": post.get("permalink", "")}, "thread": []})
+    for a in accts:
+        for conv in call("GET", f"/inbox/conversations?accountId={a['_id']}&limit={CONVERSATIONS_LOOKED_AT}")[1].get("data", []):
+            msgs = call("GET", f"/inbox/conversations/{conv['id']}/messages?accountId={a['_id']}&limit=8&sortOrder=desc")[1].get("messages", [])
+            seen += [{"kind": "dm", "platform": a["platform"], "them": msgs[k + 1].get("message", ""), "you": m.get("message", "")}
+                     for k, m in enumerate(msgs[:-1]) if m.get("direction") == "outgoing" and msgs[k + 1].get("direction") == "incoming"]
+            if not msgs or msgs[0].get("direction") != "incoming" or f"dm:{msgs[0]['id']}" in done:
+                continue
+            items.append({"key": f"dm:{msgs[0]['id']}", "kind": "dm", "platform": a["platform"], "accountId": a["_id"], "conversationId": conv["id"],
+                          "text": msgs[0].get("message", ""), "who": conv.get("participantUsername") or conv.get("participantName") or "someone",
+                          "at": msgs[0].get("createdAt") or msgs[0].get("sentAt", ""), "url": conv.get("url", ""), "canHide": False, "post": None,
+                          "thread": [{"from": "you" if m.get("direction") == "outgoing" else "them", "text": m.get("message", "")} for m in reversed(msgs)]})
+    learn(EXAMPLES, [e for e in seen if e["them"] and e["you"]])
+    CACHE.update(at=time.time(), items=sorted(items, key=lambda i: i["at"], reverse=True))
+    return CACHE["items"]
+
+
+def learn(f, new, keep=60):
+    """Add to a list of examples, newest last, without repeats."""
+    old = cli.load(f) if f.exists() else []
+    merged = list({json.dumps(e, sort_keys=True): e for e in old + new}.values())[-keep:]
+    if merged != old:
+        cli.save(f, merged)
+
+
+def examples():
+    """The owner's own replies, and his changes to drafts: what drafts learn from."""
+    return (cli.load(EXAMPLES) if EXAMPLES.exists() else []), (cli.load(REPLY_EDITS) if REPLY_EDITS.exists() else [])
+
+
+def find(key):
+    item = next((i for i in inbox() if i["key"] == key), None)
+    if not item:
+        raise ValueError("That's no longer waiting: it may have been answered or deleted")
+    return item
+
+
+def reply(key, text, drafted=""):
+    """Send a reply the user has read: under the comment, or in the DM thread. What he changed in the draft teaches the next ones."""
+    item, text = find(key), text.strip()
+    if not text:
+        raise ValueError("Write a reply first")
+    idem = hashlib.sha256(f"{key}|{text}".encode()).hexdigest()  # pressing Send twice sends once
+    if item["kind"] == "comment":
+        call("POST", f"/inbox/comments/{item['postId']}", {"accountId": item["accountId"], "commentId": item["commentId"], "message": text}, idem)
+    else:
+        call("POST", f"/inbox/conversations/{item['conversationId']}/messages", {"accountId": item["accountId"], "message": text}, idem)
+    CACHE["items"] = [i for i in CACHE["items"] if i["key"] != key]
+    learn(EXAMPLES, [{"kind": item["kind"], "platform": item["platform"], "them": item["text"], "you": text}])
+    if drafted.strip() and drafted.strip() != text:
+        learn(REPLY_EDITS, [{"them": item["text"], "drafted": drafted.strip(), "sent": text}], 40)
+
+
+def hide(key):
+    item = find(key)
+    if item["kind"] != "comment":
+        raise ValueError("Only comments can be hidden")
+    call("POST", f"/inbox/comments/{item['postId']}/{item['commentId']}/hide", {"accountId": item["accountId"]})
+    CACHE["items"] = [i for i in CACHE["items"] if i["key"] != key]
+
+
+def dismiss(key):
+    """Done without a reply. Kept to the most recent, which is all the inbox ever shows."""
+    done = sorted(done_ids() | {key})[-2000:]
+    cli.save(DONE_FILE, done)
+    if CACHE["items"] is not None:
+        CACHE["items"] = [i for i in CACHE["items"] if i["key"] != key]

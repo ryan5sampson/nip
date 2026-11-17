@@ -757,6 +757,35 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError as e:
                         print(f"posting: {vid}: {e}")
                 self.send_json({"moved": moved})
+            elif p == ["api", "inbox"]:  # comments and DMs waiting for a reply
+                self.send_json(post.inbox(bool(body.get("fresh"))))
+            elif p == ["api", "inbox", "draft"]:  # drafts for a batch, or one again with a note
+                keys = body.get("keys")
+                if not isinstance(keys, list) or not keys or len(keys) > 30:
+                    raise ValueError("draft between 1 and 30 replies at a time")
+                items = [post.find(str(k)) for k in keys]
+                try:
+                    self.send_json(dict(zip(keys, brief.reply_drafts(items, str(body.get("note", ""))[:500]))))
+                except RuntimeError as e:
+                    raise ValueError(str(e))
+            elif p == ["api", "inbox", "send"]:  # what he approved, each sent on its own so one failure doesn't stop the rest
+                batch = body.get("replies")
+                if not isinstance(batch, list) or not all(isinstance(r, dict) and isinstance(r.get("text"), str) and len(r["text"]) <= 2000 for r in batch):
+                    raise ValueError("send replies as a list of {key, text}, each up to 2000 characters")
+                out = {}
+                for r in batch:
+                    try:
+                        post.reply(str(r.get("key", "")), r["text"], str(r.get("drafted", "")))
+                        out[r.get("key")] = "sent"
+                    except ValueError as e:
+                        out[r.get("key")] = str(e)
+                self.send_json(out)
+            elif p == ["api", "inbox", "hide"]:
+                post.hide(str(body.get("key", "")))
+                self.send_json({})
+            elif p == ["api", "inbox", "done"]:
+                post.dismiss(str(body.get("key", "")))
+                self.send_json({})
             elif p == ["api", "post", "key"]:  # the user pastes the key into a file only on this computer
                 post.KEY.parent.mkdir(parents=True, exist_ok=True)
                 post.KEY.touch(mode=0o600, exist_ok=True)
