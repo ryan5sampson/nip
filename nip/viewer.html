@@ -198,6 +198,10 @@
   .ibox .liked { color: #ff2d55; }
   @media (max-width: 900px) { .ibox { grid-template-columns: minmax(0, 1fr); } }
   .vpost { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
+  .vstats { display: grid; grid-template-columns: auto repeat(2, minmax(0, 1fr)); gap: 3px 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .vstats > b { font-weight: 600; }
+  .vstats > span:nth-child(3n+1) { color: var(--secondary); }
+  .views { position: absolute; right: 6px; bottom: 6px; padding: 2px 7px; border-radius: 9px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; font-weight: 600; }
   .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .vpost .chip { height: 28px; padding: 0 10px; font-size: 12px; }
   .vpost ol { margin: 0; padding-left: 18px; color: var(--secondary); font-size: 12px; line-height: 1.5; }
@@ -820,6 +824,8 @@ async function loadLibrary() {
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
   api('/api/videos').then(v => { vids = v; drawLibrary(); }).catch(e => onVideos && status(e.message, true));
+  if (onVideos && vids.some(v => v.shelf === 'Posted' && Date.now() / 1000 - (v.stats?.at || 0) > 3600 && Object.values(v.posts || {}).some(x => x.post)))
+    api('/api/videos/stats', {}).then(r => r.updated && api('/api/videos').then(v => { vids = v; drawLibrary(); })).catch(() => {});
   if (onVideos && vids.some(postState)) api('/api/videos/settle', {}).then(r => r.moved && api('/api/videos').then(v => { vids = v; drawLibrary(); status(`${plural(r.moved, 'video')} went live and moved to Posted`); })).catch(() => {});
   loadIdeas();
 }
@@ -936,7 +942,7 @@ function drawVideos(words) {
   const blank = {Drafts: 'Videos wait here for you to read their captions.', Unposted: 'Press Add Finished Video, or put a video in the Unposted folder on Drive.', Posted: 'Videos you’ve marked posted land here.'};
   $('#videocards').innerHTML = shown.length ? shown.map(v => { const [label, kind] = vidState(v), caption = v.captions.instagram || v.captions.tiktok || ''; return `
     <a class="tile" href="#/videos" data-vid="${esc(v.id)}">
-      <div class="dur"><div class="thumb" style="background-image:url('${vidUrl('videothumb', v)}')"></div><span class="pill ${kind}">${label}</span></div>
+      <div class="dur"><div class="thumb" style="background-image:url('${vidUrl('videothumb', v)}')"></div><span class="pill ${kind}">${label}</span>${totalViews(v) ? `<span class="views" title="Views on TikTok and Instagram together">${big(totalViews(v))} views</span>` : ''}</div>
       <b>${esc(v.title)}</b>
       <div class="vcap">${esc(caption)}</div>
       <div class="vcopy">${caption ? `<button class="btn" data-copy="instagram" title="Copy the Instagram caption">${icon('copy')}Instagram</button><button class="btn" data-copy="tiktok" title="Copy the TikTok caption">${icon('copy')}TikTok</button>` : `<button class="btn" data-write>Write Captions</button>`}</div>
@@ -1259,12 +1265,27 @@ function showVideo(id) {  // the review screen: nothing reaches Drive until it's
   $('#videodlg').showModal();
 }
 const PLATFORMS = {tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube (bonus)'};
+const big = n => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(/\.0$/, '')}K` : String(Math.round(n));
+const totalViews = v => Object.entries(v.stats || {}).reduce((n, [k, s]) => n + (k === 'at' ? 0 : s.views || 0), 0);
+function statsTable(st) {  // how it did, a column per platform
+  const plats = Object.keys(st || {}).filter(k => k !== 'at');
+  if (!plats.length) return '';
+  const watched = s => s.igReelsAvgWatchTime && s.videoDurationSeconds ? `${(s.igReelsAvgWatchTime / 1000).toFixed(1)} s (${Math.round(s.igReelsAvgWatchTime / 10 / s.videoDurationSeconds)}%)` : '';
+  const rows = [['Views', s => s.views ? big(s.views) : ''], ['Likes', s => s.likes ? big(s.likes) : ''], ['Comments', s => s.comments ?? ''], ['Shares', s => s.shares ?? ''],
+    ['Saves', s => s.saves ?? ''], ['Avg watch', watched], ['Watched to end', s => s.completionRate ? `${Math.round(s.completionRate * 100)}%` : ''],
+    ['Skipped', s => s.reelsSkipRate ? `${Math.round(s.reelsSkipRate)}%` : ''], ['Reached', s => s.reach ? big(s.reach) : ''],
+    ['New followers', s => s.follows || ''], ['Engagement', s => s.engagementRate ? `${s.engagementRate.toFixed(1)}%` : '']]
+    .filter(([, f]) => plats.some(p => f(st[p]) !== '' && f(st[p]) !== 0));
+  const pad = plats.length === 1 ? '<span></span>' : '';
+  return `<div class="vstats"><span></span>${plats.map(p => `<b>${esc(PLATFORMS[p] || p)}</b>`).join('')}${pad}${rows.map(([n, f]) => `<span>${n}</span>${plats.map(p => `<span>${f(st[p]) === '' ? '–' : f(st[p])}</span>`).join('')}${pad}`).join('')}</div>
+    <small class="hint">Updated ${ago(new Date(st.at * 1000).toISOString())} ago · <a href="#" data-post="stats">Update now</a></small>`;
+}
 async function drawPost(v) {  // straight to the platforms through Zernio, once it's connected
   const box = $('#vpost'), done = Object.entries(v.posts || {});
   const lines = done.map(([k, x]) => `<div class="res ${x.status === 'failed' ? 'bad' : ''}">${esc(PLATFORMS[k] || k)}: ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.status)}</a>` : esc(x.status)}${x.when ? ` for ${esc(x.when.slice(0, 16).replace('T', ' '))}` : ''}${x.error ? ` · ${esc(x.error)}` : ''}</div>`).join('');
   box.hidden = v.shelf === 'Drafts';
   if (box.hidden) return;
-  box.innerHTML = `<div class="vlabel">Post</div>${lines}<small class="hint">Checking Zernio…</small>`;
+  box.innerHTML = `<div class="vlabel">Post</div>${lines}${statsTable(v.stats)}<small class="hint">Checking Zernio…</small>`;
   const s = await api('/api/post/setup').catch(e => ({connected: true, accounts: [], error: e.message}));
   if (openVid !== v) return;
   if (!s.connected) {
@@ -1276,7 +1297,7 @@ async function drawPost(v) {  // straight to the platforms through Zernio, once 
   if (!s.accounts.length) { box.innerHTML = `<div class="vlabel">Post</div>${lines}<div class="res bad">${esc(s.error || 'No TikTok, Instagram or YouTube account is connected in Zernio.')}</div>`; return; }
   const tomorrow = new Date(Date.now() + 864e5); tomorrow.setHours(9, 0, 0, 0);
   const local = d => new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
-  box.innerHTML = `<div class="vlabel">Post</div>${lines}
+  box.innerHTML = `<div class="vlabel">Post</div>${lines}${statsTable(v.stats)}
     <div class="row2">${s.accounts.map(a => `<button type="button" class="chip ${done.some(([k, x]) => k === a && x.status !== 'failed') ? '' : 'on'}" data-plat="${a}">${esc(PLATFORMS[a] || a)}</button>`).join('')}</div>
     <div class="row2"><div class="seg" id="vwhen"><button type="button" class="on" data-v="now">Now</button><button type="button" data-v="later">Later</button></div><input type="datetime-local" id="vat" value="${local(tomorrow)}" hidden><span class="grow" style="flex:1"></span><button type="button" class="btn default" data-post="go">Post</button></div>`;
 }
@@ -1285,6 +1306,7 @@ $('#vpost').onclick = e => {
   if (!b) return;
   if (b.dataset.plat) return b.classList.toggle('on');
   if (b.dataset.v) { segSet($('#vwhen'), b.dataset.v); $('#vat').hidden = b.dataset.v !== 'later'; return; }
+  if (b.dataset.post === 'stats') { e.preventDefault(); return run(b, 'Getting the latest numbers…', async () => { openVid.stats = await api('/api/videos/stats', {id: openVid.id}); drawPost(openVid); status('Updated'); }); }
   if (b.dataset.post === 'key') return api('/api/post/key', {}).then(() => status('Paste your Zernio key into the file, save it, then open this video again')).catch(err => status(err.message, true));
   if (b.dataset.post === 'go') {
     const only = [...$('#vpost').querySelectorAll('[data-plat].on')].map(c => c.dataset.plat), later = segGet($('#vwhen')) === 'later';

@@ -749,6 +749,18 @@ class Handler(BaseHTTPRequestHandler):
                 job = video_job(f"post:{v.name}", v.name, lambda progress: post.publish(vid, when and f"{when}:00", zone, only, progress))
                 job["posting"] = True
                 self.send_json(job)
+            elif p == ["api", "videos", "stats"]:  # how posted videos are doing: one, now, or every one whose numbers are stale
+                if body.get("id"):
+                    self.send_json(post.stats(body["id"], True))
+                else:
+                    done = 0
+                    for vid in post.stats_due()[:10]:
+                        try:
+                            post.stats(vid)
+                            done += 1
+                        except ValueError as e:
+                            print(f"stats: {vid}: {e}")
+                    self.send_json({"updated": done})
             elif p == ["api", "videos", "settle"]:  # scheduled posts that have gone live move to Posted
                 moved = 0
                 for vid in post.waiting():

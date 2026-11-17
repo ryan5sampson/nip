@@ -299,3 +299,31 @@ def dismiss(key):
     cli.save(DONE_FILE, done)
     if CACHE["items"] is not None:
         CACHE["items"] = [i for i in CACHE["items"] if i["key"] != key]
+
+
+STATS = ("views", "likes", "comments", "shares", "saves", "follows", "reach", "engagementRate", "completionRate", "reelsSkipRate",
+         "igReelsAvgWatchTime", "videoDurationSeconds")  # what's worth seeing of what Zernio reports; it syncs from the platforms about hourly
+STATS_EVERY = 3600
+
+
+def stats(vid, fresh=False):
+    """How a posted video is doing on each platform, kept in its info so the Videos page shows it without asking again."""
+    p = cli.video_path(vid)
+    info = cli.video_info(p)
+    old = info.get("stats", {})
+    if not fresh and time.time() - old.get("at", 0) < STATS_EVERY:
+        return old
+    out = {"at": time.time()}
+    for post_id in {x["post"] for x in info.get("posts", {}).values() if x.get("post") and x.get("status") == "published"}:
+        for pa in call("GET", f"/analytics?postId={post_id}")[1].get("platformAnalytics", []):
+            a = pa.get("analytics") or {}
+            if pa.get("platform") in MAIN + BONUS:
+                out[pa["platform"]] = {k: a[k] for k in STATS if isinstance(a.get(k), (int, float))}
+    cli.update_video(p, stats=out)
+    return out
+
+
+def stats_due():
+    """Posted videos whose numbers are over an hour old."""
+    return [v["id"] for v in cli.videos() if v["shelf"] == "Posted" and any(x.get("post") for x in v.get("posts", {}).values())
+            and time.time() - v.get("stats", {}).get("at", 0) >= STATS_EVERY]

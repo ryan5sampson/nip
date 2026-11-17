@@ -909,6 +909,14 @@ class Robustness(unittest.TestCase):
                 self.assertEqual(cli.video_info(cli.video_path(got["id"]))["posts"]["tiktok"]["url"], "https://tiktok.com/v/1")  # caught up from Zernio
                 post.publish("Posted/Toss", "2026-11-18T09:00:00", "America/Denver", ["tiktok", "instagram"])  # pressing Post again
                 self.assertEqual([s[3] for s in seen if s[:2] == ("POST", "/posts")][-1], posts[0][3])  # same key, so Zernio won't post twice
+                with mock.patch.object(post, "call", return_value=(200, {"platformAnalytics": [
+                        {"platform": "tiktok", "analytics": {"views": 6696, "likes": 118, "completionRate": 0.16, "retentionCurve": [1, .5], "impressions": 0}},
+                        {"platform": "linkedin", "analytics": {"views": 1}}]})) as asked:
+                    st = post.stats("Posted/Toss")
+                    self.assertEqual(st["tiktok"], {"views": 6696, "likes": 118, "completionRate": 0.16})  # the numbers worth seeing, nothing else
+                    self.assertEqual(post.stats("Posted/Toss")["tiktok"]["views"], 6696)
+                    self.assertEqual(asked.call_count, 1)  # under an hour old: kept, not asked again
+                    self.assertEqual(post.stats_due(), [])
                 cli.update_video(cli.video_path("Posted/Toss"), reviewed=False)
                 with self.assertRaisesRegex(ValueError, "save its captions"):
                     post.publish("Posted/Toss")
