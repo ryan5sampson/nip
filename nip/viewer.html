@@ -643,7 +643,7 @@
 <dialog id="handoff"><form method="dialog">
   <b id="handoffhead"></b>
   <input type="text" id="handoffname" maxlength="80" required aria-label="Name of the video" placeholder="What’s the video?" style="width:100%;margin:10px 0 4px">
-  <p class="hint">They’re copied to a new folder in Handoffs, numbered in the order you picked them.</p>
+  <p class="hint">They’re copied to a new folder in Exports, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
 </form></dialog>
 <dialog id="setupdlg"><form method="dialog">
@@ -1250,7 +1250,7 @@ $('#handoff').onclose = () => $('#handoff').returnValue && run($('#pickexport'),
   chosen.clear();
   $('#handoffname').value = '';
   drawLibrary();
-  status(`Exported ${plural(n, 'clip')} to Handoffs/${r.folder}`);
+  status(`Exported ${plural(n, 'clip')} to Exports/${r.folder}`);
   api('/api/open', {what: 'handoff', folder: r.folder}).catch(e => status(e.message, true));
 });
 $('#clipcards').onmousemove = e => {
@@ -2253,7 +2253,7 @@ async function nipDo(a, undo) {  // each goes through the same checked routes as
   if (a.action === 'export') {
     const r = await api('/api/handoff', {name: a.text, clips: picks.map(c => ({folder: c.folder, file: c.file}))});
     api('/api/open', {what: 'handoff', folder: r.folder}).catch(e => status(e.message, true));
-    return `Exported ${plural(picks.length, 'clip')} to Handoffs/${r.folder}`;
+    return `Exported ${plural(picks.length, 'clip')} to Exports/${r.folder}`;
   }
   if (a.action === 'mark_used' || a.action === 'mark_unused') { await api('/api/used/' + enc(a.project), {used: a.action === 'mark_used'}); return `Moved ${titleOf(a.project)} to ${a.action === 'mark_used' ? 'Used' : 'Unused'}`; }
   if (a.action === 'rename') { await api('/api/project/' + enc(a.project), {description: a.text}); return `Renamed it “${a.text}”`; }

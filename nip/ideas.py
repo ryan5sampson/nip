@@ -5,7 +5,7 @@ from datetime import date
 
 from nip import cli
 
-FOLDER = cli.WORK / "Ideas"
+FOLDER = cli.DATA / "Ideas"
 STATUSES = ("Idea", "In progress", "Complete")
 TEXT = ("idea", "notes", "link")
 LISTS = ("bundles", "videos")  # a bundle's project folder, a video's folder in Videos

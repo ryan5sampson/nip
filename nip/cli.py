@@ -19,23 +19,24 @@ SETTINGS = json.loads((HOME / "settings.json").read_text()) if (HOME / "settings
 CONFIGURED = bool(os.environ.get("NIP_WORK") or SETTINGS.get("workspace"))
 WORK = Path(os.environ.get("NIP_WORK") or SETTINGS.get("workspace") or HOME).expanduser()  # the shared folder: everything that matters lives here, so sharing it shares the lot
 INBOX, STAGING = HOME / "inbox", HOME / "transcribing"  # footage on this computer, on its way to the workspace
-LIBRARY, EXPORTS = WORK / "Projects", WORK / "Exports"
+DATA, BRAND = WORK / "App Data", WORK / "Brand"  # what only the app touches sits out of the way; what the user opens sits at the top
+LIBRARY = DATA / "Projects"
 FINAL = WORK / "Library"  # kept clips, as their own files
 SHELVES = ("Unused", "Used")  # the library's two folders; a bundle's folder sits in one, moved by the app or by hand in Drive
-HANDOFFS = WORK / "Handoffs"  # clips picked from the library for a video, a folder each
+EXPORTS = HANDOFFS = WORK / "Exports"  # everything headed to CapCut: picked clips and NIP's edits, a folder each
 DRIVE_INBOX = WORK / "Inbox" if CONFIGURED else None  # footage added to the shared folder, from a phone or anywhere
 VIDEOS = WORK / "Videos"  # finished videos, a folder each
-DRAFTS = VIDEOS / "Drafts"
+DRAFTS = DATA / "Drafts"  # not on the shelf until the user has read the captions
 VIDEO_SHELVES = ("Drafts", "Unposted", "Posted")
-STYLE, CAPTION_EDITS = WORK / "Caption Style.md", WORK / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
+STYLE, CAPTION_EDITS = BRAND / "Caption Style.md", DATA / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
-VOCABULARY = WORK / "Vocabulary.txt"
+VOCABULARY = BRAND / "Vocabulary.txt"
 VOCABULARY_START = """# Words Footage Flow should spell your way. One per line.
 # A word on its own helps the transcription hear it, and fixes its spelling and capitals.
 # "what it hears = how it's spelled" fixes a mistake. Changes show as soon as you reload the page.
 """
-UNREADABLE = WORK / "Unreadable"  # inbox files ffmpeg can't read are set aside here
+UNREADABLE = DATA / "Unreadable"  # inbox files ffmpeg can't read are set aside here
 VIDEO = {".mov", ".mp4", ".m4v"}
 MODEL = "mlx-community/whisper-large-v3-turbo"
 PROMPT = "NIP. Take one. Take two. Scratch that. Reset. NIP, this is"

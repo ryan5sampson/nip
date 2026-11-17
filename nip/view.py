@@ -737,6 +737,7 @@ class Handler(BaseHTTPRequestHandler):
                 text = body.get("guide")
                 if not isinstance(text, str) or not text.strip():
                     raise ValueError("the style guide can't be empty")
+                cli.STYLE.parent.mkdir(exist_ok=True)
                 cli.STYLE.write_text(text)
                 self.send_json({})
             elif p == ["api", "clear-bundle"]:  # a bundle in the library whose project is already gone
@@ -770,6 +771,7 @@ class Handler(BaseHTTPRequestHandler):
                     target.mkdir(parents=True, exist_ok=True)
                 elif body.get("what") == "vocabulary":
                     if not cli.VOCABULARY.exists():
+                        cli.VOCABULARY.parent.mkdir(exist_ok=True)
                         cli.VOCABULARY.write_text(cli.VOCABULARY_START)
                     target = cli.VOCABULARY
                 elif body.get("what") == "style" and cli.STYLE.exists():
@@ -835,8 +837,11 @@ def watch_inbox():
 def serve(port=8765):
     cli.INBOX.mkdir(parents=True, exist_ok=True)
     if cli.WORK.is_dir():  # with Drive not running, making it would only confuse it
-        for d in (cli.LIBRARY, cli.EXPORTS):
-            d.mkdir(exist_ok=True)
+        for d in (cli.LIBRARY, cli.EXPORTS, cli.BRAND):
+            d.mkdir(parents=True, exist_ok=True)
+        if not (cli.DATA / "About this folder.txt").exists():
+            (cli.DATA / "About this folder.txt").write_text("Footage Flow keeps its working files here: your original footage, edits, ideas and drafts. "
+                                                            "Use the app to change them; moving or editing things here by hand can break it.\n")
     cli.rescue()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)  # this Mac only
     threading.Thread(target=watch_inbox, daemon=True).start()
