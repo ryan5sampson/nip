@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -800,6 +801,40 @@ class Robustness(unittest.TestCase):
             with self.assertRaises(ValueError):
                 view.clean_sort(bad)
 
+    def test_on_screen_captions_follow_the_edit(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, VOCABULARY=d / "v.txt"):
+                (d / "v.txt").write_text("linear ball = Linderball\n")
+                w = lambda text, a: {"w": text, "start": a, "end": a + .3}
+                cli.save(d / "a.nip.json", {"words": [w("skip", 1.0), w("throw", 5.0), w("the", 5.4), w("linear", 5.8), w("ball.", 6.1), w("Next", 6.6)]})
+                story = {"pieces": [{"stem": "a", "start": 4.9, "end": 6.5}, {"stem": "a", "start": .9, "end": 1.4}]}
+                got = cli.story_words(d, story)
+            self.assertEqual([(x["w"], x["start"]) for x in got], [("throw", .1), ("the", .5), ("Linderball.", .9), ("skip", 1.7)])  # moved into the edit's time, spelled your way
+            look = {**cli.LOOK_START, "words_at_once": 2, "highlight": "#112233"}
+            ass = cli.caption_ass(got, look, "Watch {this}", 3.0)
+            events = [l for l in ass.splitlines() if l.startswith("Dialogue")]
+            self.assertIn("Hook,,0,0,0,,Watch (this)", events[0])  # braces would be read as styling
+            words = [e.split(",,0,0,0,,")[1] for e in events[1:]]
+            self.assertEqual(words[0], "{\\c&H00332211&}throw{\\c&H00FFFFFF&} the")  # the word being said, highlighted; ASS colors run blue, green, red
+            self.assertEqual(len(words), 4)
+            self.assertNotIn("skip", words[2])  # a sentence's end starts a new line
+            self.assertEqual(cli.caption_ass([], look, "", 3).count("Dialogue"), 0)
+
+    @unittest.skipUnless(Path(cli.FINISHER).exists(), "needs ffmpeg-full")
+    def test_finishing_draws_captions_and_mixes_music(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, HOME=d, BRAND=d / "Brand", LOOK=d / "Brand" / "look.json"):
+                run = lambda *a: subprocess.run(["ffmpeg", "-v", "error", "-y", *a], check=True)
+                run("-f", "lavfi", "-i", "testsrc=d=4:s=270x480", "-f", "lavfi", "-i", "sine=f=300:d=4", "-shortest", str(d / "v.mp4"))
+                run("-f", "lavfi", "-i", "sine=f=500:d=1.5", str(d / "m.m4a"))  # shorter than the video: it loops
+                out = cli.finish(d / "v.mp4", [{"w": "hello", "start": .2, "end": .8}], d / "out.mp4", "A hook", d / "m.m4a")
+                self.assertAlmostEqual(cli.probe(out)[0], 4, delta=.3)
+                self.assertTrue(cli.LOOK.exists())  # the look file, made with defaults to change
+                meter = subprocess.run([cli.FINISHER, "-hide_banner", "-i", str(out), "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
+                self.assertAlmostEqual(float(re.findall(r"I:\s+(-?[\d.]+) LUFS", meter)[-1]), -14, delta=1.5)  # where the platforms play things
+
     def test_finished_videos_from_draft_to_posted(self):
         from nip import brief
         with tempfile.TemporaryDirectory() as t:
@@ -809,7 +844,9 @@ class Robustness(unittest.TestCase):
                 cli.STYLE.write_text("Sound like us.")
                 cut = d / "capcut.mp4"
                 cut.write_bytes(b"video")
+                (d / "capcut-Cover.jpg").write_bytes(b"jpg")  # CapCut's cover beside its export
                 draft = cli.new_draft("Big/ toss", cut)
+                self.assertEqual(cli.video_cover(draft).name, "Big toss-Cover.jpg")
                 self.assertTrue(cut.exists())  # the user's export stays where it was
                 answer = {"instagram": "Toss it! #linderball", "tiktok": "linderball toss #linderball"}
                 with mock.patch.object(cli, "transcribe", return_value=([{"w": "toss"}], [])) as heard, mock.patch.object(brief, "claude_json", return_value=answer) as ask:
@@ -825,7 +862,7 @@ class Robustness(unittest.TestCase):
                 p = cli.video_path(vid)
                 self.assertEqual(vid.split("/")[0], "Unposted")
                 self.assertFalse(draft.exists())
-                self.assertEqual(sorted(f.name for f in p.iterdir()), ["Big toss.mp4", "Captions.txt", "_info"])
+                self.assertEqual(sorted(f.name for f in p.iterdir()), ["Big toss-Cover.jpg", "Big toss.mp4", "Captions.txt", "_info"])
                 self.assertIn("INSTAGRAM\nMine", (p / "Captions.txt").read_text())
                 self.assertEqual(cli.load(cli.CAPTION_EDITS), [{"platform": "instagram", "drafted": answer["instagram"], "final": "Mine"}])  # what teaches later drafts
                 cli.save_video(vid, "Big toss", {**answer, "instagram": "Mine"}, [])

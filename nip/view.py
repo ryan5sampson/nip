@@ -288,12 +288,13 @@ def video_job(key, title, work):
 
 
 def video_thumb(p):
-    """A frame from a finished video, kept on this Mac so nothing extra lands in the Drive folder."""
-    f = cli.video_file(p)
+    """The cover the user made, or else a frame from the video, kept on this Mac so nothing extra lands in the Drive folder."""
+    f = cli.video_cover(p) or cli.video_file(p)
     out = cli.HOME / "video-thumbs" / f"{hashlib.md5(f'{f}{f.stat().st_mtime}'.encode()).hexdigest()}.jpg"
     if not out.exists():
         out.parent.mkdir(exist_ok=True)
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "1", "-i", str(f), "-frames:v", "1", "-vf", "scale=360:-2", str(out)], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *([] if f.suffix.lower() in cli.IMAGES else ["-ss", "1"]), "-i", str(f),
+                        "-frames:v", "1", "-vf", "scale=360:-2", str(out)], check=True)
     return out
 
 
@@ -402,6 +403,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(thumbnail(self.project(p[1])), "image/jpeg")
             elif p == ["api", "clips"]:
                 self.send_json(final_clips())
+            elif p == ["api", "music"]:
+                self.send_json(sorted(f.name for f in cli.MUSIC.glob("[!.]*") if f.suffix.lower() in (".mp3", ".m4a", ".wav", ".aac", ".aif", ".aiff")) if cli.MUSIC.is_dir() else [])
             elif p == ["api", "videos"]:
                 if not library_answers():
                     raise ValueError("Google Drive isn’t answering, so your videos can’t be listed. Try again in a moment.")
@@ -678,9 +681,24 @@ class Handler(BaseHTTPRequestHandler):
                 if story is None:
                     raise FileNotFoundError
 
+                fin = body.get("finish")
+                if fin is not None:  # captions, a hook title and music, checked here before the minute of rendering
+                    if not isinstance(fin, dict) or not isinstance(fin.get("hook", ""), str) or len(fin.get("hook", "")) > 120:
+                        raise ValueError("a hook title is up to 120 characters")
+                    music = cli.MUSIC / Path(str(fin.get("music") or "")).name if fin.get("music") else None
+                    if music and not music.is_file():
+                        raise ValueError("That track isn’t in Brand/Music anymore")
+
                 def work(progress):
                     progress("Rendering", .1)
-                    p = cli.new_draft(story["title"], cli.export_story(proj, story), [info["library_folder"]] if info.get("library_folder") else [], move=True)
+                    video = cli.export_story(proj, story)
+                    if fin is not None:
+                        progress("Adding captions and music", .3)
+                        done = cli.finish(video, cli.story_words(proj, story), video.with_name(f"{video.stem} finished.mp4"),
+                                          fin.get("hook", ""), music, fin.get("captions", True) is not False)
+                        video.unlink()
+                        video = done
+                    p = cli.new_draft(story["title"], video, [info["library_folder"]] if info.get("library_folder") else [], move=True)
                     return cli.caption_video(p, "", progress)
                 self.send_json(video_job(f"{proj.name}/{story['id']}", story["title"], work))
             elif p == ["api", "videos", "add"]:  # finished in CapCut, and given to Footage Flow to caption
@@ -776,6 +794,12 @@ class Handler(BaseHTTPRequestHandler):
                     target = cli.VOCABULARY
                 elif body.get("what") == "style" and cli.STYLE.exists():
                     target = cli.STYLE
+                elif body.get("what") in ("music", "look"):
+                    cli.video_look()  # makes Brand and the look file the first time
+                    cli.MUSIC.mkdir(exist_ok=True)
+                    target = cli.MUSIC if body["what"] == "music" else cli.LOOK
+                elif body.get("what") == "video":
+                    target = cli.video_path(body.get("id"))
                 elif body.get("what") == "videos":
                     target = cli.VIDEOS
                 elif body.get("what") == "unreadable" and cli.UNREADABLE.exists():

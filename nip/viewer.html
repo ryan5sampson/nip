@@ -646,6 +646,14 @@
   <p class="hint">They’re copied to a new folder in Exports, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
 </form></dialog>
+<dialog id="finishdlg"><form method="dialog" onsubmit="return false">
+  <b>Finish Video</b>
+  <p>Footage Flow draws the captions and title on and mixes in the music, then drafts the post captions. It lands in Videos for you to watch and read.</p>
+  <div class="field"><label for="fhook">Hook title, for the first few seconds</label><input type="text" id="fhook" maxlength="120" placeholder="Leave empty for none"></div>
+  <div class="field"><label>On-screen captions</label><div class="seg" id="fcaps" role="group" aria-label="On-screen captions"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div></div>
+  <div class="field"><label>Music</label><div class="ipicks" id="fmusic"></div></div>
+  <div class="actions-line"><button type="button" class="btn" data-fopen="music">Music Folder</button><button type="button" class="btn" data-fopen="look" title="Font, colors, where captions sit, and how loud the music is">Text Look</button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="fgo">Finish</button></div>
+</form></dialog>
 <dialog id="setupdlg"><form method="dialog">
   <b>Welcome to Footage Flow</b>
   <p>Everything lives in one shared folder in Google Drive, and Footage Flow works from it. Choose that folder to start. For a folder someone shared with you, add a shortcut to it in your Drive first.</p>
@@ -660,7 +668,7 @@
     <div class="vlabel">TikTok<small id="vttcount" class="num"></small><button type="button" class="icon-btn small" data-copyfrom="vtt" title="Copy">Copy</button></div>
     <textarea id="vtt" aria-label="TikTok caption" maxlength="4000"></textarea>
     <div style="display:flex;gap:6px"><input type="text" id="vnote" style="flex:1;min-width:0" aria-label="What to change" placeholder="Tell Claude what to change, or what the video shows"><button type="button" class="btn" id="vredraft">Redraft</button></div>
-    <div class="vlabel">Made from</div>
+    <div class="vlabel">Made from<small id="vcover"></small><button type="button" class="icon-btn small" id="vfolder" title="Show the video, its cover and Captions.txt in Finder, ready to upload">Show Files</button></div>
     <div id="vsources"></div>
     <div class="actions-line" style="flex-wrap:wrap"><button type="button" class="btn" id="vdelete">Delete</button><button type="button" class="btn" id="vmove"></button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="vsave"></button></div>
   </div>
@@ -1037,6 +1045,26 @@ $('#ideatable').ondrop = e => {
   document.querySelectorAll('.igroup.drop').forEach(x => x.classList.remove('drop'));
   if (id && to) moveIdea(id, to);
 };
+let finishing = null;  // the edit being finished
+async function finishEdit(s) {
+  finishing = s;
+  $('#fhook').value = s.title;
+  segSet($('#fcaps'), 'on');
+  const tracks = await api('/api/music').catch(() => []);
+  $('#fmusic').innerHTML = ['', ...tracks].map(t => `<button type="button" class="chip ${t ? '' : 'on'}" data-track="${esc(t)}">${t ? esc(t.replace(/\.[^.]+$/, '')) : 'No music'}</button>`).join('')
+    + (tracks.length ? '' : '<p class="hint">Put royalty-free tracks in Brand/Music to choose from.</p>');
+  $('#finishdlg').showModal();
+}
+$('#fcaps').onclick = e => { const b = e.target.closest('button'); if (b) segSet($('#fcaps'), b.dataset.v); };
+$('#fmusic').onclick = e => { const b = e.target.closest('[data-track]'); if (!b) return; $('#fmusic').querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === b)); };
+$('#finishdlg').addEventListener('click', e => { const b = e.target.closest('[data-fopen]'); if (b) api('/api/open', {what: b.dataset.fopen}).catch(err => status(err.message, true)); });
+$('#fgo').onclick = e => run(e.currentTarget, 'Starting…', async () => {
+  const finish = {hook: $('#fhook').value, captions: segGet($('#fcaps')) === 'on', music: $('#fmusic .chip.on')?.dataset.track || ''};
+  await api('/api/videos/from-edit', {project: proj, story: finishing.id, finish});
+  $('#finishdlg').close();
+  await watchSaves();
+  status('Finishing it and writing post captions; the corner shows when it’s ready');
+});
 const addFinished = () => run($('#addvideos'), 'Pick your finished videos in the Finder window…', async () => {
   const r = await api('/api/videos/add', {});
   await watchSaves();
@@ -1071,7 +1099,9 @@ function showVideo(id) {  // the review screen: nothing reaches Drive until it's
   if (!v) return api('/api/videos').then(list => { vids = list; if (vids.some(x => x.id === id)) showVideo(id); });
   vidShelf = v.shelf;
   go('#/videos');
+  $('#vplayer').poster = vidUrl('videothumb', v);  // the cover, if one was made
   $('#vplayer').src = vidUrl('video', v);
+  $('#vcover').textContent = v.cover ? 'Has your cover' : 'No cover yet';
   $('#vtitle').value = v.title;
   $('#vig').value = v.captions.instagram || '';
   $('#vtt').value = v.captions.tiktok || '';
@@ -1087,6 +1117,7 @@ function showVideo(id) {  // the review screen: nothing reaches Drive until it's
 $('#videodlg').onclose = () => { $('#vplayer').removeAttribute('src'); $('#vplayer').load(); };
 $('#vsources').onclick = e => e.target.closest('[data-source]')?.classList.toggle('on');
 $('#videodlg').addEventListener('click', e => { const b = e.target.closest('[data-copyfrom]'); if (b) copyText($('#' + b.dataset.copyfrom).value, b.dataset.copyfrom === 'vtt' ? 'TikTok' : 'Instagram').catch(err => status(err.message, true)); });
+$('#vfolder').onclick = () => api('/api/open', {what: 'video', id: openVid.id}).catch(e => status(e.message, true));
 $('#vredraft').onclick = e => run(e.currentTarget, 'Claude is redrafting…', async () => {
   const r = await api('/api/videos/redraft', {id: openVid.id, title: $('#vtitle').value, note: $('#vnote').value, instagram: $('#vig').value, tiktok: $('#vtt').value});
   $('#vig').value = r.instagram;
@@ -1495,7 +1526,7 @@ function show(d, idx = clipIdx) {
   allSegs = data.clips.flatMap((c, ci) => c.segments.map(s => ({...s, ci})));  // every video on one timeline, in order
   segs = allSegs.filter(s => s.ci === clipIdx);  // editing works on the video under the playhead
   $('#timeline').innerHTML = allSegs.map((s, k) => {
-    const c = data.clips[s.ci], e = c.edit, first = s.ci > 0 && allSegs[k - 1].ci !== s.ci ? ` vstart" data-video="${esc(c.stem)}` : '';
+    const c = data.clips[s.ci], e = c.edit, first = k > 0 && allSegs[k - 1].ci !== s.ci ? ` vstart" data-video="${esc(c.stem)}` : '';
     const len = s.b - s.a, open = s.gap && s.ci === clipIdx && s.a === openGap, at = t => `left:${100 * (t - s.a) / len}%`;
     const marks = s.gap && !open ? '' : [
       ...e.markers.filter(m => m.end == null && m.t >= s.a && m.t < s.b).map(m => `<i class="hl" style="${at(m.t)};width:4px"></i>`),
@@ -1535,7 +1566,7 @@ function show(d, idx = clipIdx) {
       <div class="acts">
         <button class="icon-btn small" data-act="play" title="Play this edit">${icon('play', true)}</button>
         <button class="icon-btn small" data-act="export" title="Export as one video, to take into CapCut">${icon('share')}</button>
-        <button class="icon-btn small" data-act="video" title="Save as a finished video and draft its captions">${icon('check')}</button>
+        <button class="icon-btn small" data-act="video" title="Finish it: captions, a hook title and music, then its post captions">${icon('check')}</button>
         <button class="icon-btn small" data-act="delete" title="Delete this edit">${icon('trash')}</button>
       </div>
     </div>`;
@@ -1997,11 +2028,7 @@ $('#stories').onclick = e => {
     const list = s.pieces.map(p => ({ci: data.clips.findIndex(c => c.stem === p.stem), a: p.start, b: p.end})).filter(p => p.ci >= 0);
     playList(list);
   }
-  if (b.dataset.act === 'video') run(b, 'Saving…', async () => {
-    await api('/api/videos/from-edit', {project: proj, story: s.id});
-    await watchSaves();
-    status('Rendering it and writing captions; the corner shows when it’s ready');
-  });
+  if (b.dataset.act === 'video') finishEdit(s);
   if (b.dataset.act === 'export') run(b, `Exporting “${s.title}”…`, async () => {
     const r = await api(`/api/story/${enc(proj)}/${s.id}`, {action: 'export'});
     status(`Exported to ${r.done}`);

@@ -29,6 +29,10 @@ VIDEOS = WORK / "Videos"  # finished videos, a folder each
 DRAFTS = DATA / "Drafts"  # not on the shelf until the user has read the captions
 VIDEO_SHELVES = ("Drafts", "Unposted", "Posted")
 STYLE, CAPTION_EDITS = BRAND / "Caption Style.md", DATA / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
+MUSIC, LOOK = BRAND / "Music", BRAND / "Video Look.json"  # tracks for finished videos, and how their text looks
+FINISHER = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"  # shortcut: Homebrew's path only, the plain ffmpeg can't draw text; look it up on PATH if it's ever installed elsewhere
+LOOK_START = {"font": "Avenir Next Heavy", "bold": False, "size": 110, "color": "#FFFFFF", "highlight": "#C6F432", "outline": "#000000",
+              "position": 0.7, "words_at_once": 3, "hook_size": 100, "hook_seconds": 3, "music_volume": 0.2}
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = BRAND / "Vocabulary.txt"
@@ -734,6 +738,17 @@ def video_file(p):
     return p if p.is_file() else next((f for f in sorted(p.iterdir()) if f.suffix.lower() in VIDEO), None)
 
 
+IMAGES = {".jpg", ".jpeg", ".png", ".heic", ".webp"}
+
+
+def video_cover(p):
+    """The cover the user made for a video, kept beside it, like CapCut's "<name>-Cover.jpg". One named cover wins over any other image."""
+    if not p.is_dir():
+        return None
+    images = [f for f in sorted(p.iterdir()) if f.suffix.lower() in IMAGES and not f.name.startswith(".")]
+    return next((f for f in images if "cover" in f.stem.lower()), images[0] if images else None)
+
+
 def video_info(p):
     f = p / "_info" / "video.json"
     return load(f) if p.is_dir() and f.exists() else {}
@@ -757,7 +772,7 @@ def videos():
                 info = {}
             out.append({"id": f"{shelf}/{p.name}", "shelf": shelf, "file": f.name, "title": info.get("title") or (p.name if p.is_dir() else p.stem),
                         "captions": info.get("captions", {}), "sources": info.get("sources", []), "reviewed": bool(info.get("reviewed")),
-                        "said": info.get("said", ""), "when": f.stat().st_mtime})
+                        "said": info.get("said", ""), "cover": bool(video_cover(p)), "when": f.stat().st_mtime})
     return sorted(out, key=lambda v: v["when"], reverse=True)
 
 
@@ -792,6 +807,9 @@ def new_draft(title, src, sources=(), move=False):
     p.mkdir(parents=True)
     dest = p / f"{name}{Path(src).suffix}"
     shutil.move(src, dest) if move else shutil.copyfile(src, dest)
+    for f in Path(src).parent.glob(f"{Path(src).stem}*"):  # CapCut puts its cover beside the video: "<name>-Cover.jpg"
+        if f.suffix.lower() in IMAGES:
+            shutil.copyfile(f, p / f"{name}-Cover{f.suffix.lower()}")
     update_video(p, title=title, sources=list(sources))
     return p
 
@@ -849,6 +867,85 @@ def move_video(vid, shelf):
 def delete_video(vid):
     p = own_folder(video_path(vid))
     shutil.rmtree(p) if p.parent == DRAFTS else discard(p)
+
+
+def video_look():
+    """How a finished video's text looks, from Brand/Video Look.json, made with the defaults the first time so it can be changed."""
+    if not LOOK.exists():
+        LOOK.parent.mkdir(parents=True, exist_ok=True)
+        save(LOOK, LOOK_START)
+    return {**LOOK_START, **load(LOOK)}
+
+
+def story_words(proj, story):
+    """What's said in an edit, in its own time: each piece's words, moved to where the piece plays."""
+    spellings, at, out = vocabulary()[1], 0.0, []
+    for p in story["pieces"]:
+        words = respell(load(proj / f"{p['stem']}.nip.json")["words"], spellings)
+        out += [{"w": w["w"], "start": round(w["start"] - p["start"] + at, 2), "end": round(w["end"] - p["start"] + at, 2)}
+                for w in words if p["start"] - .05 <= w["start"] and w["end"] <= p["end"] + .05]
+        at += p["end"] - p["start"]
+    return out
+
+
+def ass_color(hex_color):
+    h = hex_color.lstrip("#")
+    return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}&".upper()  # ASS writes colors blue, green, red
+
+
+def caption_ass(words, look, hook="", duration=0.0):
+    """Subtitles for burning in: a few words at a time, the one being said in the highlight color, and a hook title up top."""
+    t = lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{s % 60:05.2f}"
+    clean = lambda s: s.replace("\\", "").replace("{", "(").replace("}", ")")
+    lines = ["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0", "",
+             "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
+             f"Style: Words,{look['font']},{look['size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,6,0,2,80,80,{round(1920 * (1 - look['position']))}",
+             f"Style: Hook,{look['font']},{look['hook_size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,-1,1,6,0,8,80,80,260", "",
+             "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
+    if hook.strip():
+        lines.append(f"Dialogue: 0,{t(0)},{t(min(look['hook_seconds'], duration or look['hook_seconds']))},Hook,,0,0,0,,{clean(hook.strip())}")
+    chunks, n = [], max(1, int(look["words_at_once"]))
+    for w in words:  # a new line after n words, a pause, or the end of a sentence
+        if not chunks or len(chunks[-1]) >= n or w["start"] - chunks[-1][-1]["end"] > .6 or chunks[-1][-1]["w"].endswith((".", "?", "!")):
+            chunks.append([])
+        chunks[-1].append(w)
+    hi, base = ass_color(look["highlight"]), ass_color(look["color"])
+    for k, chunk in enumerate(chunks):
+        last = min(chunk[-1]["end"] + .3, chunks[k + 1][0]["start"]) if k + 1 < len(chunks) else chunk[-1]["end"] + .3
+        for i, w in enumerate(chunk):
+            end = chunk[i + 1]["start"] if i + 1 < len(chunk) else last
+            text = " ".join(f"{{\\c{hi}}}{clean(x['w'])}{{\\c{base}}}" if j == i else clean(x["w"]) for j, x in enumerate(chunk))
+            lines.append(f"Dialogue: 1,{t(w['start'])},{t(max(end, w['start'] + .05))},Words,,0,0,0,,{text}")
+    return "\n".join(lines) + "\n"
+
+
+def finish(video, words, out, hook="", music=None, captions=True):
+    """A finished video: captions and a hook title drawn on, music under the voice, and the loudness evened out for the platforms."""
+    if not Path(FINISHER).exists():
+        raise RuntimeError("Finishing videos needs the fuller ffmpeg: run `brew install ffmpeg-full`, then try again")
+    look, duration = video_look(), probe(video)[0]
+    tmp = HOME / ".finishing"
+    tmp.mkdir(parents=True, exist_ok=True)
+    ass = tmp / "captions.ass"
+    ass.write_text(caption_ass(words if captions else [], look, hook, duration))
+    fonts = f":fontsdir='{BRAND / 'Fonts'}'" if (BRAND / "Fonts").is_dir() else ""
+    graph = f"[0:v]subtitles=filename='{ass}'{fonts}[v];"
+    if music:
+        graph += (f"[1:a]volume={look['music_volume']},afade=t=out:st={max(duration - 2, 0):.2f}:d=2[m];"
+                  "[m][0:a]sidechaincompress=threshold=0.04:ratio=6:attack=20:release=500[duck];"  # the music dips while there's talking
+                  "[0:a][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5[a]")
+    else:
+        graph += "[0:a]loudnorm=I=-14:TP=-1.5[a]"
+    subprocess.run([FINISHER, "-v", "error", "-y", "-i", str(video), *(["-stream_loop", "-1", "-i", str(music)] if music else []),
+                    "-filter_complex", graph, "-map", "[v]", "-map", "[a]", *encoder(), "-c:a", "aac", "-b:a", "192k", "-t", f"{duration:.3f}", str(out)], check=True)
+    meter = subprocess.run([FINISHER, "-hide_banner", "-i", str(out), "-map", "0:a", "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
+    level = float(re.findall(r"I:\s+(-?[\d.]+) LUFS", meter)[-1])
+    if abs(level + 14) > 1:  # one loudnorm pass on a short video lands a few LU off: measure, then a gain and a limiter close the gap
+        fixed = out.with_name(f".{out.name}")
+        subprocess.run([FINISHER, "-v", "error", "-y", "-i", str(out), "-c:v", "copy", "-af", f"volume={-14 - level:.2f}dB,alimiter=limit=0.85",
+                        "-c:a", "aac", "-b:a", "192k", str(fixed)], check=True)
+        os.replace(fixed, out)
+    return out
 
 
 def find(name):
