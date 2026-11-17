@@ -835,6 +835,87 @@ class Robustness(unittest.TestCase):
                 meter = subprocess.run([cli.FINISHER, "-hide_banner", "-i", str(out), "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
                 self.assertAlmostEqual(float(re.findall(r"I:\s+(-?[\d.]+) LUFS", meter)[-1]), -14, delta=1.5)  # where the platforms play things
 
+    def test_posting_through_zernio(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from nip import post
+        seen, stored = [], {}
+
+        class Zernio(BaseHTTPRequestHandler):  # a stand-in that answers the way Zernio's docs say it does
+            def log_message(self, *a): pass
+
+            def reply(self, code, body):
+                data = json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                seen.append(("GET", self.path, self.headers.get("Authorization"), None, None))
+                if self.path.startswith("/accounts"):
+                    return self.reply(200, {"accounts": [{"_id": "tt1", "platform": "tiktok"}, {"_id": "ig1", "platform": "instagram"},
+                                                         {"_id": "yt1", "platform": "youtube"}, {"_id": "li1", "platform": "linkedin"}]})
+                self.reply(200, {"post": {"_id": "p1", "platforms": [{"platform": "tiktok", "status": "published", "platformPostUrl": "https://tiktok.com/v/1"},
+                                                                    {"platform": "instagram", "status": "published", "platformPostUrl": "https://instagram.com/r/1"}]}})
+
+            def do_PUT(self):
+                stored[self.path] = (self.headers.get("Content-Type"), self.headers.get("Authorization"), self.rfile.read(int(self.headers["Content-Length"])))
+                self.reply(200, {})
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                seen.append(("POST", self.path, self.headers.get("Authorization"), self.headers.get("Idempotency-Key"), body))
+                if self.path == "/media/presign":
+                    return self.reply(200, {"uploadUrl": f"{base}/put/{body['filename']}", "publicUrl": f"https://cdn/{body['filename']}"})
+                if body["platforms"][0]["platform"] == "youtube":
+                    return self.reply(400, {"error": "title too long", "code": "invalid_field_value"})
+                self.reply(201, {"post": {"_id": "p1", "status": "publishing", "platforms": [{"platform": "tiktok", "status": "publishing"},
+                                                                                             {"platform": "instagram", "status": "published", "platformPostUrl": "https://instagram.com/r/1"}]}})
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Zernio)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            with mock.patch.multiple(cli, HOME=d, VIDEOS=d / "Videos", DRAFTS=d / "Drafts", FINAL=d / "Library"), mock.patch.multiple(post, API=base, KEY=d / "key.txt"), \
+                    mock.patch.dict(os.environ, {"ZERNIO_API_KEY": ""}):
+                self.assertEqual(post.setup(), {"connected": False, "accounts": []})
+                v = d / "Videos" / "Unposted" / "Toss"  # spaces in the file name below: they can't go in an upload address
+                v.mkdir(parents=True)
+                (v / "Big Toss.mov").write_bytes(b"video")
+                (v / "Big Toss-Cover.jpg").write_bytes(b"cover")
+                cli.update_video(v, title="Toss " * 30, captions={"instagram": "Insta words", "tiktok": "TikTok words"}, reviewed=True)
+                post.KEY.write_text("sk_test\n")
+                self.assertEqual(post.setup()["accounts"], ["instagram", "tiktok", "youtube"])
+                got = post.publish("Unposted/Toss", "2026-11-18T09:00:00", "America/Denver")
+                self.assertEqual(stored["/put/Big-Toss.mov"], ("video/quicktime", None, b"video"))  # straight to storage, without the key
+                self.assertIn("/put/Big-Toss-Cover.jpg", stored)
+                posts = [s for s in seen if s[0] == "POST" and s[1] == "/posts"]
+                main, yt = posts[0][4], posts[1][4]
+                self.assertEqual([e["platform"] for e in main["platforms"]], ["tiktok", "instagram"])
+                self.assertEqual({e["platform"]: e["customContent"] for e in main["platforms"]}, {"tiktok": "TikTok words", "instagram": "Insta words"})
+                self.assertEqual(main["platforms"][1]["platformSpecificData"], {"instagramThumbnail": "https://cdn/Big-Toss-Cover.jpg"})
+                self.assertTrue(main["tiktokSettings"]["content_preview_confirmed"] and main["tiktokSettings"]["express_consent_given"])
+                self.assertEqual(main["tiktokSettings"]["video_cover_image_url"], "https://cdn/Big-Toss-Cover.jpg")
+                self.assertEqual((main["scheduledFor"], main["timezone"]), ("2026-11-18T09:00:00", "America/Denver"))
+                self.assertEqual(len(yt["platforms"][0]["platformSpecificData"]["title"]), 100)  # YouTube's limit
+                self.assertTrue(all(s[2] == "Bearer sk_test" for s in seen if s[1] != "/put"))
+                self.assertNotEqual(posts[0][3], posts[1][3])
+                self.assertEqual((got["posts"]["youtube"]["status"], got["posts"]["youtube"]["error"]), ("failed", "Zernio said: title too long"))  # YouTube failing...
+                self.assertEqual(got["posts"]["instagram"]["url"], "https://instagram.com/r/1")  # ...doesn't stop the other two
+                self.assertEqual(got["id"], "Posted/Toss")  # live somewhere, so it moved
+                self.assertEqual(cli.video_info(cli.video_path(got["id"]))["posts"]["tiktok"]["url"], "https://tiktok.com/v/1")  # caught up from Zernio
+                post.publish("Posted/Toss", "2026-11-18T09:00:00", "America/Denver", ["tiktok", "instagram"])  # pressing Post again
+                self.assertEqual([s[3] for s in seen if s[:2] == ("POST", "/posts")][-1], posts[0][3])  # same key, so Zernio won't post twice
+                cli.update_video(cli.video_path("Posted/Toss"), reviewed=False)
+                with self.assertRaisesRegex(ValueError, "save its captions"):
+                    post.publish("Posted/Toss")
+                post.KEY.write_text("not a key")
+                with self.assertRaisesRegex(ValueError, "API key"):
+                    post.call("GET", "/accounts")
+
     def test_finished_videos_from_draft_to_posted(self):
         from nip import brief
         with tempfile.TemporaryDirectory() as t:

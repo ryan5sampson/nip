@@ -772,7 +772,7 @@ def videos():
                 info = {}
             out.append({"id": f"{shelf}/{p.name}", "shelf": shelf, "file": f.name, "title": info.get("title") or (p.name if p.is_dir() else p.stem),
                         "captions": info.get("captions", {}), "sources": info.get("sources", []), "reviewed": bool(info.get("reviewed")),
-                        "said": info.get("said", ""), "cover": bool(video_cover(p)), "when": f.stat().st_mtime})
+                        "said": info.get("said", ""), "cover": bool(video_cover(p)), "posts": info.get("posts", {}), "when": f.stat().st_mtime})
     return sorted(out, key=lambda v: v["when"], reverse=True)
 
 

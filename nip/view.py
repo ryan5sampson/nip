@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from nip import brief, cli, ideas
+from nip import brief, cli, ideas, post
 from nip.commands import kept_ranges, respell, tiers, timeline, unmarked
 
 PAGE = Path(__file__).with_name("viewer.html")
@@ -403,6 +403,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(thumbnail(self.project(p[1])), "image/jpeg")
             elif p == ["api", "clips"]:
                 self.send_json(final_clips())
+            elif p == ["api", "post", "setup"]:
+                try:
+                    self.send_json(post.setup())
+                except ValueError as e:  # a bad key or Zernio being down shouldn't hide the review screen
+                    self.send_json({"connected": True, "accounts": [], "error": str(e)})
             elif p == ["api", "music"]:
                 self.send_json(sorted(f.name for f in cli.MUSIC.glob("[!.]*") if f.suffix.lower() in (".mp3", ".m4a", ".wav", ".aac", ".aif", ".aiff")) if cli.MUSIC.is_dir() else [])
             elif p == ["api", "videos"]:
@@ -734,6 +739,30 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"id": cli.save_video(body.get("id"), title, caps, sources)})
             elif p == ["api", "videos", "move"]:
                 self.send_json({"id": cli.move_video(body.get("id"), body.get("shelf"))})
+            elif p == ["api", "videos", "post"]:  # to TikTok and Instagram, and YouTube as a bonus, now or at a time
+                vid, when, zone, only = body.get("id"), body.get("when"), body.get("zone"), body.get("only")
+                if when is not None and not (isinstance(when, str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d", when) and isinstance(zone, str) and zone):
+                    raise ValueError("a time looks like 2026-11-17T09:00, with a time zone")
+                if only is not None and not (isinstance(only, list) and set(only) <= set(post.MAIN + post.BONUS)):
+                    raise ValueError("pick from tiktok, instagram and youtube")
+                v = cli.video_path(vid)
+                job = video_job(f"post:{v.name}", v.name, lambda progress: post.publish(vid, when and f"{when}:00", zone, only, progress))
+                job["posting"] = True
+                self.send_json(job)
+            elif p == ["api", "videos", "settle"]:  # scheduled posts that have gone live move to Posted
+                moved = 0
+                for vid in post.waiting():
+                    try:
+                        moved += post.settle(vid)["id"].startswith("Posted/")
+                    except ValueError as e:
+                        print(f"posting: {vid}: {e}")
+                self.send_json({"moved": moved})
+            elif p == ["api", "post", "key"]:  # the user pastes the key into a file only on this computer
+                post.KEY.parent.mkdir(parents=True, exist_ok=True)
+                post.KEY.touch(mode=0o600, exist_ok=True)
+                os.chmod(post.KEY, 0o600)
+                subprocess.run(["open", "-e", str(post.KEY)], check=True)
+                self.send_json({})
             elif p == ["api", "videos", "delete"]:
                 if not library_answers():
                     raise ValueError(NO_DRIVE)

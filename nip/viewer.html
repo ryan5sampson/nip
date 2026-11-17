@@ -166,6 +166,13 @@
   .vlabel small { margin-left: auto; color: var(--secondary); font-weight: 400; }
   #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
   #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
+  .vpost { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
+  .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .vpost .chip { height: 28px; padding: 0 10px; font-size: 12px; }
+  .vpost ol { margin: 0; padding-left: 18px; color: var(--secondary); font-size: 12px; line-height: 1.5; }
+  .vpost .res { font-size: 12px; }
+  .vpost .res.bad { color: var(--red); }
+  .vpost a { color: var(--accent); }
   #useddlg { width: min(460px, 94vw); }
   #iquickform { display: flex; gap: 8px; padding: 12px 0 10px; }
   #iquick { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border-radius: 12px; font-size: 14px; }
@@ -670,6 +677,7 @@
     <div style="display:flex;gap:6px"><input type="text" id="vnote" style="flex:1;min-width:0" aria-label="What to change" placeholder="Tell Claude what to change, or what the video shows"><button type="button" class="btn" id="vredraft">Redraft</button></div>
     <div class="vlabel">Made from<small id="vcover"></small><button type="button" class="icon-btn small" id="vfolder" title="Show the video, its cover and Captions.txt in Finder, ready to upload">Show Files</button></div>
     <div id="vsources"></div>
+    <div class="vpost" id="vpost"></div>
     <div class="actions-line" style="flex-wrap:wrap"><button type="button" class="btn" id="vdelete">Delete</button><button type="button" class="btn" id="vmove"></button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="vsave"></button></div>
   </div>
 </form></dialog>
@@ -779,6 +787,7 @@ async function loadLibrary() {
   drawLibrary();  // the library shows at once; clips can be slower, they may live on Drive
   api('/api/clips').then(c => { clips = c; drawLibrary(); }).catch(e => status(e.message, true));
   api('/api/videos').then(v => { vids = v; drawLibrary(); }).catch(e => onVideos && status(e.message, true));
+  if (onVideos && vids.some(postState)) api('/api/videos/settle', {}).then(r => r.moved && api('/api/videos').then(v => { vids = v; drawLibrary(); status(`${plural(r.moved, 'video')} went live and moved to Posted`); })).catch(() => {});
   loadIdeas();
 }
 let landed = false, saves = [], saveTimer = null;  // footage being completed, in the corner until dismissed
@@ -789,6 +798,7 @@ function drawSaves() {
     <a href="${s.video ? '#/videos' : '#/p/' + enc(s.project)}">${esc(s.title)}</a>
     ${saving(s) ? '' : `<button class="icon-btn small" data-dismiss="${esc(s.project)}" title="Dismiss" aria-label="Dismiss">✕</button>`}
     ${saving(s) ? `<progress value="${s.part}" aria-label="Saving ${esc(s.title)}"></progress><small>${esc(s.step)}…</small>`
+      : s.posting ? (s.state === 'done' ? `<small>${Object.entries(s.saved.posts).map(([k, x]) => `${PLATFORMS[k] || k}: ${x.status}${x.error ? ` (${x.error})` : ''}`).join(' · ')}. <a href="#/videos" data-vid="${esc(s.saved.id)}">Open it</a></small>` : `<small>Not posted. ${esc(s.error)}</small>`)
       : s.video ? (s.state === 'done' ? `<small>Captions are ready. <a href="#/videos" data-vid="${esc(s.saved.id)}">Review them</a></small>` : `<small>No captions yet. ${esc(s.error)}</small>`)
       : s.state === 'done' ? `<small>Saved ${plural(s.saved.clips, 'clip')} to the library, ${(s.saved.bytes / 1e9).toFixed(2)} GB${s.saved.skipped ? `. Left out ${plural(s.saved.skipped, 'sliver')} under half a second` : ''}. <a href="#/clips" data-bundle="${esc(s.saved.folder.split('/').pop())}">See clips</a></small>`
       : `<small>Not saved. It stays in Processing. ${esc(s.error)}</small>`}
@@ -873,7 +883,8 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
 const sortBtn = folder => folder ? `<button class="srt" data-folder="${esc(folder)}" title="Sort these clips" aria-label="Sort these clips">${icon('tag')}</button>` : '';
 const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
 const go = hash => location.hash === hash ? drawLibrary() : location.hash = hash;
-const vidState = v => !v.captions.instagram && !v.captions.tiktok ? ['No captions', 'bad'] : !v.reviewed ? ['Needs review', 'warn'] : v.shelf === 'Posted' ? ['Posted', ''] : ['Ready', ''];
+const postState = v => { const s = Object.values(v.posts || {}).map(x => x.status); return s.includes('failed') ? ['Post failed', 'bad'] : s.includes('scheduled') ? ['Scheduled', ''] : s.some(x => !['published', 'cancelled'].includes(x)) ? ['Posting', ''] : null; };
+const vidState = v => !v.captions.instagram && !v.captions.tiktok ? ['No captions', 'bad'] : !v.reviewed ? ['Needs review', 'warn'] : postState(v) ? postState(v) : v.shelf === 'Posted' ? ['Posted', ''] : ['Ready', ''];
 const vidUrl = (kind, v) => `/${kind}/${v.id.split('/').map(enc).join('/')}`;
 function drawVideos(words) {
   const count = sh => vids.filter(v => v.shelf === sh).length, unposted = vids.filter(v => v.shelf === 'Unposted');
@@ -1112,8 +1123,50 @@ function showVideo(id) {  // the review screen: nothing reaches Drive until it's
   $('#vsave').textContent = v.shelf === 'Drafts' ? 'Save to Unposted' : 'Save';
   $('#vmove').hidden = v.shelf === 'Drafts';
   $('#vmove').textContent = v.shelf === 'Posted' ? 'Move to Unposted' : 'Mark Posted';
+  drawPost(v);
   $('#videodlg').showModal();
 }
+const PLATFORMS = {tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube (bonus)'};
+async function drawPost(v) {  // straight to the platforms through Zernio, once it's connected
+  const box = $('#vpost'), done = Object.entries(v.posts || {});
+  const lines = done.map(([k, x]) => `<div class="res ${x.status === 'failed' ? 'bad' : ''}">${esc(PLATFORMS[k] || k)}: ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.status)}</a>` : esc(x.status)}${x.when ? ` for ${esc(x.when.slice(0, 16).replace('T', ' '))}` : ''}${x.error ? ` · ${esc(x.error)}` : ''}</div>`).join('');
+  box.hidden = v.shelf === 'Drafts';
+  if (box.hidden) return;
+  box.innerHTML = `<div class="vlabel">Post</div>${lines}<small class="hint">Checking Zernio…</small>`;
+  const s = await api('/api/post/setup').catch(e => ({connected: true, accounts: [], error: e.message}));
+  if (openVid !== v) return;
+  if (!s.connected) {
+    box.innerHTML = `<div class="vlabel">Post straight to TikTok and Instagram</div>
+      <ol><li>Sign up free at <a href="https://zernio.com" target="_blank" rel="noopener">zernio.com</a>.</li><li>Connect TikTok and Instagram there (YouTube too, as a bonus).</li><li>Create an API key under API Keys.</li><li>Press Connect Zernio, paste the key into the file that opens, save it, and come back.</li></ol>
+      <div class="row2"><button type="button" class="btn" data-post="key">Connect Zernio</button></div>`;
+    return;
+  }
+  if (!s.accounts.length) { box.innerHTML = `<div class="vlabel">Post</div>${lines}<div class="res bad">${esc(s.error || 'No TikTok, Instagram or YouTube account is connected in Zernio.')}</div>`; return; }
+  const tomorrow = new Date(Date.now() + 864e5); tomorrow.setHours(9, 0, 0, 0);
+  const local = d => new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
+  box.innerHTML = `<div class="vlabel">Post</div>${lines}
+    <div class="row2">${s.accounts.map(a => `<button type="button" class="chip ${done.some(([k, x]) => k === a && x.status !== 'failed') ? '' : 'on'}" data-plat="${a}">${esc(PLATFORMS[a] || a)}</button>`).join('')}</div>
+    <div class="row2"><div class="seg" id="vwhen"><button type="button" class="on" data-v="now">Now</button><button type="button" data-v="later">Later</button></div><input type="datetime-local" id="vat" value="${local(tomorrow)}" hidden><span class="grow" style="flex:1"></span><button type="button" class="btn default" data-post="go">Post</button></div>`;
+}
+$('#vpost').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.plat) return b.classList.toggle('on');
+  if (b.dataset.v) { segSet($('#vwhen'), b.dataset.v); $('#vat').hidden = b.dataset.v !== 'later'; return; }
+  if (b.dataset.post === 'key') return api('/api/post/key', {}).then(() => status('Paste your Zernio key into the file, save it, then open this video again')).catch(err => status(err.message, true));
+  if (b.dataset.post === 'go') {
+    const only = [...$('#vpost').querySelectorAll('[data-plat].on')].map(c => c.dataset.plat), later = segGet($('#vwhen')) === 'later';
+    if (!only.length) return status('Pick at least one platform', true);
+    run(b, 'Saving…', async () => {
+      if (!openVid.reviewed || $('#vig').value !== (openVid.captions.instagram || '') || $('#vtt').value !== (openVid.captions.tiktok || '') || $('#vtitle').value !== openVid.title)
+        openVid.id = (await api('/api/videos/save', {id: openVid.id, title: $('#vtitle').value, instagram: $('#vig').value, tiktok: $('#vtt').value, sources: openVid.sources})).id;  // post what's on screen
+      await api('/api/videos/post', {id: openVid.id, only, ...(later ? {when: $('#vat').value, zone: Intl.DateTimeFormat().resolvedOptions().timeZone} : {})});
+      $('#videodlg').close();
+      await watchSaves();
+      status(later ? 'Uploading it to Zernio to post at that time; the corner shows progress' : 'Posting; the corner shows progress');
+    });
+  }
+};
 $('#videodlg').onclose = () => { $('#vplayer').removeAttribute('src'); $('#vplayer').load(); };
 $('#vsources').onclick = e => e.target.closest('[data-source]')?.classList.toggle('on');
 $('#videodlg').addEventListener('click', e => { const b = e.target.closest('[data-copyfrom]'); if (b) copyText($('#' + b.dataset.copyfrom).value, b.dataset.copyfrom === 'vtt' ? 'TikTok' : 'Instagram').catch(err => status(err.message, true)); });
