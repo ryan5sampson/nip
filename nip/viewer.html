@@ -166,25 +166,36 @@
   .vlabel small { margin-left: auto; color: var(--secondary); font-weight: 400; }
   #vsources { display: flex; flex-wrap: wrap; gap: 4px; }
   #vsources .chip { height: 26px; padding: 0 9px; font-size: 12px; }
-  #ibar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 12px 0 10px; background: var(--window); }
+  #ibar { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0 10px; background: var(--window); border-bottom: .5px solid var(--separator); }
   #ibar b { font-weight: 600; }
   #ibar .btn { height: 32px; border-radius: 16px; padding: 0 14px; }
-  #iboxes { display: flex; flex-direction: column; gap: 10px; max-width: 860px; padding-bottom: 40px; }
-  .ibox { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--fill); box-shadow: inset 0 0 0 1.5px transparent; }
-  .ibox.ok { box-shadow: inset 0 0 0 1.5px var(--green); }
-  .ibox .ihd { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--secondary); }
-  .ibox .ihd b { color: var(--label); font-size: 13px; }
-  .ibox .ihd a { margin-left: auto; color: var(--accent); text-decoration: none; }
-  .ibox .ctx { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--secondary); }
-  .ibox .ctx i { flex: none; width: 30px; height: 40px; border-radius: 4px; background: #000 center / cover no-repeat; }
-  .ibox .ctx span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .ibox .thr { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--secondary); }
-  .ibox .them { font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
-  .ibox textarea { min-height: 54px; font-size: 14px; }
-  .ibox .row3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .ibox .row3 input[type=text] { flex: 1; min-width: 160px; }
-  .ibox .appr { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  #iboxes { display: flex; flex-direction: column; padding-bottom: 40px; }
+  .ifilt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .ifilt .chip { height: 30px; }
+  .ifilt .note { color: var(--secondary); font-size: 12px; }
+  .ibox { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 16px; padding: 9px 4px; border-bottom: .5px solid var(--separator); }
+  .ibox:hover { background: var(--fill); }
+  .ibox.ok { background: color-mix(in srgb, var(--green) 9%, transparent); }
+  .ibox .left { display: flex; gap: 9px; min-width: 0; }
+  .ibox .left i { flex: none; width: 28px; height: 36px; border-radius: 4px; background: #000 center / cover no-repeat; }
+  .ibox .msg { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .ibox .ihd { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--secondary); white-space: nowrap; overflow: hidden; }
+  .ibox .ihd b { color: var(--label); font-weight: 600; }
+  .ibox .ihd .plat { font-weight: 600; font-size: 11px; color: var(--c); }
+  .ibox .ihd .on { overflow: hidden; text-overflow: ellipsis; }
+  .ibox .ihd a { color: var(--accent); text-decoration: none; }
+  .ibox .them { font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ibox .thr { font-size: 12px; color: var(--secondary); line-height: 1.35; }
+  .ibox .right { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ibox textarea { min-height: 0; height: auto; field-sizing: content; padding: 5px 8px; font-size: 13px; line-height: 1.4; resize: none; }
+  .ibox .acts2 { display: flex; align-items: center; gap: 2px; font-size: 12px; }
+  .ibox .acts2 .appr { display: inline-flex; align-items: center; gap: 5px; margin-right: auto; font-weight: 500; }
+  .ibox .acts2 button { height: 24px; padding: 0 8px; border: none; border-radius: 6px; background: none; color: var(--secondary); font-size: 12px; }
+  .ibox .acts2 button:hover { background: var(--fill-strong); color: var(--label); }
+  .ibox .redo { display: flex; gap: 4px; }
+  .ibox .redo input { flex: 1; min-width: 0; height: 26px; font-size: 12px; }
   .ibox .err { color: var(--red); font-size: 12px; }
+  @media (max-width: 900px) { .ibox { grid-template-columns: minmax(0, 1fr); } }
   .vpost { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
   .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .vpost .chip { height: 28px; padding: 0 10px; font-size: 12px; }
@@ -772,7 +783,7 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w, many = w + 's') => `${n} ${n === 1 ? w : many}`;
-let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {}, inboxError = '';
+let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {}, inboxError = '', inboxView = {platform: '', days: 7, newest: true};
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -1105,7 +1116,6 @@ async function loadInbox(fresh) {
   try { inboxItems = await api('/api/inbox', {fresh}); inboxError = ''; } catch (e) { inboxError = e.message; return drawLibrary(); }
   for (const k of Object.keys(inboxState)) if (!inboxItems.some(i => i.key === k)) delete inboxState[k];
   drawLibrary();
-  if (onInbox) draftInbox(inboxItems.filter(i => !inboxState[i.key]).map(i => i.key));
 }
 async function draftInbox(keys, note = '') {  // one Claude call for the batch
   keys = keys.slice(0, 30);
@@ -1118,27 +1128,35 @@ async function draftInbox(keys, note = '') {  // one Claude call for the batch
   } catch (e) { keys.forEach(k => inboxState[k] = {...inboxState[k], drafting: false, err: e.message}); }
   drawInbox();
 }
+const INBOX_DAYS = [[7, 'Past week'], [30, 'Past month'], [0, 'All time']], PLAT = {tiktok: ['TikTok', '#ff2d55'], instagram: ['Instagram', '#c13584']};
+const shownInbox = () => (inboxItems || []).filter(i => (!inboxView.platform || i.platform === inboxView.platform)
+  && (!inboxView.days || Date.now() - new Date(i.at) < inboxView.days * 864e5)).sort((a, b) => inboxView.newest ? b.at.localeCompare(a.at) : a.at.localeCompare(b.at));
 function drawInbox() {
   if (!onInbox) return;
   if (document.activeElement?.closest?.('#iboxes')) return;  // never redraw under someone's typing
   $('#title').textContent = 'Replies';
-  const list = inboxItems || [], approved = list.filter(i => inboxState[i.key]?.ok).length;
-  $('#subtitle').textContent = inboxItems ? plural(list.length, 'reply', 'replies') + ' waiting' : 'Checking…';
-  $('#ibar').innerHTML = `<b>${approved} approved</b><span class="grow" style="flex:1"></span><button class="btn" data-ia="refresh">Check Again</button><button class="btn" data-ia="all" ${list.length ? '' : 'disabled'}>Approve All</button><button class="btn default" data-ia="send" ${approved ? '' : 'disabled'}>Send ${approved || ''} Approved</button>`;
-  const NAMES = {tiktok: 'TikTok', instagram: 'Instagram'};
+  const list = shownInbox(), all = inboxItems || [], approved = all.filter(i => inboxState[i.key]?.ok).length, hidden = all.length - list.length;
+  $('#subtitle').textContent = inboxItems ? `${plural(all.length, 'reply', 'replies')} waiting` : 'Checking…';
+  const chip = (attr, value, label, on) => `<button class="chip ${on ? 'on' : ''}" ${attr}="${value}">${on ? icon('check') : ''}${label}</button>`;
+  $('#ibar').innerHTML = `<div class="ifilt">${chip('data-iplat', '', 'All', !inboxView.platform)}${Object.entries(PLAT).map(([k, [n]]) => chip('data-iplat', k, `${n} <small class="num">${all.filter(i => i.platform === k).length}</small>`, inboxView.platform === k)).join('')}
+      <span class="fsep"></span>${INBOX_DAYS.map(([d, n]) => chip('data-idays', d, n, inboxView.days === d)).join('')}
+      <span class="fsep"></span><div class="seg"><button class="${inboxView.newest ? 'on' : ''}" data-inew="1">Newest</button><button class="${inboxView.newest ? '' : 'on'}" data-inew="">Oldest</button></div>
+      ${hidden ? `<span class="note">${hidden} older or filtered out</span>` : ''}</div>
+    <span class="grow" style="flex:1"></span><b>${approved} approved</b><button class="btn" data-ia="refresh">Check Again</button><button class="btn" data-ia="all" ${list.length ? '' : 'disabled'}>Approve All Shown</button><button class="btn default" data-ia="send" ${approved ? '' : 'disabled'}>Send ${approved || ''} Approved</button>`;
   $('#iboxes').innerHTML = inboxError && !inboxItems ? `<div class="empty">${icon('text')}<b>Couldn’t check for replies</b>${esc(inboxError)}</div>`
     : !inboxItems ? `<div class="empty">${icon('text')}<b>Checking for comments and DMs…</b></div>`
-    : !list.length ? `<div class="empty">${icon('check')}<b>All caught up</b>No comments or DMs waiting on TikTok or Instagram.</div>`
-    : list.map(i => { const st = inboxState[i.key] || {}; return `<article class="ibox ${st.ok ? 'ok' : ''}" data-key="${esc(i.key)}">
-      <div class="ihd">${NAMES[i.platform] || i.platform} ${i.kind === 'dm' ? 'DM' : 'comment'} · <b>@${esc(i.who)}</b> · ${ago(i.at)}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
-      ${i.post ? `<div class="ctx">${i.post.picture ? `<i style="background-image:url('${esc(i.post.picture)}')"></i>` : ''}<span>On: ${esc(i.post.text || 'your video')}</span></div>` : ''}
-      ${i.thread.length > 1 ? `<div class="thr">${i.thread.slice(-4, -1).map(m => `<span>${m.from === 'you' ? 'You' : '@' + esc(i.who)}: ${esc(m.text)}</span>`).join('')}</div>` : ''}
-      <div class="them">${esc(i.text)}</div>
-      <textarea data-reply aria-label="Your reply to @${esc(i.who)}" maxlength="2000" placeholder="${st.drafting ? 'NIP is drafting…' : 'Write a reply'}" ${st.drafting ? 'disabled' : ''}>${esc(st.text || '')}</textarea>
-      ${st.err ? `<div class="err">${esc(st.err)}</div>` : ''}
-      <div class="row3"><label class="appr"><input type="checkbox" data-ok ${st.ok ? 'checked' : ''} ${st.text ? '' : 'disabled'}> Approve</label><input type="text" data-note placeholder="Tell NIP what to change" aria-label="What to change"><button class="btn" data-ia="redraft">Redraft</button>
-        ${i.canHide ? '<button class="btn" data-ia="hide" title="Hide this comment from everyone but its author">Hide</button>' : ''}<button class="btn" data-ia="skip" title="Leave it without a reply">Skip</button></div>
+    : !list.length ? `<div class="empty">${icon('check')}<b>${all.length ? 'Nothing here' : 'All caught up'}</b>${all.length ? 'Nothing matches these filters. Try All time.' : 'No comments or DMs waiting on TikTok or Instagram.'}</div>`
+    : list.map(i => { const st = inboxState[i.key] || {}, [pname, pcol] = PLAT[i.platform] || [i.platform, 'var(--secondary)']; return `<article class="ibox ${st.ok ? 'ok' : ''}" data-key="${esc(i.key)}">
+      <div class="left">${i.post?.picture ? `<i style="background-image:url('${esc(i.post.picture)}')" title="${esc(i.post.text || '')}"></i>` : ''}<div class="msg">
+        <div class="ihd"><span class="plat" style="--c:${pcol}">${pname}${i.kind === 'dm' ? ' DM' : ''}</span><b>@${esc(i.who)}</b><span>${ago(i.at)}</span>${i.post ? `<span class="on" title="${esc(i.post.text || '')}">on “${esc((i.post.text || 'your video').split('\n')[0])}”</span>` : ''}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
+        ${i.thread.length > 1 ? `<div class="thr">${i.thread.slice(-3, -1).map(m => `${m.from === 'you' ? 'You' : '@' + esc(i.who)}: ${esc(m.text)}`).join('<br>')}</div>` : ''}
+        <div class="them">${esc(i.text)}</div></div></div>
+      <div class="right"><textarea data-reply rows="1" aria-label="Your reply to @${esc(i.who)}" maxlength="2000" placeholder="${st.drafting ? 'NIP is drafting…' : 'Write a reply'}" ${st.drafting ? 'disabled' : ''}>${esc(st.text || '')}</textarea>
+        ${st.err ? `<div class="err">${esc(st.err)}</div>` : ''}
+        ${st.redo ? `<div class="redo"><input type="text" data-note placeholder="What should change?" aria-label="What to change"><button class="btn" data-ia="redraft">Redraft</button></div>` : ''}
+        <div class="acts2"><label class="appr"><input type="checkbox" data-ok ${st.ok ? 'checked' : ''} ${st.text ? '' : 'disabled'}> Approve</label><button data-ia="redo" title="Have NIP write it again, with a note">Redraft…</button>${i.canHide ? '<button data-ia="hide" title="Hide this comment from everyone but its author">Hide</button>' : ''}<button data-ia="skip" title="Leave it without a reply">Skip</button></div></div>
     </article>`; }).join('');
+  draftInbox(list.filter(i => !inboxState[i.key]).map(i => i.key));  // only what's on screen
 }
 $('#inboxview').addEventListener('input', e => {
   const card = e.target.closest('[data-key]');
@@ -1148,12 +1166,20 @@ $('#inboxview').addEventListener('input', e => {
   if (e.target.matches('[data-ok]')) { st.ok = e.target.checked; card.classList.toggle('ok', st.ok); $('#ibar b').textContent = `${(inboxItems || []).filter(i => inboxState[i.key]?.ok).length} approved`; const n = (inboxItems || []).filter(i => inboxState[i.key]?.ok).length; const send = $('#ibar [data-ia="send"]'); send.disabled = !n; send.textContent = `Send ${n || ''} Approved`; }
 });
 $('#inboxview').addEventListener('click', e => {
+  const f = e.target.closest('[data-iplat], [data-idays], [data-inew]');
+  if (f) {
+    if ('iplat' in f.dataset) inboxView.platform = f.dataset.iplat;
+    if ('idays' in f.dataset) inboxView.days = +f.dataset.idays;
+    if ('inew' in f.dataset) inboxView.newest = !!f.dataset.inew;
+    return drawInbox();
+  }
   const b = e.target.closest('[data-ia]');
   if (!b) return;
   const card = b.closest('[data-key]'), key = card?.dataset.key, act = b.dataset.ia;
+  if (act === 'redo') { inboxState[key] = {...inboxState[key], redo: !inboxState[key]?.redo}; b.blur(); drawInbox(); return card.querySelector?.('[data-note]') && document.querySelector(`[data-key="${CSS.escape(key)}"] [data-note]`)?.focus(); }
   if (act === 'refresh') return run(b, 'Checking…', () => loadInbox(true));
-  if (act === 'all') { (inboxItems || []).forEach(i => { const st = inboxState[i.key]; if (st?.text?.trim()) st.ok = true; }); b.blur(); return drawInbox(); }
-  if (act === 'redraft') { const note = card.querySelector('[data-note]').value; b.blur(); return draftInbox([key], note); }
+  if (act === 'all') { shownInbox().forEach(i => { const st = inboxState[i.key]; if (st?.text?.trim()) st.ok = true; }); b.blur(); return drawInbox(); }
+  if (act === 'redraft') { const note = card.querySelector('[data-note]').value; inboxState[key] = {...inboxState[key], redo: false}; b.blur(); return draftInbox([key], note); }
   if (act === 'skip' || act === 'hide') return run(b, act === 'hide' ? 'Hiding…' : 'Skipping…', async () => {
     await api(`/api/inbox/${act === 'hide' ? 'hide' : 'done'}`, {key});
     inboxItems = inboxItems.filter(i => i.key !== key); delete inboxState[key]; b.blur(); drawLibrary();
