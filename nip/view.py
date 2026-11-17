@@ -765,9 +765,13 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("draft between 1 and 30 replies at a time")
                 items = [post.find(str(k)) for k in keys]
                 try:
-                    self.send_json(dict(zip(keys, brief.reply_drafts(items, str(body.get("note", ""))[:500]))))
+                    drafts = dict(zip(keys, brief.reply_drafts(items, str(body.get("note", ""))[:500])))
                 except RuntimeError as e:
                     raise ValueError(str(e))
+                if body.get("autolike"):  # the friendly ones get a like straight away
+                    for k, r in post.like_positive([k for k, d in drafts.items() if d["positive"]]).items():
+                        drafts[k]["liked"] = r
+                self.send_json(drafts)
             elif p == ["api", "inbox", "send"]:  # what he approved, each sent on its own so one failure doesn't stop the rest
                 batch = body.get("replies")
                 if not isinstance(batch, list) or not all(isinstance(r, dict) and isinstance(r.get("text"), str) and len(r["text"]) <= 2000 for r in batch):

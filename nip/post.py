@@ -158,6 +158,8 @@ DONE_FILE = cli.DATA / "Inbox Done.json"  # what was dealt with without a reply,
 EXAMPLES, REPLY_EDITS = cli.DATA / "Reply Examples.json", cli.DATA / "Reply Edits.json"  # how the owner really replies, and what he changed in drafts
 CACHE = {"at": 0, "items": None}  # Zernio allows 60 requests a minute on the free tier, and a refresh can make up to ~20
 CHECKING = threading.Lock()  # one check at a time: a second one waits and gets the first one's answer
+NO_LIKES = {}  # platforms that refused a like this session, with why: Instagram allows it for very few accounts
+LIKES_AT_ONCE = 15  # each like is a request, and the free tier allows 60 a minute
 DM_DAYS = 7  # Instagram and TikTok don't allow a reply later than this, so older conversations aren't worth a request
 POSTS_LOOKED_AT, CONVERSATIONS_LOOKED_AT = 10, 10
 
@@ -195,6 +197,7 @@ def check():
                 items.append({"key": key, "kind": "comment", "platform": post["platform"], "accountId": post["accountId"], "postId": post["id"],
                               "commentId": c["id"], "text": c.get("message", ""), "who": (c.get("from") or {}).get("username") or (c.get("from") or {}).get("name") or "someone",
                               "at": c.get("createdTime", ""), "url": c.get("url") or post.get("permalink", ""), "canHide": bool(c.get("canHide")),
+                              "canLike": bool(c.get("canLike")), "liked": bool(c.get("isLiked")),
                               "post": {"text": post.get("content", ""), "picture": post.get("picture", ""), "url": post.get("permalink", "")}, "thread": []})
     for a in accts:
         since = (datetime.now(timezone.utc) - timedelta(days=DM_DAYS)).isoformat()
@@ -207,7 +210,7 @@ def check():
             if not msgs or msgs[0].get("direction") != "incoming" or f"dm:{msgs[0]['id']}" in done:
                 continue
             items.append({"key": f"dm:{msgs[0]['id']}", "kind": "dm", "platform": a["platform"], "accountId": a["_id"], "conversationId": conv["id"],
-                          "text": said(msgs[0]), "who": conv.get("participantUsername") or conv.get("participantName") or "someone",
+                          "text": said(msgs[0]), "canLike": False, "liked": False, "who": conv.get("participantUsername") or conv.get("participantName") or "someone",
                           "at": msgs[0].get("createdAt") or msgs[0].get("sentAt", ""), "url": conv.get("url", ""), "canHide": False, "post": None,
                           "thread": [{"from": "you" if m.get("direction") == "outgoing" else "them", "text": said(m)} for m in reversed(msgs)]})
     learn(EXAMPLES, [e for e in seen if e["them"] and e["you"]])
@@ -259,6 +262,27 @@ def reply(key, text, drafted=""):
     learn(EXAMPLES, [{"kind": item["kind"], "platform": item["platform"], "them": item["text"], "you": text}])
     if drafted.strip() and drafted.strip() != text:
         learn(REPLY_EDITS, [{"them": item["text"], "drafted": drafted.strip(), "sent": text}], 40)
+
+
+def like_positive(keys):
+    """Like the comments NIP judged positive, where the platform allows it. Returns {key: "liked" or why not}."""
+    out = {}
+    for key in keys[:LIKES_AT_ONCE]:
+        item = next((i for i in CACHE["items"] or [] if i["key"] == key), None)
+        if not item or item["kind"] != "comment" or item["liked"] or not item["canLike"]:
+            continue
+        if item["platform"] in NO_LIKES:
+            out[key] = NO_LIKES[item["platform"]]
+            continue
+        try:
+            call("POST", f"/inbox/comments/{item['postId']}/{item['commentId']}/like", {"accountId": item["accountId"]})
+            item["liked"] = True
+            out[key] = "liked"
+        except ValueError as e:
+            if "support" in str(e).lower() or "restricted" in str(e).lower() or "permission" in str(e).lower():
+                NO_LIKES[item["platform"]] = f"{item['platform'].title()} doesn't allow liking for this account"  # don't ask again this session
+            out[key] = NO_LIKES.get(item["platform"], str(e))
+    return out
 
 
 def hide(key):

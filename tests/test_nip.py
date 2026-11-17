@@ -932,7 +932,7 @@ class Robustness(unittest.TestCase):
                                       {"id": "post2", "platform": "tiktok", "accountId": "tt", "commentCount": 0}]}
             if path.startswith("/inbox/comments/post1"):
                 return 200, {"comments": [
-                    {"id": "c1", "message": "Where can I buy one?", "from": fan, "createdTime": "2026-11-17T10:00:00Z", "canReply": True, "canHide": True, "replies": []},
+                    {"id": "c1", "message": "Where can I buy one?", "from": fan, "createdTime": "2026-11-17T10:00:00Z", "canReply": True, "canHide": True, "canLike": True, "replies": []},
                     {"id": "c2", "message": "So cool", "from": fan, "createdTime": "2026-11-17T09:00:00Z", "canReply": True, "replies": [{"message": "thanks!! 🙌", "from": owner}]},
                     {"id": "c3", "message": "my own note", "from": owner, "createdTime": "2026-11-17T08:00:00Z", "replies": []}]}
             if path.startswith("/inbox/conversations?accountId=ig"):
@@ -959,12 +959,15 @@ class Robustness(unittest.TestCase):
                 learned = cli.load(post.EXAMPLES)
                 self.assertIn({"kind": "comment", "platform": "instagram", "them": "So cool", "you": "thanks!! 🙌"}, learned)  # your real replies
                 self.assertIn({"kind": "dm", "platform": "instagram", "them": "how much?", "you": "yep, link in bio!"}, learned)
-                answer = {"replies": [{"n": 2, "reply": "Link in bio!"}, {"n": 1, "reply": "We sure do!"}]}
+                answer = {"replies": [{"n": 2, "reply": "Link in bio!", "positive": False}, {"n": 1, "reply": "We sure do!", "positive": True}]}
                 with mock.patch.object(brief, "claude_json", return_value=answer) as ask:
-                    self.assertEqual(brief.reply_drafts(items), ["We sure do!", "Link in bio!"])  # by number, in order
+                    self.assertEqual(brief.reply_drafts(items), [{"reply": "We sure do!", "positive": True}, {"reply": "Link in bio!", "positive": False}])  # by number, in order
                 self.assertIn('he replied "thanks!! 🙌"', ask.call_args[0][0])
                 with mock.patch.object(brief, "claude_json", return_value={"replies": answer["replies"][:1]}), self.assertRaises(RuntimeError):
                     brief.reply_drafts(items)
+                self.assertEqual(post.like_positive(["comment:c1", "dm:m3"]), {"comment:c1": "liked"})  # DMs can't be liked
+                self.assertEqual(sent[-1][:2], ("/inbox/comments/post1/c1/like", {"accountId": "ig"}))
+                self.assertEqual(post.like_positive(["comment:c1"]), {})  # already liked: not asked again
                 post.reply("comment:c1", " Link in bio, ships worldwide! ", "Link in bio!")
                 self.assertEqual(sent[-1][:2], ("/inbox/comments/post1", {"accountId": "ig", "commentId": "c1", "message": "Link in bio, ships worldwide!"}))
                 self.assertEqual(cli.load(post.REPLY_EDITS), [{"them": "Where can I buy one?", "drafted": "Link in bio!", "sent": "Link in bio, ships worldwide!"}])

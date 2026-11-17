@@ -195,6 +195,7 @@
   .ibox .redo { display: flex; gap: 4px; }
   .ibox .redo input { flex: 1; min-width: 0; height: 26px; font-size: 12px; }
   .ibox .err { color: var(--red); font-size: 12px; }
+  .ibox .liked { color: #ff2d55; }
   @media (max-width: 900px) { .ibox { grid-template-columns: minmax(0, 1fr); } }
   .vpost { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
   .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -783,7 +784,8 @@ const mins = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2
 const icon = (id, solid) => `<svg class="i${solid ? ' solid' : ''}"><use href="#i-${id}"/></svg>`;
 const enc = encodeURIComponent;
 const plural = (n, w, many = w + 's') => `${n} ${n === 1 ? w : many}`;
-let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {}, inboxError = '', inboxView = {platform: '', days: 7, newest: true};
+let onIdeas = false, ideaList = null, ideaStatuses = [], openIdea = null, onInbox = false, inboxItems = null, inboxState = {}, inboxError = '', inboxView = {platform: '', days: 7, newest: true, autolike: true};
+try { inboxView.autolike = localStorage.getItem('autolike') !== 'off'; } catch {}
 let projects = [], clips = [], chosen = new Map(), onClips = false, openClip = null, tagFilter = new Set(), stageFilter = 'inbox', lastList = '#/', onVideos = false, vids = [], vidShelf = 'Unposted', openVid = null, data = null, proj = '', clipIdx = 0;
 let nipT = null, nipMode = 'at', playing = null, pendingSeek = null, kept = [], keptAll = [], segs = [], allSegs = [], openGap = null, openSeg = null, naming = null, picked = null, justPicked = false, mergeArmed = false, grip = null, gripped = false, lastT = -1, armed = null, wordEls = [], nowWord = null, lastProcessing = 0;
 
@@ -1123,8 +1125,12 @@ async function draftInbox(keys, note = '') {  // one Claude call for the batch
   keys.forEach(k => inboxState[k] = {...inboxState[k], drafting: true});
   drawInbox();
   try {
-    const got = await api('/api/inbox/draft', {keys, note});
-    for (const k of keys) inboxState[k] = {...inboxState[k], drafting: false, drafted: got[k], text: got[k], ok: false};
+    const got = await api('/api/inbox/draft', {keys, note, autolike: inboxView.autolike && !note});
+    for (const k of keys) {
+      const item = inboxItems.find(i => i.key === k);
+      if (got[k].liked === 'liked' && item) item.liked = true;
+      inboxState[k] = {...inboxState[k], drafting: false, drafted: got[k].reply, text: got[k].reply, ok: false, likeNote: got[k].liked && got[k].liked !== 'liked' ? got[k].liked : ''};
+    }
   } catch (e) { keys.forEach(k => inboxState[k] = {...inboxState[k], drafting: false, err: e.message}); }
   drawInbox();
 }
@@ -1141,6 +1147,7 @@ function drawInbox() {
   $('#ibar').innerHTML = `<div class="ifilt">${chip('data-iplat', '', 'All', !inboxView.platform)}${Object.entries(PLAT).map(([k, [n]]) => chip('data-iplat', k, `${n} <small class="num">${all.filter(i => i.platform === k).length}</small>`, inboxView.platform === k)).join('')}
       <span class="fsep"></span>${INBOX_DAYS.map(([d, n]) => chip('data-idays', d, n, inboxView.days === d)).join('')}
       <span class="fsep"></span><div class="seg"><button class="${inboxView.newest ? 'on' : ''}" data-inew="1">Newest</button><button class="${inboxView.newest ? '' : 'on'}" data-inew="">Oldest</button></div>
+      <span class="fsep"></span>${chip('data-ilike', '1', 'Auto-like positive', inboxView.autolike)}
       ${hidden ? `<span class="note">${hidden} older or filtered out</span>` : ''}</div>
     <span class="grow" style="flex:1"></span><b>${approved} approved</b><button class="btn" data-ia="refresh">Check Again</button><button class="btn" data-ia="all" ${list.length ? '' : 'disabled'}>Approve All Shown</button><button class="btn default" data-ia="send" ${approved ? '' : 'disabled'}>Send ${approved || ''} Approved</button>`;
   $('#iboxes').innerHTML = inboxError && !inboxItems ? `<div class="empty">${icon('text')}<b>Couldn’t check for replies</b>${esc(inboxError)}</div>`
@@ -1148,11 +1155,11 @@ function drawInbox() {
     : !list.length ? `<div class="empty">${icon('check')}<b>${all.length ? 'Nothing here' : 'All caught up'}</b>${all.length ? 'Nothing matches these filters. Try All time.' : 'No comments or DMs waiting on TikTok or Instagram.'}</div>`
     : list.map(i => { const st = inboxState[i.key] || {}, [pname, pcol] = PLAT[i.platform] || [i.platform, 'var(--secondary)']; return `<article class="ibox ${st.ok ? 'ok' : ''}" data-key="${esc(i.key)}">
       <div class="left">${i.post?.picture ? `<i style="background-image:url('${esc(i.post.picture)}')" title="${esc(i.post.text || '')}"></i>` : ''}<div class="msg">
-        <div class="ihd"><span class="plat" style="--c:${pcol}">${pname}${i.kind === 'dm' ? ' DM' : ''}</span><b>@${esc(i.who)}</b><span>${ago(i.at)}</span>${i.post ? `<span class="on" title="${esc(i.post.text || '')}">on “${esc((i.post.text || 'your video').split('\n')[0])}”</span>` : ''}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
+        <div class="ihd"><span class="plat" style="--c:${pcol}">${pname}${i.kind === 'dm' ? ' DM' : ''}</span><b>@${esc(i.who)}</b><span>${ago(i.at)}</span>${i.liked ? '<span class="liked" title="Liked">♥</span>' : ''}${i.post ? `<span class="on" title="${esc(i.post.text || '')}">on “${esc((i.post.text || 'your video').split('\n')[0])}”</span>` : ''}${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open</a>` : ''}</div>
         ${i.thread.length > 1 ? `<div class="thr">${i.thread.slice(-3, -1).map(m => `${m.from === 'you' ? 'You' : '@' + esc(i.who)}: ${esc(m.text)}`).join('<br>')}</div>` : ''}
         <div class="them">${esc(i.text)}</div></div></div>
       <div class="right"><textarea data-reply rows="1" aria-label="Your reply to @${esc(i.who)}" maxlength="2000" placeholder="${st.drafting ? 'NIP is drafting…' : 'Write a reply'}" ${st.drafting ? 'disabled' : ''}>${esc(st.text || '')}</textarea>
-        ${st.err ? `<div class="err">${esc(st.err)}</div>` : ''}
+        ${st.err ? `<div class="err">${esc(st.err)}</div>` : ''}${st.likeNote ? `<div class="thr">${esc(st.likeNote)}</div>` : ''}
         ${st.redo ? `<div class="redo"><input type="text" data-note placeholder="What should change?" aria-label="What to change"><button class="btn" data-ia="redraft">Redraft</button></div>` : ''}
         <div class="acts2"><label class="appr"><input type="checkbox" data-ok ${st.ok ? 'checked' : ''} ${st.text ? '' : 'disabled'}> Approve</label><button data-ia="redo" title="Have NIP write it again, with a note">Redraft…</button>${i.canHide ? '<button data-ia="hide" title="Hide this comment from everyone but its author">Hide</button>' : ''}<button data-ia="skip" title="Leave it without a reply">Skip</button></div></div>
     </article>`; }).join('');
@@ -1166,8 +1173,9 @@ $('#inboxview').addEventListener('input', e => {
   if (e.target.matches('[data-ok]')) { st.ok = e.target.checked; card.classList.toggle('ok', st.ok); $('#ibar b').textContent = `${(inboxItems || []).filter(i => inboxState[i.key]?.ok).length} approved`; const n = (inboxItems || []).filter(i => inboxState[i.key]?.ok).length; const send = $('#ibar [data-ia="send"]'); send.disabled = !n; send.textContent = `Send ${n || ''} Approved`; }
 });
 $('#inboxview').addEventListener('click', e => {
-  const f = e.target.closest('[data-iplat], [data-idays], [data-inew]');
+  const f = e.target.closest('[data-iplat], [data-idays], [data-inew], [data-ilike]');
   if (f) {
+    if ('ilike' in f.dataset) { inboxView.autolike = !inboxView.autolike; try { localStorage.setItem('autolike', inboxView.autolike ? 'on' : 'off'); } catch {} }
     if ('iplat' in f.dataset) inboxView.platform = f.dataset.iplat;
     if ('idays' in f.dataset) inboxView.days = +f.dataset.idays;
     if ('inew' in f.dataset) inboxView.newest = !!f.dataset.inew;
