@@ -202,6 +202,8 @@
   .vstats > b { font-weight: 600; }
   .vstats > span:nth-child(3n+1) { color: var(--secondary); }
   .views { position: absolute; right: 6px; bottom: 6px; padding: 2px 7px; border-radius: 9px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; font-weight: 600; }
+  .vpost .sched b { font-weight: 600; }
+  .vpost .hint.err, #vsay.err { color: var(--red); }
   .vpost .row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .vpost .chip { height: 28px; padding: 0 10px; font-size: 12px; }
   .vpost ol { margin: 0; padding-left: 18px; color: var(--secondary); font-size: 12px; line-height: 1.5; }
@@ -925,7 +927,12 @@ function togglePick(c) {  // picks outlive searching and filtering, so one video
 const sortBtn = folder => folder ? `<button class="srt" data-folder="${esc(folder)}" title="Sort these clips" aria-label="Sort these clips">${icon('tag')}</button>` : '';
 const reuseOf = c => c.reusable == null ? 'none' : c.reusable ? 'yes' : 'no';
 const go = hash => location.hash === hash ? drawLibrary() : location.hash = hash;
-const postState = v => { const s = Object.values(v.posts || {}).map(x => x.status); return s.includes('failed') ? ['Post failed', 'bad'] : s.includes('scheduled') ? ['Scheduled', ''] : s.some(x => !['published', 'cancelled'].includes(x)) ? ['Posting', ''] : null; };
+const whenOf = v => Object.values(v.posts || {}).find(x => ['scheduled', 'pending'].includes(x.status) && x.when)?.when;
+const day = t => { const d = new Date(/Z$|[+-]\d\d:\d\d$/.test(t) ? t : t), today = new Date(), tom = new Date(Date.now() + 864e5);
+  const name = d.toDateString() === today.toDateString() ? 'Today' : d.toDateString() === tom.toDateString() ? 'Tomorrow' : d.toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'});
+  return `${name} ${d.toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'})}`; };
+const until = t => { const m = (new Date(t) - Date.now()) / 6e4; return m < 0 ? 'any moment now' : m < 60 ? `in ${Math.max(1, Math.round(m))} min` : m < 2880 ? `in ${Math.round(m / 60)} hours` : `in ${Math.round(m / 1440)} days`; };
+const postState = v => { const s = Object.values(v.posts || {}).map(x => x.status); return s.includes('failed') ? ['Post failed', 'bad'] : whenOf(v) ? [`Scheduled · ${day(whenOf(v))}`, ''] : s.some(x => !['published', 'cancelled'].includes(x)) ? ['Posting', ''] : null; };
 const vidState = v => !v.captions.instagram && !v.captions.tiktok ? ['No captions', 'bad'] : !v.reviewed ? ['Needs review', 'warn'] : postState(v) ? postState(v) : v.shelf === 'Posted' ? ['Posted', ''] : ['Ready', ''];
 const vidUrl = (kind, v) => `/${kind}/${v.id.split('/').map(enc).join('/')}`;
 function drawVideos(words) {
@@ -1295,29 +1302,64 @@ async function drawPost(v) {  // straight to the platforms through Zernio, once 
     return;
   }
   if (!s.accounts.length) { box.innerHTML = `<div class="vlabel">Post</div>${lines}<div class="res bad">${esc(s.error || 'No TikTok, Instagram or YouTube account is connected in Zernio.')}</div>`; return; }
-  const tomorrow = new Date(Date.now() + 864e5); tomorrow.setHours(9, 0, 0, 0);
-  const local = d => new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
+  const at = whenOf(v);
+  if (at) {  // already on its way: say exactly when, and offer to change it
+    box.innerHTML = `<div class="vlabel">Post</div><div class="sched"><b>Scheduled for ${esc(day(at))}</b> <span class="hint">${until(at)} · ${done.filter(([, x]) => x.when).map(([k]) => PLATFORMS[k] || k).join(' and ')}</span></div>
+      <div class="row2"><button type="button" class="btn default" data-post="now">Post Now</button><button type="button" class="btn" data-post="move">Change Time</button><button type="button" class="btn" data-post="cancel">Cancel</button></div><div id="vpick"></div>`;
+    return;
+  }
   box.innerHTML = `<div class="vlabel">Post</div>${lines}${statsTable(v.stats)}
     <div class="row2">${s.accounts.map(a => `<button type="button" class="chip ${done.some(([k, x]) => k === a && x.status !== 'failed') ? '' : 'on'}" data-plat="${a}">${esc(PLATFORMS[a] || a)}</button>`).join('')}</div>
-    <div class="row2"><div class="seg" id="vwhen"><button type="button" class="on" data-v="now">Now</button><button type="button" data-v="later">Later</button></div><input type="datetime-local" id="vat" value="${local(tomorrow)}" hidden><span class="grow" style="flex:1"></span><button type="button" class="btn default" data-post="go">Post</button></div>`;
+    <div class="row2"><div class="seg" id="vwhen"><button type="button" class="on" data-v="now">Now</button><button type="button" data-v="later">Schedule</button></div><span class="grow" style="flex:1"></span><button type="button" class="btn default" data-post="go">Post Now</button></div><div id="vpick" hidden></div>`;
 }
+const local = d => new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
+function picker(value) {  // a few common times, or your own, and the time said in words so the day can't be mistaken
+  const at = (days, h) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, 0, 0, 0); return d; };
+  const soon = new Date(Math.ceil((Date.now() + 36e5) / 9e5) * 9e5);
+  const quick = [['In an hour', soon], ['Today 5 PM', at(0, 17)], ['Today 7 PM', at(0, 19)], ['Tomorrow 9 AM', at(1, 9)], ['Tomorrow 12 PM', at(1, 12)], ['Tomorrow 5 PM', at(1, 17)]].filter(([, d]) => d > Date.now() + 6e5);
+  $('#vpick').innerHTML = `<div class="row2">${quick.map(([n, d]) => `<button type="button" class="chip" data-at="${local(d)}">${n}</button>`).join('')}<input type="datetime-local" id="vat" min="${local(new Date())}" value="${value || local(quick[0]?.[1] || at(1, 9))}"></div><div class="hint" id="vsay"></div>`;
+  sayWhen();
+}
+function sayWhen() {
+  const d = new Date($('#vat').value), ok = d > Date.now() + 6e4;
+  $('#vsay').textContent = isNaN(d) ? 'Pick a day and time' : ok ? `Posts ${d.toLocaleDateString(undefined, {weekday: 'long', month: 'long', day: 'numeric'})} at ${d.toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'})}, ${until(d)}` : 'That time has passed';
+  $('#vsay').classList.toggle('err', !ok);
+  $('#vpick').querySelectorAll('[data-at]').forEach(c => c.classList.toggle('on', c.dataset.at === $('#vat').value));
+  return ok;
+}
+$('#vpost').addEventListener('input', e => { if (e.target.id === 'vat') sayWhen(); });
 $('#vpost').onclick = e => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.plat) return b.classList.toggle('on');
-  if (b.dataset.v) { segSet($('#vwhen'), b.dataset.v); $('#vat').hidden = b.dataset.v !== 'later'; return; }
+  if (b.dataset.at) { $('#vat').value = b.dataset.at; return sayWhen(); }
+  if (b.dataset.v) { segSet($('#vwhen'), b.dataset.v); $('#vpick').hidden = b.dataset.v !== 'later'; if (b.dataset.v === 'later') picker(); $('#vpost [data-post="go"]').textContent = b.dataset.v === 'later' ? 'Schedule' : 'Post Now'; return; }
+  if (b.dataset.post === 'move') { if (!$('#vpick').innerHTML) { picker(local(new Date(whenOf(openVid)))); $('#vpick').insertAdjacentHTML('beforeend', '<div class="row2"><button type="button" class="btn default" data-post="moveok">Move It</button></div>'); } return; }
+  if (b.dataset.post === 'moveok') {
+    if (!sayWhen()) return status('Pick a time in the future', true);
+    return run(b, 'Moving…', async () => { openVid.posts = await api('/api/videos/reschedule', {id: openVid.id, when: $('#vat').value, zone: Intl.DateTimeFormat().resolvedOptions().timeZone}); await loadLibrary(); drawPost(openVid); status(`Moved to ${day(whenOf(openVid))}`); });
+  }
+  if (b.dataset.post === 'cancel') {
+    if (!confirm('Cancel this scheduled post? Nothing will be posted, and you can schedule it again.')) return;
+    return run(b, 'Cancelling…', async () => { await api('/api/videos/cancel', {id: openVid.id}); openVid.posts = {}; await loadLibrary(); drawPost(openVid); status('Cancelled; nothing was posted'); });
+  }
+  if (b.dataset.post === 'now') {
+    if (!confirm('Post it now instead of at its scheduled time?')) return;
+    return run(b, 'Starting…', async () => { await api('/api/videos/post-now', {id: openVid.id}); $('#videodlg').close(); await watchSaves(); status('Posting now; the corner shows progress'); });
+  }
   if (b.dataset.post === 'stats') { e.preventDefault(); return run(b, 'Getting the latest numbers…', async () => { openVid.stats = await api('/api/videos/stats', {id: openVid.id}); drawPost(openVid); status('Updated'); }); }
   if (b.dataset.post === 'key') return api('/api/post/key', {}).then(() => status('Paste your Zernio key into the file, save it, then open this video again')).catch(err => status(err.message, true));
   if (b.dataset.post === 'go') {
     const only = [...$('#vpost').querySelectorAll('[data-plat].on')].map(c => c.dataset.plat), later = segGet($('#vwhen')) === 'later';
     if (!only.length) return status('Pick at least one platform', true);
+    if (later && !sayWhen()) return status('Pick a time in the future', true);
     run(b, 'Saving…', async () => {
       if (!openVid.reviewed || $('#vig').value !== (openVid.captions.instagram || '') || $('#vtt').value !== (openVid.captions.tiktok || '') || $('#vtitle').value !== openVid.title)
         openVid.id = (await api('/api/videos/save', {id: openVid.id, title: $('#vtitle').value, instagram: $('#vig').value, tiktok: $('#vtt').value, sources: openVid.sources})).id;  // post what's on screen
       await api('/api/videos/post', {id: openVid.id, only, ...(later ? {when: $('#vat').value, zone: Intl.DateTimeFormat().resolvedOptions().timeZone} : {})});
       $('#videodlg').close();
       await watchSaves();
-      status(later ? 'Uploading it to Zernio to post at that time; the corner shows progress' : 'Posting; the corner shows progress');
+      status(later ? `Scheduling it for ${$('#vsay').textContent.replace(/^Posts /, '')}; the corner shows progress` : 'Posting; the corner shows progress');
     });
   }
 };

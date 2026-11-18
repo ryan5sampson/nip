@@ -761,6 +761,19 @@ class Handler(BaseHTTPRequestHandler):
                         except ValueError as e:
                             print(f"stats: {vid}: {e}")
                     self.send_json({"updated": done})
+            elif p == ["api", "videos", "reschedule"]:
+                when, zone = body.get("when"), body.get("zone")
+                if not (isinstance(when, str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d", when) and isinstance(zone, str) and zone):
+                    raise ValueError("a time looks like 2026-11-17T09:00, with a time zone")
+                self.send_json(post.reschedule(body.get("id"), f"{when}:00", zone))
+            elif p == ["api", "videos", "cancel"]:
+                self.send_json({"cancelled": post.cancel(body.get("id"))})
+            elif p == ["api", "videos", "post-now"]:
+                vid = body.get("id")
+                v = cli.video_path(vid)
+                job = video_job(f"post:{v.name}", v.name, lambda progress: post.post_now(vid, progress))
+                job["posting"] = True
+                self.send_json(job)
             elif p == ["api", "videos", "settle"]:  # scheduled posts that have gone live move to Posted
                 moved = 0
                 for vid in post.waiting():

@@ -917,6 +917,19 @@ class Robustness(unittest.TestCase):
                     self.assertEqual(post.stats("Posted/Toss")["tiktok"]["views"], 6696)
                     self.assertEqual(asked.call_count, 1)  # under an hour old: kept, not asked again
                     self.assertEqual(post.stats_due(), [])
+                self.assertEqual(post.results({"status": "scheduled", "scheduledFor": "2026-11-19T00:00:00.000Z", "platforms": [{"platform": "tiktok", "status": "pending"}]}),
+                                 {"tiktok": {"status": "scheduled", "url": "", "error": "", "when": "2026-11-19T00:00:00.000Z"}})  # Zernio's "pending" on a scheduled post means scheduled
+                calls = []
+                fake = lambda method, path, body=None, idem=None: (calls.append((method, path, body)), (200, {"post": {"status": "scheduled", "scheduledFor": "2026-11-20T16:00:00.000Z", "platforms": [{"platform": "tiktok", "status": "pending"}]}}))[1]
+                cli.update_video(cli.video_path("Posted/Toss"), posts={"tiktok": {"status": "scheduled", "post": "s1", "when": "x"}, "instagram": {"status": "published", "post": "p0", "url": "u"}})
+                with mock.patch.object(post, "call", fake):
+                    moved = post.reschedule("Posted/Toss", "2026-11-20T09:00:00", "America/Denver")
+                    self.assertEqual((calls[-1], moved["tiktok"]["when"]), (("PUT", "/posts/s1", {"scheduledFor": "2026-11-20T09:00:00", "timezone": "America/Denver"}), "2026-11-20T16:00:00.000Z"))
+                    self.assertEqual(post.cancel("Posted/Toss"), ["tiktok"])
+                    self.assertEqual(calls[-1][:2], ("DELETE", "/posts/s1"))  # only what's scheduled: the live Instagram post is left alone
+                    self.assertEqual(list(cli.video_info(cli.video_path("Posted/Toss"))["posts"]), ["instagram"])
+                    with self.assertRaisesRegex(ValueError, "Nothing is scheduled"):
+                        post.reschedule("Posted/Toss", "2026-11-20T09:00:00", "America/Denver")
                 cli.update_video(cli.video_path("Posted/Toss"), reviewed=False)
                 with self.assertRaisesRegex(ValueError, "save its captions"):
                     post.publish("Posted/Toss")

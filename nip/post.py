@@ -93,7 +93,10 @@ def requests(info, title, accts, video, cover, when=None, zone=None):
 
 
 def results(post):
-    return {x["platform"]: {"status": x.get("status", ""), "url": x.get("platformPostUrl") or "", "error": x.get("errorMessage") or ""}
+    """Each platform's state. A scheduled post's platforms say "pending" (not yet sent), which here reads as scheduled, with its time."""
+    later = post.get("status") == "scheduled"
+    return {x["platform"]: {"status": "scheduled" if later and x.get("status") == "pending" else x.get("status", ""), "url": x.get("platformPostUrl") or "",
+                            "error": x.get("errorMessage") or "", **({"when": post["scheduledFor"]} if later and post.get("scheduledFor") else {})}
             for x in post.get("platforms", [])}
 
 
@@ -119,7 +122,7 @@ def publish(vid, when=None, zone=None, only=None, progress=lambda step, part: No
         try:
             got = call("POST", "/posts", body, idem)[1].get("post", {})
             for name, r in results(got).items():
-                posts[name] = {**r, "post": got.get("_id", ""), "when": when or ""}
+                posts[name] = {"when": when or "", **r, "post": got.get("_id", "")}
         except ValueError as e:  # one request failing still lets the other go
             for name in platforms:
                 posts[name] = {"status": "failed", "url": "", "error": str(e), "post": "", "when": when or ""}
@@ -140,6 +143,47 @@ def settle(vid):
     if p.parent == cli.VIDEOS / "Unposted" and any(x["status"] == "published" for x in posts.values()):
         return {"id": cli.move_video(cli.video_id(p), "Posted"), "posts": posts}
     return {"id": cli.video_id(p), "posts": posts}
+
+
+def scheduled(posts):
+    return {x["post"] for x in posts.values() if x.get("post") and x.get("status") in ("scheduled", "pending")}
+
+
+def reschedule(vid, when, zone):
+    """Move a scheduled post to another time."""
+    p = cli.video_path(vid)
+    posts = cli.video_info(p).get("posts", {})
+    ids = scheduled(posts)
+    if not ids:
+        raise ValueError("Nothing is scheduled for this video")
+    for post_id in ids:
+        got = call("PUT", f"/posts/{post_id}", {"scheduledFor": when, "timezone": zone})[1].get("post", {})
+        for name, r in results(got).items():
+            if name in posts:
+                posts[name] = {**posts[name], **r}
+    cli.update_video(p, posts=posts)
+    return posts
+
+
+def cancel(vid):
+    """Stop a scheduled post before it goes out. Zernio deletes it; nothing reaches the platforms."""
+    p = cli.video_path(vid)
+    posts = cli.video_info(p).get("posts", {})
+    ids = scheduled(posts)
+    for post_id in ids:
+        call("DELETE", f"/posts/{post_id}")
+    gone = [k for k, x in posts.items() if x.get("post") in ids]
+    cli.update_video(p, posts={k: x for k, x in posts.items() if k not in gone})
+    return gone
+
+
+def post_now(vid, progress=lambda step, part: None):
+    """A scheduled post, sent now instead: Zernio has no documented way to bring one forward, so it's cancelled and posted afresh."""
+    progress("Cancelling the scheduled post", .1)
+    platforms = cancel(vid)
+    if not platforms:
+        raise ValueError("Nothing is scheduled for this video")
+    return publish(vid, None, None, platforms, progress)
 
 
 def waiting():
