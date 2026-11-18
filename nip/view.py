@@ -948,7 +948,7 @@ def watch_inbox():
 def serve(port=8765):
     cli.INBOX.mkdir(parents=True, exist_ok=True)
     if cli.WORK.is_dir():  # with Drive not running, making it would only confuse it
-        for d in (cli.LIBRARY, cli.EXPORTS, cli.BRAND):
+        for d in (cli.LIBRARY, cli.EXPORTS, cli.BRAND, cli.MUSIC):
             d.mkdir(parents=True, exist_ok=True)
         if not (cli.DATA / "About this folder.txt").exists():
             (cli.DATA / "About this folder.txt").write_text("Footage Flow keeps its working files here: your original footage, edits, ideas and drafts. "
