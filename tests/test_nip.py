@@ -522,6 +522,12 @@ class Viewer(unittest.TestCase):
                             post(f"/api/story/p/{s['id']}", {"action": "update", "finish": bad})
                     with self.assertRaises(urllib.error.HTTPError):
                         get("/music/..%2Fp%2Fproject.json")
+                cover = {"stem": "v", "at": 1.5, "text": "Look at this", "ok": True}
+                s = json.loads(post(f"/api/story/p/{s['id']}", {"action": "update", "cover": cover}).read())["stories"][-1]
+                self.assertEqual((s["cover"], s["finish"]["hook"]), (cover, "Watch this"))  # saved beside, not instead of, the rest
+                for bad in ({**cover, "stem": "nope"}, {**cover, "at": dur + 9}, {**cover, "text": "x" * 200}):
+                    with self.assertRaises(urllib.error.HTTPError):
+                        post(f"/api/story/p/{s['id']}", {"action": "update", "cover": bad})
                 self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "uncut", "start": 3.0}).read())["clips"][0]["redo"], 0)  # a new edit ends redo
                 for act in ("undo", "undo", "redo", "redo"):
                     post("/api/cuts/p/v", {"action": act})
@@ -778,6 +784,15 @@ class Export(unittest.TestCase):
                                       capture_output=True, text=True, check=True).stdout.strip()
                 self.assertEqual(size, "1080,1920")  # portrait source scaled to the social size
                 self.assertEqual(sorted(f.name for f in (cli.EXPORTS / proj.name).glob(".*")), [])
+                if Path(cli.FINISHER).exists():  # a cover: a frame from inside the edit, its title drawn on, full size
+                    with mock.patch.multiple(cli, HOME=d, LOOK=d / "look.json"):
+                        pick = cli.pick_cover(proj, story)
+                        self.assertTrue(any(p["stem"] == pick["stem"] and p["start"] <= pick["at"] <= p["end"] for p in story["pieces"]), pick)
+                        cover = cli.cover_image(proj, pick["stem"], pick["at"], "Demo day wins", d / "c.jpg")
+                        size = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(cover)],
+                                              capture_output=True, text=True, check=True).stdout.strip()
+                        self.assertEqual(size, "1080,1920")
+                        self.assertEqual([f.name for f in d.glob("*.ass")], [])  # its subtitle file is cleaned up
 
 
 class Robustness(unittest.TestCase):

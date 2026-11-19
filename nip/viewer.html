@@ -330,6 +330,11 @@
   #vidpanel .actions-line { margin: 0; flex-wrap: wrap; }
   #vpieces .row.sel { box-shadow: inset 0 0 0 2px var(--accent); border-radius: 7px; }
   #vidstrip .tk { cursor: pointer; }
+  .vcover { display: flex; gap: 10px; align-items: flex-start; padding: 4px; border-radius: 9px; }
+  .vcover.need { box-shadow: 0 0 0 2px var(--yellow); }
+  .vcovercol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .vcovercol .field { margin: 0; }
+  #vcoverimg { width: 108px; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
   .deck { grid-column: 1 / -1; grid-row: 2; min-width: 0; border-top: .5px solid var(--separator); background: var(--window); }
   .deck :is(#timeline, #vidstrip) { margin: 8px 12px; }
   .deck #gapinfo { margin: 0 12px 10px; }
@@ -613,6 +618,16 @@
           <div class="field"><label>On-screen captions</label><div class="seg" id="vcaps" role="group" aria-label="On-screen captions"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div></div>
           <div class="field"><label>Music</label><div class="ipicks" id="vmusic"></div></div>
           <div class="field" id="vvolrow"><label for="vvol">Music volume</label><input type="range" id="vvol" min="0" max="60" step="1"></div>
+          <h4 style="font-size:11px;font-weight:600;color:var(--secondary);margin:10px 2px 0">Cover</h4>
+          <div class="vcover">
+            <img id="vcoverimg" alt="The video's cover">
+            <div class="vcovercol">
+              <div class="field"><label for="vcovertext">Cover title, 3 to 6 words</label><input type="text" id="vcovertext" maxlength="100" placeholder="Leave empty for none"></div>
+              <div class="field"><label for="vcovery">Title height: keep it off your face</label><input type="range" id="vcovery" min="15" max="85" step="1"></div>
+              <div class="actions-line"><button type="button" class="btn" id="vcoverframe" title="Use the frame under the playhead">Use This Frame</button><button type="button" class="btn" id="vcoverauto" title="Pick a sharp frame from the opening again">Pick for Me</button></div>
+              <button type="button" class="btn" id="vcoverok" title="The cover is right; Finish Video waits for this">Looks Good</button>
+            </div>
+          </div>
           <div class="actions-line"><button type="button" class="btn" data-fopen="music">Music Folder</button><button type="button" class="btn" data-fopen="look" title="Font, colors, where captions sit. Changes show here when you come back.">Text Look</button><span class="grow"></span>
             <button type="button" class="btn default" id="vfinish" title="Render it as you see and hear it here; it lands in Videos with post captions"><svg class="i"><use href="#i-check"/></svg>Finish Video</button></div>
         </div>
@@ -1960,7 +1975,7 @@ const takeAt = t => clip().edit.takes.findIndex(x => !x.mine && x.start <= t && 
 
 // ---------- video mode: a video made from this footage, with its own cuts; the footage's clips stay as they are ----------
 let vid = null, vidStart = false, vidSel = 0, vidHist = [];  // vid: the edit (story) being made into a video
-let look = null, tracks = [], vwords = [], vchunks = [], vlen = 0, capKey = '';
+let look = null, tracks = [], vwords = [], vchunks = [], vlen = 0, capKey = '', coverStamp = '';
 const music = new Audio();
 const vfin = () => ({hook: '', captions: true, music: '', volume: null, ...vstory()?.finish});
 const capFamily = () => `"${look.font}","Avenir Next",sans-serif`, capWeight = () => /heavy|black/i.test(look.font) ? 800 : look.bold ? 700 : 500;
@@ -1968,12 +1983,14 @@ async function vidLook() {  // the Text Look and the music folder, read again on
   [look, tracks] = await Promise.all([api('/api/look'), api('/api/music')]).catch(e => (status(e.message, true), [look, tracks]));
   const m = Object.assign(document.createElement('canvas').getContext('2d'), {font: `${capWeight()} 100px ${capFamily()}`}).measureText('Hg');
   look.em = 100 / (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent) || 1;  // the burner sizes text by the font's full height, CSS by its em
+  coverStamp = `&l=${Date.now()}`;  // a changed Text Look redraws the cover
   capKey = '';
   if (vid) drawVid();
 }
 addEventListener('focus', () => vid && vidLook());
 const vidSet = changes => run($('#vidpanel'), 'Saving…', async () => {
   show(await api(`/api/story/${enc(proj)}/${vid}`, {action: 'update', finish: {...vfin(), hook: $('#vhook').value, ...changes}}));
+  status('Saved');
 });
 function vidOverlay(T, on) {  // the same lines, timing and look as caption_ass() in cli.py
   const cv = $('#capview');
@@ -2048,6 +2065,13 @@ function drawVid() {
     + (tracks.length ? '' : '<p class="hint">Put royalty-free tracks in Brand/Music to choose from.</p>');
   $('#vvol').value = Math.round(100 * (f.volume ?? look?.music_volume ?? .2));
   $('#vvolrow').hidden = !f.music;
+  const c = s.cover;  // the image is drawn by the server exactly as it will be saved; its URL changes with the cover
+  if (c) $('#vcoverimg').src = `/cover/${enc(proj)}/${vid}?${enc(JSON.stringify(c))}${coverStamp}`; else $('#vcoverimg').removeAttribute('src');
+  if (document.activeElement !== $('#vcovertext')) $('#vcovertext').value = c?.text || '';
+  $('#vcovery').value = Math.round(100 * (c?.y ?? look?.cover_center ?? .4));
+  $('#vcoverok').innerHTML = c?.ok ? `${icon('check')}Looks Good` : 'Looks Good';
+  $('#vcoverok').classList.toggle('default', !c?.ok);
+  if (c?.ok) document.querySelector('.vcover').classList.remove('need');
   const src = f.music ? '/music/' + enc(f.music) : '';
   if (music.dataset.src !== src) { music.pause(); music.dataset.src = src; src ? music.src = src : music.removeAttribute('src'); }
   vidSel = Math.min(vidSel, s.pieces.length - 1);
@@ -2073,6 +2097,7 @@ function vidHead(t) {
 function vidOpen(id) {
   vid = id; vidSel = 0; vidHist = [];
   vidLook();
+  if (!vstory()?.cover) coverAuto();
   stopPlaying(); video.pause();
   show(data);
   const p = vidList()[0];
@@ -2158,12 +2183,26 @@ $('#vname').onchange = () => $('#vname').value.trim() && run($('#vname'), 'Savin
   status('Named');
 });
 $('#vhook').oninput = () => capKey = '';
-$('#vhook').onchange = () => vidSet({});
+$('#vhook').onchange = () => {
+  const c = vstory()?.cover, was = vfin().hook || vstory()?.title;
+  vidSet({}).then(() => c && !c.ok && c.text === was && $('#vhook').value.trim() && coverSet({text: $('#vhook').value.trim()}));
+};
 $('#vcaps').onclick = e => { const b = e.target.closest('button'); if (b) { segSet($('#vcaps'), b.dataset.v); vidSet({captions: b.dataset.v === 'on'}); } };
 $('#vmusic').onclick = e => { const b = e.target.closest('[data-track]'); if (b) vidSet({music: b.dataset.track, volume: null}); };
 $('#vvol').onchange = () => vidSet({volume: $('#vvol').value / 100});
 $('#vidpanel').addEventListener('click', e => { const b = e.target.closest('[data-fopen]'); if (b) api('/api/open', {what: b.dataset.fopen}).catch(err => status(err.message, true)); });
-$('#vfinish').onclick = e => run(e.currentTarget, 'Starting…', async () => {
+const coverSet = changes => run($('#vidpanel'), 'Saving…', async () => {
+  show(await api(`/api/story/${enc(proj)}/${vid}`, {action: 'update', cover: {...vstory().cover, text: $('#vcovertext').value, ok: false, ...changes}}));
+  status(vstory().cover.ok ? 'Cover OK’d' : 'Cover updated');
+});
+const coverAuto = () => run($('#vcoverauto'), 'Picking a cover…', async () => { show(await api(`/api/story/${enc(proj)}/${vid}`, {action: 'cover-auto'})); status('Picked a cover. Check it, then press Looks Good'); });
+$('#vcovertext').onchange = () => vstory()?.cover && coverSet({});
+$('#vcoverframe').onclick = () => { const {i} = vidAt(); i < 0 ? status('Move the playhead onto a piece of the video first', true) : coverSet({stem: clip().stem, at: video.currentTime}); };
+$('#vcoverauto').onclick = coverAuto;
+$('#vcovery').onchange = () => vstory()?.cover && coverSet({y: $('#vcovery').value / 100});
+$('#vcoverok').onclick = () => vstory()?.cover && coverSet({ok: !vstory().cover.ok});
+$('#vfinish').onclick = e => !vstory()?.cover?.ok ? (document.querySelector('.vcover').classList.add('need'), document.querySelector('.vcover').scrollIntoView({block: 'center', behavior: 'smooth'}),
+  status('Check the cover, then press Looks Good', true)) : run(e.currentTarget, 'Starting…', async () => {
   video.pause();
   await api('/api/videos/from-edit', {project: proj, story: vid, finish: {...vfin(), hook: $('#vhook').value, captions: segGet($('#vcaps')) === 'on'}});
   await watchSaves();

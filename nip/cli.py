@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import date
@@ -36,7 +37,8 @@ LOOK_START = {  # captions and the hook title, sized for a 1080 x 1920 frame; Br
     "size": 100, "color": "#FFFFFF", "highlight": "#C6F432", "pop": True,  # the word being said, in the brand's green, a touch bigger as it lands
     "outline": "#000000", "outline_size": 6, "shadow": 2,
     "position": 0.65, "side_margin": 110,  # bottom of the text at 65% down, clear of the apps' buttons, name and caption below and on the right
-    "words_at_once": 3, "hook_size": 92, "hook_top": 300, "hook_seconds": 3, "music_volume": 0.2}
+    "words_at_once": 3, "hook_size": 92, "hook_top": 300, "hook_seconds": 3, "music_volume": 0.2,
+    "cover_size": 140, "cover_center": 0.4}  # the cover title: big, in the middle 3:4 the profile grids show
 LOOK_HELP = {  # written into the file beside the settings, so it explains itself
     "font": "Any font on this Mac, or one you put in Brand/Fonts. Bold, simple sans-serif fonts read best on a phone.",
     "bold": "true to make the font bolder; leave false for a font that's already heavy, like Avenir Next Heavy.",
@@ -49,7 +51,8 @@ LOOK_HELP = {  # written into the file beside the settings, so it explains itsel
     "side_margin": "Space kept clear on each side, in pixels. TikTok's buttons take about 120 on the right.",
     "words_at_once": "How many words show at a time. 2 to 4 keeps it to one line.",
     "hook_size / hook_top / hook_seconds": "The title at the start: its size, how far from the top (TikTok and Instagram cover about the top 200), and how long it shows.",
-    "music_volume": "Music loudness under your voice, from 0 to 1. It also dips while you talk."}
+    "music_volume": "Music loudness under your voice, from 0 to 1. It also dips while you talk.",
+    "cover_size / cover_center": "The cover's title: its size, and how far down its middle sits, from 0 (top) to 1 (bottom). Profile grids show only the middle of a cover, about 0.12 to 0.88, and the apps' buttons cover the bottom, so 0.35 to 0.5 is safe. Three to six words read best."}
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = BRAND / "Vocabulary.txt"
@@ -910,10 +913,61 @@ def ass_color(hex_color):
     return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}&".upper()  # ASS writes colors blue, green, red
 
 
+def ass_text(s, look):
+    return (s.upper() if look.get("uppercase") else s).replace("\\", "").replace("{", "(").replace("}", ")")
+
+
+def cover_image(proj, stem, at, text, out, width=1080, y=None):
+    """A cover: a frame of the footage with its title drawn big in the Text Look, where the apps' grids and buttons leave it whole."""
+    if not Path(FINISHER).exists():
+        raise RuntimeError("Making covers needs the fuller ffmpeg: run `brew install ffmpeg-full`, then try again")
+    look, src = video_look(), proj / "raw" / load(proj / f"{stem}.nip.json")["source"]
+    vf = f"scale={width}:-2"
+    with tempfile.NamedTemporaryFile("w", suffix=".ass", dir=HOME, delete=False) as ass:  # previews can be drawn at the same time
+        ass.write("\n".join(["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0", "",
+                              "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
+                              f"Style: Cover,{look['font']},{look['cover_size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,{look['outline_size'] * 1.5},{look['shadow'] * 2},5,{look['side_margin']},{look['side_margin']},0", "",
+                              "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+                              f"Dialogue: 0,0:00:00.00,0:01:00.00,Cover,,0,0,0,,{{\\pos(540,{round(1920 * (look['cover_center'] if y is None else y))})}}{ass_text(text.strip(), look)}", ""]))
+    try:
+        if text.strip():
+            vf += f",subtitles=filename='{ass.name}'" + (f":fontsdir='{BRAND / 'Fonts'}'" if (BRAND / "Fonts").is_dir() else "")
+        subprocess.run([FINISHER, "-v", "error", "-y", "-ss", f"{at:.3f}", "-i", str(src), "-frames:v", "1", "-vf", vf, "-q:v", "2", str(out)], check=True)
+    finally:
+        os.unlink(ass.name)
+    return out
+
+
+def pick_cover(proj, story, n=10):
+    """A frame for an automatic cover: a moment you're talking (your face is likely on camera), the sharpest of those, leaning to the opening (the hook)."""
+    # shortcut: JPEG size stands in for sharpness (a blurry frame compresses smaller); upgrade to a face and expression check if picks look off
+    from concurrent.futures import ThreadPoolExecutor
+    length, said = sum(p["end"] - p["start"] for p in story["pieces"]), story_words(proj, story)
+    srcs = {p["stem"]: proj / "raw" / load(proj / f"{p['stem']}.nip.json")["source"] for p in story["pieces"]}
+    picks = []
+    for k in range(n):
+        t, at = length * (k + .5) / n, 0.0
+        for p in story["pieces"]:
+            if t < at + p["end"] - p["start"] or p is story["pieces"][-1]:
+                picks.append((t, p["stem"], min(p["start"] + t - at, p["end"] - .05)))
+                break
+            at += p["end"] - p["start"]
+    with tempfile.TemporaryDirectory(dir=HOME) as d:
+        def score(k):
+            t, stem, src_t = picks[k]
+            f = Path(d) / f"{k}.jpg"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{src_t:.3f}", "-i", str(srcs[stem]), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "3", str(f)], check=True)
+            return f.stat().st_size * (1.2 if t < length / 3 else 1) * (2.5 if any(w["start"] - .2 <= t <= w["end"] + .3 for w in said) else 1)  # a busy scene compresses big too: talking must outweigh it
+        with ThreadPoolExecutor(4) as pool:
+            scores = list(pool.map(score, range(len(picks))))
+    _, stem, src_t = picks[scores.index(max(scores))]
+    return {"stem": stem, "at": round(src_t, 3)}
+
+
 def caption_ass(words, look, hook="", duration=0.0):
     """Subtitles for burning in: a few words at a time, the one being said in the highlight color, and a hook title up top."""
     t = lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{s % 60:05.2f}"
-    clean = lambda s: (s.upper() if look.get("uppercase") else s).replace("\\", "").replace("{", "(").replace("}", ")")
+    clean = lambda s: ass_text(s, look)
     lines = ["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0", "",
              "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
              f"Style: Words,{look['font']},{look['size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,{look['outline_size']},{look['shadow']},2,{look['side_margin']},{look['side_margin']},{round(1920 * (1 - look['position']))}",

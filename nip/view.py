@@ -152,6 +152,24 @@ def clean_finish(fin):
     return {"hook": fin.get("hook", ""), "captions": fin.get("captions", True) is not False, "music": music, "volume": volume}
 
 
+def clean_cover(proj, c):
+    """A video's cover from the page: a moment of the footage, its title, and whether you've OK'd it."""
+    if not isinstance(c, dict) or not isinstance(c.get("text", ""), str) or len(c.get("text", "")) > 100:
+        raise ValueError("cover text is up to 100 characters")
+    if c.get("stem") not in cli.load(proj / "project.json")["clips"]:
+        raise ValueError("that frame isn't in this footage")
+    try:
+        at = float(c["at"])
+    except (TypeError, KeyError, ValueError):
+        raise ValueError("a cover needs a moment of the footage")
+    if not 0 <= at <= cli.load(proj / f"{c['stem']}.nip.json")["duration"]:
+        raise ValueError("that frame isn't in this footage")
+    y = c.get("y")
+    if y is not None and (not isinstance(y, (int, float)) or not .1 <= y <= .9):
+        raise ValueError("the cover title sits from 0.1 to 0.9 down")
+    return {"stem": c["stem"], "at": round(at, 3), "text": c.get("text", ""), "ok": c.get("ok") is True, "y": y}
+
+
 def edited(proj, clips=True):
     """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing. Completed footage stays
     in Completed, marked unsaved until its new clips replace the old ones in the library. clips=False: this edit left them alone."""
@@ -441,6 +459,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"connected": True, "accounts": [], "error": str(e)})
             elif p == ["api", "look"]:
                 self.send_json(cli.video_look())
+            elif len(p) == 3 and p[0] == "cover":  # a video's cover as it will be, drawn smaller to look at
+                proj = self.project(p[1])
+                story = next((s for s in cli.load(proj / "project.json").get("stories", []) if str(s["id"]) == p[2] and s.get("cover")), None)
+                if story is None:
+                    raise FileNotFoundError
+                c = story["cover"]
+                f = cli.HOME / f".cover-{hashlib.sha1(f'{proj.name}/{p[2]}'.encode()).hexdigest()[:12]}.jpg"
+                self.send_file(cli.cover_image(proj, c["stem"], c["at"], c["text"], f, 540, c.get("y")), "image/jpeg")
             elif len(p) == 2 and p[0] == "music":  # a track to hear while making a video
                 f = cli.MUSIC / Path(p[1]).name
                 if not f.is_file():
@@ -644,18 +670,29 @@ class Handler(BaseHTTPRequestHandler):
                 elif body.get("action") == "update":  # the video's own cuts, order, captions and music; the footage's clips stay as they are
                     pieces = clean_pieces(proj, body["pieces"]) if "pieces" in body else None
                     fin = clean_finish(body["finish"]) if "finish" in body else None
+                    cover = clean_cover(proj, body["cover"]) if "cover" in body else None
                     with LOCK:
                         info = cli.load(proj / "project.json")
                         for s in info["stories"]:
                             if s["id"] == story["id"]:
                                 s["pieces"] = pieces or s["pieces"]
                                 s["finish"] = fin or s.get("finish")
+                                s["cover"] = cover or s.get("cover")
                                 if isinstance(body.get("title"), str) and body["title"].strip():
                                     s["title"] = body["title"].strip()[:120]
                         cli.save(proj / "project.json", info)
                     self.send_json(edited(proj, False))
+                elif body.get("action") == "cover-auto":  # a cover picked for you, with the hook as its title, waiting for your OK
+                    pick = cli.pick_cover(proj, story)
+                    with LOCK:
+                        info = cli.load(proj / "project.json")
+                        for s in info["stories"]:
+                            if s["id"] == story["id"]:
+                                s["cover"] = {**pick, "text": (s.get("finish") or {}).get("hook") or s["title"], "ok": False}
+                        cli.save(proj / "project.json", info)
+                    self.send_json(edited(proj, False))
                 else:
-                    raise ValueError("action must be export, update or delete")
+                    raise ValueError("action must be export, update, cover-auto or delete")
             elif len(p) == 3 and p[:2] == ["api", "stage"]:  # the user moves footage to any stage
                 proj = self.project(p[2])
                 if body.get("stage") not in cli.STAGES:
@@ -760,7 +797,11 @@ class Handler(BaseHTTPRequestHandler):
                                           fin["hook"], music, fin["captions"], fin["volume"])
                         video.unlink()
                         video = done
+                        if story.get("cover"):  # beside the video, named the way new_draft() picks covers up
+                            c = story["cover"]
+                            cli.cover_image(proj, c["stem"], c["at"], c["text"], video.with_name(f"{video.stem}-Cover.jpg"), y=c.get("y"))
                     p = cli.new_draft(story["title"], video, [info["library_folder"]] if info.get("library_folder") else [], move=True)
+                    video.with_name(f"{video.stem}-Cover.jpg").unlink(missing_ok=True)  # copied into the draft
                     return cli.caption_video(p, "", progress)
                 with LOCK:  # Make Video opens a new video once this one is finished
                     info = cli.load(proj / "project.json")
