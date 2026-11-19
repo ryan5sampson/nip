@@ -121,6 +121,23 @@ def project_data(proj):
             "tags": info.get("my_tags", info["tags"]), "stories": info.get("stories", [])}
 
 
+def clean_pieces(proj, pieces):
+    """A video's pieces from the page: [{stem, start, end}], each inside one of this footage's videos."""
+    if not isinstance(pieces, list) or not 0 < len(pieces) <= 500:
+        raise ValueError("a video needs at least one piece")
+    info, out = cli.load(proj / "project.json"), []
+    lengths = {stem: cli.load(proj / f"{stem}.nip.json")["duration"] for stem in info["clips"]}
+    for x in pieces:
+        try:
+            stem, a, b = x["stem"], float(x["start"]), float(x["end"])
+        except (TypeError, KeyError, ValueError):
+            raise ValueError("each piece needs a video, a start and an end")
+        if stem not in lengths or not 0 <= a < b <= lengths[stem] + 0.05:
+            raise ValueError("a piece is outside its video")
+        out.append({"stem": stem, "start": round(a, 3), "end": round(min(b, lengths[stem]), 3)})
+    return out
+
+
 def edited(proj, clips=True):
     """The project after an edit by hand or by NIP; the first edit moves Inbox footage to Processing. Completed footage stays
     in Completed, marked unsaved until its new clips replace the old ones in the library. clips=False: this edit left them alone."""
@@ -578,6 +595,17 @@ class Handler(BaseHTTPRequestHandler):
                     stories.append(story)
                     cli.save(proj / "project.json", info)
                 self.send_json(edited(proj, False))
+            elif p[:2] == ["api", "story"] and p[3:] == ["new"]:  # a video made by hand from this footage
+                proj = self.project(p[2])
+                pieces = clean_pieces(proj, body.get("pieces"))
+                with LOCK:
+                    info = cli.load(proj / "project.json")
+                    stories = info.setdefault("stories", [])
+                    stories.append({"id": max((s["id"] for s in stories), default=0) + 1, "created": time.time(),
+                                    "title": str(body.get("title") or "")[:120] or info.get("my_description") or info["description"] or proj.name,
+                                    "brief": "", "note": "Made by hand", "pieces": pieces})
+                    cli.save(proj / "project.json", info)
+                self.send_json(edited(proj, False))
             elif len(p) == 4 and p[:2] == ["api", "story"]:
                 proj = self.project(p[2])
                 info = cli.load(proj / "project.json")
@@ -592,8 +620,19 @@ class Handler(BaseHTTPRequestHandler):
                         info["stories"] = [s for s in info["stories"] if s["id"] != story["id"]]
                         cli.save(proj / "project.json", info)
                     self.send_json(edited(proj, False))
+                elif body.get("action") == "update":  # the video's own cuts and order; the footage's clips stay as they are
+                    pieces = clean_pieces(proj, body.get("pieces"))
+                    with LOCK:
+                        info = cli.load(proj / "project.json")
+                        for s in info["stories"]:
+                            if s["id"] == story["id"]:
+                                s["pieces"] = pieces
+                                if isinstance(body.get("title"), str) and body["title"].strip():
+                                    s["title"] = body["title"].strip()[:120]
+                        cli.save(proj / "project.json", info)
+                    self.send_json(edited(proj, False))
                 else:
-                    raise ValueError("action must be export or delete")
+                    raise ValueError("action must be export, update or delete")
             elif len(p) == 3 and p[:2] == ["api", "stage"]:  # the user moves footage to any stage
                 proj = self.project(p[2])
                 if body.get("stage") not in cli.STAGES:
@@ -705,6 +744,12 @@ class Handler(BaseHTTPRequestHandler):
                         video = done
                     p = cli.new_draft(story["title"], video, [info["library_folder"]] if info.get("library_folder") else [], move=True)
                     return cli.caption_video(p, "", progress)
+                with LOCK:  # Make Video opens a new video once this one is finished
+                    info = cli.load(proj / "project.json")
+                    for s in info.get("stories", []):
+                        if s["id"] == story["id"]:
+                            s["finished"] = time.time()
+                    cli.save(proj / "project.json", info)
                 self.send_json(video_job(f"{proj.name}/{story['id']}", story["title"], work))
             elif p == ["api", "videos", "add"]:  # finished in CapCut, and given to Footage Flow to caption
                 jobs = []

@@ -498,6 +498,17 @@ class Viewer(unittest.TestCase):
                 self.assertEqual(mine(json.loads(post("/api/cuts/p/v", {"action": "undo"}).read())), base)
                 d2 = json.loads(post("/api/cuts/p/v", {"action": "redo"}).read())
                 self.assertEqual((mine(d2), d2["clips"][0]["redo"]), ((after[0], base[1]), 1))
+                # a video made by hand: its own pieces, cut and reordered, while the footage's edit stays as it was
+                before = cli.decisions(cli.load(lib / "p" / "v.nip.json"))
+                s = json.loads(post("/api/story/p/new", {"pieces": [{"stem": "v", "start": 0.5, "end": 2.0}]}).read())["stories"][-1]
+                self.assertEqual((s["pieces"], s["note"]), ([{"stem": "v", "start": 0.5, "end": 2.0}], "Made by hand"))
+                two = [{"stem": "v", "start": 1.2, "end": 2.0}, {"stem": "v", "start": 0.5, "end": 1.2}]
+                s = json.loads(post(f"/api/story/p/{s['id']}", {"action": "update", "pieces": two, "title": "Mine"}).read())["stories"][-1]
+                self.assertEqual((s["pieces"], s["title"]), (two, "Mine"))
+                for bad in ([], [{"stem": "nope", "start": 0, "end": 1}], [{"stem": "v", "start": 2, "end": 1}], [{"stem": "v", "start": 0, "end": dur + 5}]):
+                    with self.assertRaises(urllib.error.HTTPError):
+                        post(f"/api/story/p/{s['id']}", {"action": "update", "pieces": bad})
+                self.assertEqual(cli.decisions(cli.load(lib / "p" / "v.nip.json")), before)
                 self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "uncut", "start": 3.0}).read())["clips"][0]["redo"], 0)  # a new edit ends redo
                 for act in ("undo", "undo", "redo", "redo"):
                     post("/api/cuts/p/v", {"action": act})
