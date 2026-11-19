@@ -522,10 +522,10 @@ class Viewer(unittest.TestCase):
                             post(f"/api/story/p/{s['id']}", {"action": "update", "finish": bad})
                     with self.assertRaises(urllib.error.HTTPError):
                         get("/music/..%2Fp%2Fproject.json")
-                cover = {"stem": "v", "at": 1.5, "text": "Look at this", "ok": True}
+                cover = {"stem": "v", "at": 1.5, "text": "Look at this", "ok": True, "y": 0.3}
                 s = json.loads(post(f"/api/story/p/{s['id']}", {"action": "update", "cover": cover}).read())["stories"][-1]
                 self.assertEqual((s["cover"], s["finish"]["hook"]), (cover, "Watch this"))  # saved beside, not instead of, the rest
-                for bad in ({**cover, "stem": "nope"}, {**cover, "at": dur + 9}, {**cover, "text": "x" * 200}):
+                for bad in ({**cover, "stem": "nope"}, {**cover, "at": dur + 9}, {**cover, "text": "x" * 200}, {**cover, "y": 0.99}):
                     with self.assertRaises(urllib.error.HTTPError):
                         post(f"/api/story/p/{s['id']}", {"action": "update", "cover": bad})
                 self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "uncut", "start": 3.0}).read())["clips"][0]["redo"], 0)  # a new edit ends redo
