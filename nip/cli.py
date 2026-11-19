@@ -938,7 +938,7 @@ def caption_ass(words, look, hook="", duration=0.0):
     return "\n".join(lines) + "\n"
 
 
-def finish(video, words, out, hook="", music=None, captions=True):
+def finish(video, words, out, hook="", music=None, captions=True, music_volume=None):
     """A finished video: captions and a hook title drawn on, music under the voice, and the loudness evened out for the platforms."""
     if not Path(FINISHER).exists():
         raise RuntimeError("Finishing videos needs the fuller ffmpeg: run `brew install ffmpeg-full`, then try again")
@@ -950,7 +950,7 @@ def finish(video, words, out, hook="", music=None, captions=True):
     fonts = f":fontsdir='{BRAND / 'Fonts'}'" if (BRAND / "Fonts").is_dir() else ""
     graph = f"[0:v]subtitles=filename='{ass}'{fonts}[v];"
     if music:
-        graph += (f"[1:a]volume={look['music_volume']},afade=t=out:st={max(duration - 2, 0):.2f}:d=2[m];"
+        graph += (f"[1:a]volume={look['music_volume'] if music_volume is None else music_volume},afade=t=out:st={max(duration - 2, 0):.2f}:d=2[m];"
                   "[m][0:a]sidechaincompress=threshold=0.04:ratio=6:attack=20:release=500[duck];"  # the music dips while there's talking
                   "[0:a][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5[a]")
     else:

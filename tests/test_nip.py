@@ -509,6 +509,19 @@ class Viewer(unittest.TestCase):
                     with self.assertRaises(urllib.error.HTTPError):
                         post(f"/api/story/p/{s['id']}", {"action": "update", "pieces": bad})
                 self.assertEqual(cli.decisions(cli.load(lib / "p" / "v.nip.json")), before)
+                # its captions and music are saved with it, and the track can be heard in the page
+                (Path(d) / "music").mkdir()
+                (Path(d) / "music" / "song.mp3").write_bytes(b"ID3abc")
+                with mock.patch.object(cli, "MUSIC", Path(d) / "music"):
+                    fin = {"hook": "Watch this", "captions": False, "music": "song.mp3", "volume": 0.3}
+                    s = json.loads(post(f"/api/story/p/{s['id']}", {"action": "update", "finish": fin}).read())["stories"][-1]
+                    self.assertEqual((s["finish"], s["pieces"]), (fin, two))
+                    self.assertEqual(get("/music/song.mp3").read(), b"ID3abc")
+                    for bad in ({"music": "gone.mp3"}, {"volume": 2}, {"hook": "x" * 200}):
+                        with self.assertRaises(urllib.error.HTTPError):
+                            post(f"/api/story/p/{s['id']}", {"action": "update", "finish": bad})
+                    with self.assertRaises(urllib.error.HTTPError):
+                        get("/music/..%2Fp%2Fproject.json")
                 self.assertEqual(json.loads(post("/api/cuts/p/v", {"action": "uncut", "start": 3.0}).read())["clips"][0]["redo"], 0)  # a new edit ends redo
                 for act in ("undo", "undo", "redo", "redo"):
                     post("/api/cuts/p/v", {"action": act})

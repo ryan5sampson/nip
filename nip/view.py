@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -136,6 +137,19 @@ def clean_pieces(proj, pieces):
             raise ValueError("a piece is outside its video")
         out.append({"stem": stem, "start": round(a, 3), "end": round(min(b, lengths[stem]), 3)})
     return out
+
+
+def clean_finish(fin):
+    """A video's hook title, captions on or off, music track and its volume, from the page."""
+    if not isinstance(fin, dict) or not isinstance(fin.get("hook", ""), str) or len(fin.get("hook", "")) > 120:
+        raise ValueError("a hook title is up to 120 characters")
+    music = Path(str(fin.get("music") or "")).name
+    if music and not (cli.MUSIC / music).is_file():
+        raise ValueError("That track isn’t in Brand/Music anymore")
+    volume = fin.get("volume")
+    if volume is not None and (not isinstance(volume, (int, float)) or not 0 <= volume <= 1):
+        raise ValueError("music volume is from 0 to 1")
+    return {"hook": fin.get("hook", ""), "captions": fin.get("captions", True) is not False, "music": music, "volume": volume}
 
 
 def edited(proj, clips=True):
@@ -425,6 +439,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(post.setup())
                 except ValueError as e:  # a bad key or Zernio being down shouldn't hide the review screen
                     self.send_json({"connected": True, "accounts": [], "error": str(e)})
+            elif p == ["api", "look"]:
+                self.send_json(cli.video_look())
+            elif len(p) == 2 and p[0] == "music":  # a track to hear while making a video
+                f = cli.MUSIC / Path(p[1]).name
+                if not f.is_file():
+                    raise FileNotFoundError
+                self.send_file(f, mimetypes.guess_type(f.name)[0] or "audio/mpeg")
             elif p == ["api", "music"]:
                 self.send_json(sorted(f.name for f in cli.MUSIC.glob("[!.]*") if f.suffix.lower() in (".mp3", ".m4a", ".wav", ".aac", ".aif", ".aiff")) if cli.MUSIC.is_dir() else [])
             elif p == ["api", "videos"]:
@@ -620,13 +641,15 @@ class Handler(BaseHTTPRequestHandler):
                         info["stories"] = [s for s in info["stories"] if s["id"] != story["id"]]
                         cli.save(proj / "project.json", info)
                     self.send_json(edited(proj, False))
-                elif body.get("action") == "update":  # the video's own cuts and order; the footage's clips stay as they are
-                    pieces = clean_pieces(proj, body.get("pieces"))
+                elif body.get("action") == "update":  # the video's own cuts, order, captions and music; the footage's clips stay as they are
+                    pieces = clean_pieces(proj, body["pieces"]) if "pieces" in body else None
+                    fin = clean_finish(body["finish"]) if "finish" in body else None
                     with LOCK:
                         info = cli.load(proj / "project.json")
                         for s in info["stories"]:
                             if s["id"] == story["id"]:
-                                s["pieces"] = pieces
+                                s["pieces"] = pieces or s["pieces"]
+                                s["finish"] = fin or s.get("finish")
                                 if isinstance(body.get("title"), str) and body["title"].strip():
                                     s["title"] = body["title"].strip()[:120]
                         cli.save(proj / "project.json", info)
@@ -725,13 +748,8 @@ class Handler(BaseHTTPRequestHandler):
                 if story is None:
                     raise FileNotFoundError
 
-                fin = body.get("finish")
-                if fin is not None:  # captions, a hook title and music, checked here before the minute of rendering
-                    if not isinstance(fin, dict) or not isinstance(fin.get("hook", ""), str) or len(fin.get("hook", "")) > 120:
-                        raise ValueError("a hook title is up to 120 characters")
-                    music = cli.MUSIC / Path(str(fin.get("music") or "")).name if fin.get("music") else None
-                    if music and not music.is_file():
-                        raise ValueError("That track isn’t in Brand/Music anymore")
+                fin = clean_finish(body["finish"]) if body.get("finish") is not None else None  # checked here before the minute of rendering
+                music = cli.MUSIC / fin["music"] if fin and fin["music"] else None
 
                 def work(progress):
                     progress("Rendering", .1)
@@ -739,7 +757,7 @@ class Handler(BaseHTTPRequestHandler):
                     if fin is not None:
                         progress("Adding captions and music", .3)
                         done = cli.finish(video, cli.story_words(proj, story), video.with_name(f"{video.stem} finished.mp4"),
-                                          fin.get("hook", ""), music, fin.get("captions", True) is not False)
+                                          fin["hook"], music, fin["captions"], fin["volume"])
                         video.unlink()
                         video = done
                     p = cli.new_draft(story["title"], video, [info["library_folder"]] if info.get("library_folder") else [], move=True)

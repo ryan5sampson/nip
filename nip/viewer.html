@@ -304,7 +304,11 @@
   /* project */
   /* the editor: transcript | vertical video | NIP, over an editing deck (controls, timeline, the open clip) */
   #project { display: grid; grid-template-columns: minmax(220px, 1fr) min(calc((100vh - 210px) * 9 / 16), 44vw) minmax(290px, 380px); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
-  .viewer { grid-column: 2; grid-row: 1; min-height: 0; background: #000; }
+  .viewer { grid-column: 2; grid-row: 1; min-height: 0; background: #000; position: relative; }
+  #capview { position: absolute; pointer-events: none; overflow: hidden; }  /* the finished video's captions, drawn as they'll be burned in */
+  #capview > div { position: absolute; left: 0; right: 0; text-align: center; line-height: normal; paint-order: stroke fill; overflow-wrap: break-word; }
+  #capview .cw.pop { display: inline-block; transform: scale(1.05); animation: cappop .12s ease-out; }
+  @keyframes cappop { from { transform: scale(1.15); } }
   .viewer video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
   .textcol { grid-column: 1; grid-row: 1; min-width: 0; overflow-y: auto; padding: 12px 16px 24px; background: var(--window); }
   .nip { grid-column: 3; grid-row: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; border-left: .5px solid var(--separator); background: var(--window); }
@@ -590,7 +594,7 @@
         </details>
         <div id="words"></div>
       </section>
-      <div class="viewer"><video id="video" playsinline preload="metadata"></video></div>
+      <div class="viewer"><video id="video" playsinline preload="metadata"></video><div id="capview" hidden><div class="hook"></div><div class="words"></div></div></div>
       <aside class="nip" aria-label="NIP">
         <div id="vidpanel">
           <div class="niphead"><svg class="i"><use href="#i-film"/></svg><b>Video</b><span class="hint num" id="vidlen"></span></div>
@@ -602,9 +606,15 @@
             <button type="button" class="btn" id="vafter" title="Cut the piece under the playhead from the playhead to its end (])">Cut After<kbd>]</kbd></button>
           </div>
           <div class="group" id="vpieces"></div>
-          <div class="actions-line"><button type="button" class="btn" id="vrestart" title="Put back all of the footage's kept clips, in order">Start Over</button><span class="grow"></span>
-            <button type="button" class="btn default" id="vfinish" title="Captions, a hook title and music, then it lands in Videos with post captions"><svg class="i"><use href="#i-check"/></svg>Finish Video…</button></div>
-          <p class="hint" style="margin:0">Space plays the video. X removes the piece under the playhead, ⌘Z undoes.</p>
+          <div class="actions-line"><button type="button" class="btn" id="vrestart" title="Put back all of the footage's kept clips, in order">Start Over</button></div>
+          <p class="hint" style="margin:0">Space plays the video, with its captions and music. X removes the piece under the playhead, ⌘Z undoes.</p>
+          <h4 style="font-size:11px;font-weight:600;color:var(--secondary);margin:10px 2px 0">Captions and Music</h4>
+          <div class="field"><label for="vhook">Hook title, for the first few seconds</label><input type="text" id="vhook" maxlength="120" placeholder="Leave empty for none"></div>
+          <div class="field"><label>On-screen captions</label><div class="seg" id="vcaps" role="group" aria-label="On-screen captions"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div></div>
+          <div class="field"><label>Music</label><div class="ipicks" id="vmusic"></div></div>
+          <div class="field" id="vvolrow"><label for="vvol">Music volume</label><input type="range" id="vvol" min="0" max="60" step="1"></div>
+          <div class="actions-line"><button type="button" class="btn" data-fopen="music">Music Folder</button><button type="button" class="btn" data-fopen="look" title="Font, colors, where captions sit. Changes show here when you come back.">Text Look</button><span class="grow"></span>
+            <button type="button" class="btn default" id="vfinish" title="Render it as you see and hear it here; it lands in Videos with post captions"><svg class="i"><use href="#i-check"/></svg>Finish Video</button></div>
         </div>
         <form id="nipform" autocomplete="off">
           <div class="niphead"><svg class="mark" aria-hidden="true"><use href="#nip"/></svg><b>NIP</b><span class="hint" id="claudehint"></span></div>
@@ -715,14 +725,6 @@
   <input type="text" id="handoffname" maxlength="80" required aria-label="Name of the video" placeholder="What’s the video?" style="width:100%;margin:10px 0 4px">
   <p class="hint">They’re copied to a new folder in Exports, numbered in the order you picked them.</p>
   <div class="actions-line"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn default" value="ok">Export</button></div>
-</form></dialog>
-<dialog id="finishdlg"><form method="dialog" onsubmit="return false">
-  <b>Finish Video</b>
-  <p>Footage Flow draws the captions and title on and mixes in the music, then drafts the post captions. It lands in Videos for you to watch and read.</p>
-  <div class="field"><label for="fhook">Hook title, for the first few seconds</label><input type="text" id="fhook" maxlength="120" placeholder="Leave empty for none"></div>
-  <div class="field"><label>On-screen captions</label><div class="seg" id="fcaps" role="group" aria-label="On-screen captions"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></div></div>
-  <div class="field"><label>Music</label><div class="ipicks" id="fmusic"></div></div>
-  <div class="actions-line"><button type="button" class="btn" data-fopen="music">Music Folder</button><button type="button" class="btn" data-fopen="look" title="Font, colors, where captions sit, and how loud the music is">Text Look</button><span class="grow" style="flex:1"></span><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button type="button" class="btn default" id="fgo">Finish</button></div>
 </form></dialog>
 <dialog id="afterdlg" style="width:min(460px, calc(100vw - 32px))"><form method="dialog" onsubmit="return false">
   <b>Your Video Is on Its Way</b>
@@ -1136,27 +1138,6 @@ $('#ideatable').ondrop = e => {
   document.querySelectorAll('.igroup.drop').forEach(x => x.classList.remove('drop'));
   if (id && to) moveIdea(id, to);
 };
-let finishing = null;  // the edit being finished
-async function finishEdit(s) {
-  finishing = s;
-  $('#fhook').value = s.title;
-  segSet($('#fcaps'), 'on');
-  const tracks = await api('/api/music').catch(() => []);
-  $('#fmusic').innerHTML = ['', ...tracks].map(t => `<button type="button" class="chip ${t ? '' : 'on'}" data-track="${esc(t)}">${t ? esc(t.replace(/\.[^.]+$/, '')) : 'No music'}</button>`).join('')
-    + (tracks.length ? '' : '<p class="hint">Put royalty-free tracks in Brand/Music to choose from.</p>');
-  $('#finishdlg').showModal();
-}
-$('#fcaps').onclick = e => { const b = e.target.closest('button'); if (b) segSet($('#fcaps'), b.dataset.v); };
-$('#fmusic').onclick = e => { const b = e.target.closest('[data-track]'); if (!b) return; $('#fmusic').querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === b)); };
-$('#finishdlg').addEventListener('click', e => { const b = e.target.closest('[data-fopen]'); if (b) api('/api/open', {what: b.dataset.fopen}).catch(err => status(err.message, true)); });
-$('#fgo').onclick = e => run(e.currentTarget, 'Starting…', async () => {
-  const finish = {hook: $('#fhook').value, captions: segGet($('#fcaps')) === 'on', music: $('#fmusic .chip.on')?.dataset.track || ''};
-  await api('/api/videos/from-edit', {project: proj, story: finishing.id, finish});
-  $('#finishdlg').close();
-  await watchSaves();
-  status('Finishing it and writing post captions; the corner shows when it’s ready');
-  if (vid && finishing.id === vid) { $('#aused').hidden = data.stage !== 'completed'; $('#afterdlg').showModal(); }
-});
 // ---------- inbox: comments and DMs, drafted in a batch, read and approved, then sent ----------
 const ago = t => { const m = (Date.now() - new Date(t)) / 6e4; return !t ? '' : m < 60 ? `${Math.max(1, Math.round(m))}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
 async function loadInbox(fresh) {
@@ -1979,12 +1960,61 @@ const takeAt = t => clip().edit.takes.findIndex(x => !x.mine && x.start <= t && 
 
 // ---------- video mode: a video made from this footage, with its own cuts; the footage's clips stay as they are ----------
 let vid = null, vidStart = false, vidSel = 0, vidHist = [];  // vid: the edit (story) being made into a video
+let look = null, tracks = [], vwords = [], vchunks = [], vlen = 0, capKey = '';
+const music = new Audio();
+const vfin = () => ({hook: '', captions: true, music: '', volume: null, ...vstory()?.finish});
+const capFamily = () => `"${look.font}","Avenir Next",sans-serif`, capWeight = () => /heavy|black/i.test(look.font) ? 800 : look.bold ? 700 : 500;
+async function vidLook() {  // the Text Look and the music folder, read again on coming back from changing them
+  [look, tracks] = await Promise.all([api('/api/look'), api('/api/music')]).catch(e => (status(e.message, true), [look, tracks]));
+  const m = Object.assign(document.createElement('canvas').getContext('2d'), {font: `${capWeight()} 100px ${capFamily()}`}).measureText('Hg');
+  look.em = 100 / (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent) || 1;  // the burner sizes text by the font's full height, CSS by its em
+  capKey = '';
+  if (vid) drawVid();
+}
+addEventListener('focus', () => vid && vidLook());
+const vidSet = changes => run($('#vidpanel'), 'Saving…', async () => {
+  show(await api(`/api/story/${enc(proj)}/${vid}`, {action: 'update', finish: {...vfin(), hook: $('#vhook').value, ...changes}}));
+});
+function vidOverlay(T, on) {  // the same lines, timing and look as caption_ass() in cli.py
+  const cv = $('#capview');
+  cv.hidden = !on || !look;
+  if (cv.hidden) return;
+  const r = video.videoWidth / video.videoHeight || 9 / 16, w = Math.min(video.clientWidth, video.clientHeight * r), h = w / r, sx = w / 1080, sy = h / 1920;
+  const hook = $('#vhook').value.trim(), showHook = hook && T < Math.min(look.hook_seconds, vlen);
+  let cur = null;
+  if (segGet($('#vcaps')) === 'on') vchunks.forEach((c, k) => {
+    const last = k + 1 < vchunks.length ? Math.min(c.at(-1).end + .3, vchunks[k + 1][0].start) : c.at(-1).end + .3;
+    c.forEach((x, i) => { if (x.start <= T && T < Math.max(i + 1 < c.length ? c[i + 1].start : last, x.start + .05)) cur = [k, i]; });
+  });
+  const key = `${showHook ? hook : ''}|${cur}|${w}x${h}`;
+  if (key === capKey) return;
+  capKey = key;
+  Object.assign(cv.style, {left: `${(video.clientWidth - w) / 2}px`, top: `${(video.clientHeight - h) / 2}px`, width: `${w}px`, height: `${h}px`});
+  const font = size => `font-family:${capFamily()};font-weight:${capWeight()};font-size:${size * sy * look.em}px;color:${look.color};`
+    + `-webkit-text-stroke:${2 * look.outline_size * sy}px ${look.outline};text-shadow:${look.shadow * sy}px ${look.shadow * sy}px 0 rgba(0,0,0,.5);text-transform:${look.uppercase ? 'uppercase' : 'none'};padding:0 ${look.side_margin * sx}px;`;
+  const [hk, wd] = cv.children;
+  hk.style.cssText = font(look.hook_size) + `top:${look.hook_top * sy}px`;
+  hk.textContent = showHook ? hook : '';
+  wd.style.cssText = font(look.size) + `bottom:${(1 - look.position) * h}px`;
+  wd.innerHTML = cur ? vchunks[cur[0]].map((x, j) => j === cur[1] ? `<span class="cw ${look.pop ? 'pop' : ''}" style="color:${look.highlight}">${esc(x.w)}</span>` : esc(x.w)).join(' ') : '';
+}
+function vidMusic(T, on) {  // the track under the video, dipping while there's talking and fading out at the end, like the render
+  if (!on || video.paused || !vfin().music || !music.src) return music.paused || music.pause();
+  if (music.duration) {
+    const want = T % music.duration;
+    if (Math.abs(music.currentTime - want) > .25) music.currentTime = want;
+  }
+  const talking = vwords.some(x => x.start <= T && T < x.end + .3), fade = Math.min(1, Math.max(0, (vlen - T) / 2));
+  const target = Math.min(1, $('#vvol').value / 100 * (talking ? .35 : 1) * fade);
+  if (music.paused) { music.volume = target; music.play().catch(() => {}); }
+  else music.volume += (target - music.volume) * .2;
+}
 const vstory = () => data?.stories.find(s => s.id === vid);
 const vci = p => data.clips.findIndex(c => c.stem === p.stem);
 const vidList = () => vstory().pieces.map(p => ({ci: vci(p), a: p.start, b: p.end}));
 const saidIn = p => data.clips[vci(p)]?.words.filter(w => w.start >= p.start - 0.05 && w.end <= p.end + 0.05).map(w => w.w).join(' ') || '';
 function vidAt(t = video.currentTime) {  // the piece under the playhead and how far into the video that is
-  const ps = vstory()?.pieces || [], stem = clip().stem, sure = playing?.base != null ? playing.base + playing.i : -1;
+  const ps = vstory()?.pieces || [], stem = clip().stem, sure = playing?.base != null && !video.paused ? playing.base + playing.i : -1;  // while playing, the piece being played
   let at = 0;
   for (let i = 0; i < ps.length; i++) {
     const p = ps[i];
@@ -1998,7 +2028,28 @@ function drawVid() {
   if (!s) vid = null;
   document.body.classList.toggle('vidmode', !!s);
   if (!s) return;
-  const len = s.pieces.reduce((n, p) => n + p.end - p.start, 0), many = data.clips.length > 1;
+  const len = s.pieces.reduce((n, p) => n + p.end - p.start, 0), many = data.clips.length > 1, f = vfin();
+  vlen = len;
+  vwords = [];
+  s.pieces.reduce((at, p) => {  // what's said, in the video's own time, as story_words() in cli.py
+    vwords.push(...data.clips[vci(p)].words.filter(w => p.start - .05 <= w.start && w.end <= p.end + .05).map(w => ({w: w.w, start: w.start - p.start + at, end: w.end - p.start + at})));
+    return at + p.end - p.start;
+  }, 0);
+  vchunks = [];
+  for (const w of vwords) {  // a new line after n words, a pause, or the end of a sentence
+    const c = vchunks.at(-1);
+    if (!c || c.length >= Math.max(1, Math.trunc(look?.words_at_once) || 1) || w.start - c.at(-1).end > .6 || /[.?!]$/.test(c.at(-1).w)) vchunks.push([]);
+    vchunks.at(-1).push(w);
+  }
+  capKey = '';
+  if (document.activeElement !== $('#vhook')) $('#vhook').value = f.hook;
+  segSet($('#vcaps'), f.captions ? 'on' : 'off');
+  $('#vmusic').innerHTML = ['', ...new Set([...tracks, f.music].filter(Boolean))].map(t => `<button type="button" class="chip ${t === f.music ? 'on' : ''}" data-track="${esc(t)}">${t ? esc(t.replace(/\.[^.]+$/, '')) : 'No music'}</button>`).join('')
+    + (tracks.length ? '' : '<p class="hint">Put royalty-free tracks in Brand/Music to choose from.</p>');
+  $('#vvol').value = Math.round(100 * (f.volume ?? look?.music_volume ?? .2));
+  $('#vvolrow').hidden = !f.music;
+  const src = f.music ? '/music/' + enc(f.music) : '';
+  if (music.dataset.src !== src) { music.pause(); music.dataset.src = src; src ? music.src = src : music.removeAttribute('src'); }
   vidSel = Math.min(vidSel, s.pieces.length - 1);
   $('#edittotal').textContent = `/ ${mmss(len)}`;
   $('#vidlen').textContent = `${mmss(len)} · ${plural(s.pieces.length, 'piece')}`;
@@ -2021,6 +2072,7 @@ function vidHead(t) {
 }
 function vidOpen(id) {
   vid = id; vidSel = 0; vidHist = [];
+  vidLook();
   stopPlaying(); video.pause();
   show(data);
   const p = vidList()[0];
@@ -2105,7 +2157,20 @@ $('#vname').onchange = () => $('#vname').value.trim() && run($('#vname'), 'Savin
   show(await api(`/api/story/${enc(proj)}/${vid}`, {action: 'update', pieces: vstory().pieces, title: $('#vname').value}));
   status('Named');
 });
-$('#vfinish').onclick = () => finishEdit(vstory());
+$('#vhook').oninput = () => capKey = '';
+$('#vhook').onchange = () => vidSet({});
+$('#vcaps').onclick = e => { const b = e.target.closest('button'); if (b) { segSet($('#vcaps'), b.dataset.v); vidSet({captions: b.dataset.v === 'on'}); } };
+$('#vmusic').onclick = e => { const b = e.target.closest('[data-track]'); if (b) vidSet({music: b.dataset.track, volume: null}); };
+$('#vvol').onchange = () => vidSet({volume: $('#vvol').value / 100});
+$('#vidpanel').addEventListener('click', e => { const b = e.target.closest('[data-fopen]'); if (b) api('/api/open', {what: b.dataset.fopen}).catch(err => status(err.message, true)); });
+$('#vfinish').onclick = e => run(e.currentTarget, 'Starting…', async () => {
+  video.pause();
+  await api('/api/videos/from-edit', {project: proj, story: vid, finish: {...vfin(), hook: $('#vhook').value, captions: segGet($('#vcaps')) === 'on'}});
+  await watchSaves();
+  status('Finishing it and writing post captions; the corner shows when it’s ready');
+  $('#aused').hidden = data.stage !== 'completed';
+  $('#afterdlg').showModal();
+});
 $('#makevid').onclick = () => makeVideo();
 $('#vidback').onclick = () => { vid = null; stopPlaying(); video.pause(); show(data); };
 $('#afterdlg').onclick = e => {  // saves fire from the buttons themselves, not on close
@@ -2161,10 +2226,11 @@ video.addEventListener('pause', playIcon);
 // follow the playhead; plain playback plays the edit, skipping folded cuts
 function follow() {
   requestAnimationFrame(follow);
+  if (!vid && !music.paused) music.pause();
   if (!data || $('#project').hidden || !segs.length) return;
   const t = video.currentTime;
   const s = segs.find(s => t < s.b) ?? segs.at(-1), el = $('#timeline').children[allSegs.indexOf(s)], ph = $('#playhead'), tl = $('#timeline');
-  if (vid) vidHead(t);
+  if (vid) { vidHead(t); const at = vidAt(t); vidOverlay(at.t, at.i >= 0); vidMusic(at.t, at.i >= 0); }
   else if (el && ph) {
     const folded = s.gap && s.a !== openGap, x = el.offsetLeft + (folded ? el.offsetWidth / 2 : Math.min(1, Math.max(0, (t - s.a) / (s.b - s.a))) * el.offsetWidth);
     ph.style.left = `${x}px`;
