@@ -31,8 +31,25 @@ VIDEO_SHELVES = ("Drafts", "Unposted", "Posted")
 STYLE, CAPTION_EDITS = BRAND / "Caption Style.md", DATA / "Caption Edits.json"  # how captions should sound, and what the user changed in drafts
 MUSIC, LOOK = BRAND / "Music", BRAND / "Video Look.json"  # tracks for finished videos, and how their text looks
 FINISHER = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"  # shortcut: Homebrew's path only, the plain ffmpeg can't draw text; look it up on PATH if it's ever installed elsewhere
-LOOK_START = {"font": "Avenir Next Heavy", "bold": False, "size": 110, "color": "#FFFFFF", "highlight": "#C6F432", "outline": "#000000",
-              "position": 0.7, "words_at_once": 3, "hook_size": 100, "hook_seconds": 3, "music_volume": 0.2}
+LOOK_START = {  # captions and the hook title, sized for a 1080 x 1920 frame; Brand/Video Look.json overrides any of these
+    "font": "Avenir Next Heavy", "bold": False, "uppercase": False,
+    "size": 100, "color": "#FFFFFF", "highlight": "#C6F432", "pop": True,  # the word being said, in the brand's green, a touch bigger as it lands
+    "outline": "#000000", "outline_size": 6, "shadow": 2,
+    "position": 0.65, "side_margin": 110,  # bottom of the text at 65% down, clear of the apps' buttons, name and caption below and on the right
+    "words_at_once": 3, "hook_size": 92, "hook_top": 300, "hook_seconds": 3, "music_volume": 0.2}
+LOOK_HELP = {  # written into the file beside the settings, so it explains itself
+    "font": "Any font on this Mac, or one you put in Brand/Fonts. Bold, simple sans-serif fonts read best on a phone.",
+    "bold": "true to make the font bolder; leave false for a font that's already heavy, like Avenir Next Heavy.",
+    "uppercase": "true for ALL CAPS captions.",
+    "size": "Caption text height in pixels on a 1080 x 1920 video. 80 to 110 reads well on a phone.",
+    "color / highlight": "The text, and the word being said. Hex colors, like #FFFFFF.",
+    "pop": "true makes the word being said grow a little as it's spoken.",
+    "outline / outline_size / shadow": "The dark edge that keeps text readable on any background, and a soft shadow under it.",
+    "position": "How far down the bottom of the captions sits, from 0 (top) to 1 (bottom). Above 0.75 risks hiding behind the apps' captions and buttons.",
+    "side_margin": "Space kept clear on each side, in pixels. TikTok's buttons take about 120 on the right.",
+    "words_at_once": "How many words show at a time. 2 to 4 keeps it to one line.",
+    "hook_size / hook_top / hook_seconds": "The title at the start: its size, how far from the top (TikTok and Instagram cover about the top 200), and how long it shows.",
+    "music_volume": "Music loudness under your voice, from 0 to 1. It also dips while you talk."}
 INDEX = HOME / "clips-index.json"  # every clip's info, kept here so search works with the library offline
 SNAP = 0.5  # a sliver of cut this short between a kept range and the footage beside it isn't meant to be there
 VOCABULARY = BRAND / "Vocabulary.txt"
@@ -873,7 +890,7 @@ def video_look():
     """How a finished video's text looks, from Brand/Video Look.json, made with the defaults the first time so it can be changed."""
     if not LOOK.exists():
         LOOK.parent.mkdir(parents=True, exist_ok=True)
-        save(LOOK, LOOK_START)
+        save(LOOK, {**LOOK_START, "what each setting does": LOOK_HELP})
     return {**LOOK_START, **load(LOOK)}
 
 
@@ -896,11 +913,11 @@ def ass_color(hex_color):
 def caption_ass(words, look, hook="", duration=0.0):
     """Subtitles for burning in: a few words at a time, the one being said in the highlight color, and a hook title up top."""
     t = lambda s: f"{int(s // 3600)}:{int(s % 3600 // 60):02d}:{s % 60:05.2f}"
-    clean = lambda s: s.replace("\\", "").replace("{", "(").replace("}", ")")
+    clean = lambda s: (s.upper() if look.get("uppercase") else s).replace("\\", "").replace("{", "(").replace("}", ")")
     lines = ["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0", "",
              "[V4+ Styles]", "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
-             f"Style: Words,{look['font']},{look['size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,6,0,2,80,80,{round(1920 * (1 - look['position']))}",
-             f"Style: Hook,{look['font']},{look['hook_size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,-1,1,6,0,8,80,80,260", "",
+             f"Style: Words,{look['font']},{look['size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,{look['outline_size']},{look['shadow']},2,{look['side_margin']},{look['side_margin']},{round(1920 * (1 - look['position']))}",
+             f"Style: Hook,{look['font']},{look['hook_size']},{ass_color(look['color'])},{ass_color(look['outline'])},&H80000000&,{-1 if look['bold'] else 0},1,{look['outline_size']},{look['shadow']},8,{look['side_margin']},{look['side_margin']},{look['hook_top']}", "",
              "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     if hook.strip():
         lines.append(f"Dialogue: 0,{t(0)},{t(min(look['hook_seconds'], duration or look['hook_seconds']))},Hook,,0,0,0,,{clean(hook.strip())}")
@@ -914,7 +931,9 @@ def caption_ass(words, look, hook="", duration=0.0):
         last = min(chunk[-1]["end"] + .3, chunks[k + 1][0]["start"]) if k + 1 < len(chunks) else chunk[-1]["end"] + .3
         for i, w in enumerate(chunk):
             end = chunk[i + 1]["start"] if i + 1 < len(chunk) else last
-            text = " ".join(f"{{\\c{hi}}}{clean(x['w'])}{{\\c{base}}}" if j == i else clean(x["w"]) for j, x in enumerate(chunk))
+            pop = "\\fscx115\\fscy115\\t(0,120,\\fscx105\\fscy105)" if look.get("pop") else ""  # lands big, settles a little bigger than the rest
+            reset = "\\fscx100\\fscy100" if look.get("pop") else ""
+            text = " ".join(f"{{\\c{hi}{pop}}}{clean(x['w'])}{{\\c{base}{reset}}}" if j == i else clean(x["w"]) for j, x in enumerate(chunk))
             lines.append(f"Dialogue: 1,{t(w['start'])},{t(max(end, w['start'] + .05))},Words,,0,0,0,,{text}")
     return "\n".join(lines) + "\n"
 

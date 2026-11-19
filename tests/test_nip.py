@@ -811,7 +811,7 @@ class Robustness(unittest.TestCase):
                 story = {"pieces": [{"stem": "a", "start": 4.9, "end": 6.5}, {"stem": "a", "start": .9, "end": 1.4}]}
                 got = cli.story_words(d, story)
             self.assertEqual([(x["w"], x["start"]) for x in got], [("throw", .1), ("the", .5), ("Linderball.", .9), ("skip", 1.7)])  # moved into the edit's time, spelled your way
-            look = {**cli.LOOK_START, "words_at_once": 2, "highlight": "#112233"}
+            look = {**cli.LOOK_START, "words_at_once": 2, "highlight": "#112233", "pop": False}
             ass = cli.caption_ass(got, look, "Watch {this}", 3.0)
             events = [l for l in ass.splitlines() if l.startswith("Dialogue")]
             self.assertIn("Hook,,0,0,0,,Watch (this)", events[0])  # braces would be read as styling
@@ -820,6 +820,9 @@ class Robustness(unittest.TestCase):
             self.assertEqual(len(words), 4)
             self.assertNotIn("skip", words[2])  # a sentence's end starts a new line
             self.assertEqual(cli.caption_ass([], look, "", 3).count("Dialogue"), 0)
+            loud = cli.caption_ass(got[:1], {**look, "uppercase": True, "pop": True}, "", 3)
+            self.assertIn("THROW", loud)
+            self.assertIn("\\fscx115", loud)  # the word being said pops
 
     @unittest.skipUnless(Path(cli.FINISHER).exists(), "needs ffmpeg-full")
     def test_finishing_draws_captions_and_mixes_music(self):
